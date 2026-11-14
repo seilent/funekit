@@ -1,0 +1,445 @@
+package net.seilent.funekit.kit.stack
+
+import androidx.activity.compose.PredictiveBackHandler
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameMillis
+import net.seilent.funekit.gen.Tok
+import net.seilent.funekit.kit.motion.Curves
+import net.seilent.funekit.kit.motion.MorphKind
+import net.seilent.funekit.kit.motion.MoveEnds
+import net.seilent.funekit.kit.motion.MoveForms
+import net.seilent.funekit.kit.motion.MoveKind
+import net.seilent.funekit.kit.motion.MoveLeg
+import net.seilent.funekit.kit.motion.OverKind
+import net.seilent.funekit.kit.motion.Overlay
+import net.seilent.funekit.kit.motion.PageMove
+import net.seilent.funekit.kit.motion.Part
+import net.seilent.funekit.kit.motion.Prop
+import net.seilent.funekit.kit.touch.Gesture
+
+enum class Phase { Rest, Exit, Enter }
+
+enum class PageKind { Grid, Hub, Plain }
+
+class Turn<P : Any>(val kind: MoveKind, val from: P?, val to: P?, val popping: Boolean, val retarget: Boolean = false, val at: Long = 0L)
+
+class PageStack<P : Any>(
+    var forms: MoveForms,
+    private val kindOf: (P) -> PageKind,
+    private val pageBack: (P, Long) -> Boolean = { _, _ -> false },
+    private val retargets: (P) -> Boolean = { true },
+    val move: PageMove = PageMove(),
+    private val enter: (P) -> Unit = {},
+    private val drop: (P) -> Unit = {},
+    private val started: (Turn<P>) -> Unit = {},
+    private val starting: (Turn<P>) -> Unit = {},
+    private val swapped: (P, Long) -> Unit = { _, _ -> },
+    private val closing: (Overlay, Long) -> Unit = { _, _ -> },
+    private val dropped: (P, Long) -> Unit = { _, _ -> },
+    private val legs: (Turn<P>) -> Unit = {},
+    private val ready: (P) -> Boolean = { true },
+    private val ends: (Turn<P>) -> MoveEnds,
+) {
+    val pages = mutableStateListOf<P>()
+    var phase by mutableStateOf(Phase.Rest)
+        private set
+    var turn: Turn<P>? by mutableStateOf(null)
+        private set
+    var overlay: Overlay? by mutableStateOf(null)
+        private set
+    var clock by mutableLongStateOf(0L)
+        private set
+    var asked by mutableIntStateOf(0)
+        private set
+    var jumpSettled by mutableStateOf(false)
+        private set
+    var hideFocus by mutableStateOf(false)
+        private set
+    var snap by mutableIntStateOf(0)
+        private set
+    var entries = 0L
+
+    var held: Held? = null
+        private set
+    private var devicePop = false
+
+    private val asks = ArrayDeque<(Long) -> Unit>()
+    private var moveEnds = MoveEnds()
+    private var seq = 0
+    private var openSeq = -1
+    private var swapHeld = false
+    private var waiting = false
+    private val gone = mutableListOf<P>()
+
+    val top: P? get() = pages.lastOrNull()
+
+    private val under: P? get() = pages.getOrNull(pages.lastIndex - 1)
+
+    val moving: Boolean
+        get() = phase != Phase.Rest || asks.isNotEmpty() || overlay?.let { it.closing || it.moving(clock) } == true
+
+    val canBack: Boolean get() = pages.isNotEmpty() || overlay != null || phase != Phase.Rest
+
+    private fun ask(a: (Long) -> Unit) {
+        asks.addLast(a)
+        asked++
+    }
+
+    fun push(page: P, kind: MoveKind) = ask { now ->
+        if (phase != Phase.Rest || overlay != null) return@ask
+        start(Turn(kind, top, page, popping = false), now, retarget = false)
+    }
+
+    fun pop(kind: MoveKind) = ask { now ->
+        if (phase != Phase.Rest) land(now)
+        if (pages.isEmpty()) return@ask
+        start(Turn(kind, top, under, popping = true), now, retarget = false)
+    }
+
+    fun entry(): Long = entries++
+
+    fun open(o: Overlay, hides: Boolean = o.kind == OverKind.Dlg) = ask { now ->
+        if (phase != Phase.Rest) land(now)
+        landOverlay(now, show = false)
+        if (overlay != null) return@ask
+        o.open(now)
+        overlay = o
+        openSeq = ++seq
+        snapshot(hides)
+    }
+
+    fun close() = ask { now -> overlay?.let { closeOverlay(it, now) } }
+
+    fun accept() = ask { now ->
+        val o = overlay ?: return@ask
+        snapshot(false)
+        closeOverlay(o, now)
+    }
+
+    fun pick() = ask { if (overlay != null) snapshot(false) }
+
+    fun swapMenu(only: Overlay? = null, swap: (Long) -> Unit) = ask { now ->
+        val o = overlay
+        if (o == null || o.kind != OverKind.Sheet) return@ask
+        if (only != null && (o !== only || o.closing)) return@ask
+        swap(now)
+        o.open(now)
+    }
+
+    private fun snapshot(hide: Boolean) {
+        hideFocus = hide
+        snap++
+    }
+
+    private fun closeOverlay(o: Overlay, now: Long) {
+        val settled = !o.closing && !o.moving(now)
+        val was = o.closing
+        o.close(now)
+        if (!was) closing(o, now)
+        if (settled && o.kind == OverKind.Dlg) snapshot(false)
+    }
+
+    private fun dropOverlay(show: Boolean = true) {
+        val was = overlay
+        overlay = null
+        hideFocus = false
+        if (show && was != null) top?.let { dropped(it, clock) }
+    }
+
+    fun back(popKind: (Turn<P>) -> MoveKind) = back(false, popKind)
+
+    fun back(device: Boolean, popKind: (Turn<P>) -> MoveKind) = ask { now ->
+        val o = overlay
+        when {
+            o != null && !o.closing && o.moving(now) -> closeOverlay(o, now)
+            o == null && reversible() -> reverse(now)
+            o == null && retargetable() -> retarget(now, popKind)
+            else -> landBack(now, popKind)
+        }
+        devicePop = device
+    }
+
+    private fun landBack(now: Long, popKind: (Turn<P>) -> MoveKind) {
+        landOverlay(now)
+        if (phase != Phase.Rest) land(now)
+        val open = overlay
+        val page = top
+        if (open != null) {
+            closeOverlay(open, now)
+        } else if (page != null && !pageBack(page, now)) {
+            val t = Turn(MoveKind.None, page, under, popping = true)
+            start(Turn(popKind(t), t.from, t.to, popping = true), now, retarget = false)
+        }
+    }
+
+    fun hold(now: Long, target: Boolean, band: Gesture.Edge): Boolean {
+        val t = turn
+        val pop = phase == Phase.Exit && t != null && t.popping && overlay == null
+        val starts = if (pop) {
+            target
+        } else {
+            holdReversible(now) && (target || band != Gesture.Edge.None)
+        }
+        held = if (starts) Held(now, target, band, seq, pop && devicePop) else null
+        return starts
+    }
+
+    fun heldBack(popKind: (Turn<P>) -> MoveKind) {
+        val h = held
+        held = null
+        ask { now -> heldBack(h, now, popKind) }
+    }
+
+    private fun heldBack(h: Held?, now: Long, popKind: (Turn<P>) -> MoveKind) {
+        val o = overlay
+        when {
+            h != null && h.seq == seq && holdReversible(now) && o != null -> closeOverlay(o, now)
+            h != null && h.seq == seq && holdReversible(now) -> reverse(now)
+            h != null && h.dev -> touch(now)
+            else -> landBack(now, popKind)
+        }
+    }
+
+    private fun holdReversible(now: Long): Boolean {
+        val o = overlay
+        if (o != null) return !o.closing && o.moving(now) && openSeq == seq
+        return reversible()
+    }
+
+    private fun moveHeld(at: Long): Boolean {
+        val h = held ?: return false
+        if (!h.target || !reversible()) return false
+        return h.at < move.swapAt && at < move.swapAt + Tok.input_keyHoldMs.toLong()
+    }
+
+    fun home(kind: MoveKind) = ask { now ->
+        dropOverlay()
+        if (phase != Phase.Rest) land(now)
+        if (pages.isEmpty()) return@ask
+        start(Turn(kind, top, null, popping = true), now, retarget = false)
+    }
+
+    fun touch() {
+        held = null
+        ask { now -> touch(now) }
+    }
+
+    fun touchDown() {
+        held = null
+        ask { now ->
+            val o = overlay
+            if (o == null || !(o.closing || o.moving(now))) touch(now)
+        }
+    }
+
+    private fun touch(now: Long) {
+        val o = overlay
+        if (o != null && (o.closing || o.moving(now))) landOverlay(now)
+        if (phase != Phase.Rest) land(now)
+    }
+
+    private fun landOverlay(now: Long, show: Boolean = true) {
+        val o = overlay ?: return
+        if (o.land(now)) dropOverlay(show)
+    }
+
+    private fun reversible(): Boolean {
+        val t = turn ?: return false
+        return phase == Phase.Exit && !t.popping && !move.reversed
+    }
+
+    private fun retargetable(): Boolean {
+        val t = turn ?: return false
+        val page = top ?: return false
+        return move.live && !move.reversed && phase == Phase.Enter && t.to != null && retargets(page)
+    }
+
+    private fun formsFor(to: P?): MoveForms {
+        if (to == null) return forms
+        val content = when (kindOf(to)) {
+            PageKind.Grid -> forms.content
+            PageKind.Hub -> forms.hubRows
+            PageKind.Plain -> forms.pageRows
+        }
+        return forms.copy(content = content)
+    }
+
+    private fun start(from: Turn<P>, now: Long, retarget: Boolean) {
+        devicePop = false
+        if (!from.popping) from.to?.let(enter)
+        seq++
+        swapHeld = false
+        val t = Turn(from.kind, from.from, from.to, from.popping, retarget, now)
+        turn = t
+        started(t)
+        starting(t)
+        moveEnds = ends(t).copy(retarget = retarget, rows = t.to?.let { kindOf(it) != PageKind.Grid } ?: false)
+        move.start(t.kind, now, moveEnds, formsFor(t.to))
+        waiting = t.to?.let { !ready(it) } ?: false
+        if (!waiting) arrive(now)
+        legs(t)
+        phase = Phase.Exit
+    }
+
+    private fun arrive(now: Long) {
+        move.release(Part.Content, now)
+        move.release(Part.Ground, now)
+    }
+
+    private fun retarget(now: Long, popKind: (Turn<P>) -> MoveKind) {
+        val v = move
+        fun cur(p: Part, q: Prop) = v.at(p, q, now)
+        val ca = cur(Part.Content, Prop.A)
+        val cs = if (moveEnds.rows) 1f else cur(Part.Content, Prop.S)
+        val ha = cur(Part.Header, Prop.A)
+        val zoomed = moveEnds.zoom && cur(Part.Zoom, Prop.A) > 0f && ha <= 0f
+        val zs = cur(Part.Zoom, Prop.S)
+        val pa = cur(Part.Pivots, Prop.A)
+        val pvx = cur(Part.Pivots, Prop.X)
+        val pvy = cur(Part.Pivots, Prop.Y)
+        val ga = cur(Part.Ground, Prop.A)
+        val word = v.has(Part.Word, Prop.S) && cur(Part.Word, Prop.A) > 0f
+        val ws = cur(Part.Word, Prop.S)
+        val wx = cur(Part.Word, Prop.X)
+        val wy = cur(Part.Word, Prop.Y)
+        val tile = v.has(Part.Tile, Prop.S) && cur(Part.Tile, Prop.A) > 0f
+        val ts = cur(Part.Tile, Prop.S)
+        val tx = cur(Part.Tile, Prop.X)
+        val ty = cur(Part.Tile, Prop.Y)
+        val wasMorph = moveEnds.morph && now < v.t0 + v.wordEnd
+        val mla = cur(Part.LeaveWord, Prop.A)
+        val mwa = cur(Part.Word, Prop.A)
+        val t = Turn(MoveKind.None, top, under, popping = true)
+        start(Turn(popKind(t), t.from, t.to, popping = true), now, retarget = true)
+        val n = move
+        val e = moveEnds
+        val leave = (if (n.kind == MoveKind.T4h || n.kind == MoveKind.T4n) Tok.motion_t4hContent else Tok.motion_leave).toInt()
+        n.from(Part.Leave, Prop.A, ca)
+        n.set(Part.Leave, Prop.S, cs)
+        n.from(Part.LeaveHeader, Prop.A, ha)
+        n.from(Part.LeavePivots, Prop.A, pa)
+        if (n.has(Part.LeavePivots, Prop.X)) {
+            n.from(Part.LeavePivots, Prop.X, pvx)
+            n.from(Part.LeavePivots, Prop.Y, pvy)
+        } else {
+            n.set(Part.LeavePivots, Prop.X, pvx)
+            n.set(Part.LeavePivots, Prop.Y, pvy)
+        }
+        if (n.has(Part.LeaveGround, Prop.A)) n.from(Part.LeaveGround, Prop.A, ga)
+        if (wasMorph && e.morph && e.morphBack) {
+            for (p in listOf(Part.LeaveWord, Part.Word)) {
+                n.from(p, Prop.S, ws)
+                n.from(p, Prop.X, wx)
+                n.from(p, Prop.Y, wy)
+            }
+            n.from(Part.LeaveWord, Prop.A, mwa)
+            n.from(Part.Word, Prop.A, mla)
+            if (e.morphKind != MorphKind.Row) {
+                n.shift(Part.LeaveWord, -Tok.motion_t4mDelay.toInt())
+                n.shift(Part.Word, -Tok.motion_t4mDelay.toInt())
+            }
+        } else if (zoomed && !e.morph) {
+            n.set(Part.LeaveWord, Prop.S, zs)
+            n.add(MoveLeg(Part.LeaveWord, Prop.A, 1f, 0f, 0, leave))
+        }
+        if (word && !e.morph && n.has(Part.Word, Prop.S)) {
+            n.from(Part.Word, Prop.S, ws)
+            n.from(Part.Word, Prop.X, wx)
+            n.from(Part.Word, Prop.Y, wy)
+        }
+        if (!tile) return
+        if (n.has(Part.Tile, Prop.S)) {
+            for ((q, value) in listOf(Prop.S to ts, Prop.X to tx, Prop.Y to ty)) {
+                val l = n.leg(Part.Tile, q) ?: continue
+                n.add(MoveLeg(l.part, l.prop, value, l.to, l.delay, l.dur, Curves.easeIn, l.pin))
+            }
+            n.set(Part.Tile, Prop.A, 1f)
+            return
+        }
+        n.set(Part.Tile, Prop.S, ts)
+        n.set(Part.Tile, Prop.X, tx)
+        n.set(Part.Tile, Prop.Y, ty)
+        n.add(MoveLeg(Part.Tile, Prop.A, 1f, 0f, 0, leave))
+    }
+
+    private fun reverse(now: Long) {
+        seq++
+        swapHeld = false
+        waiting = false
+        move.reverse(now)
+        turn?.to?.let { gone += it }
+        turn = turn?.let { Turn(it.kind, it.to, it.from, true, it.retarget, it.at) }
+        phase = Phase.Enter
+    }
+
+    private fun swap(at: Long) {
+        val t = turn ?: return
+        val by = if (swapHeld) (at - move.swapAt).toInt() else 0
+        swapHeld = false
+        if (by > 0) move.shift(Part.Content, by, at)
+        if (t.popping) {
+            if (t.to == null) {
+                gone.addAll(pages)
+                pages.clear()
+            } else if (pages.isNotEmpty()) {
+                gone += pages.removeAt(pages.lastIndex)
+            }
+        } else if (t.to != null) {
+            pages.add(t.to)
+        }
+        phase = Phase.Enter
+        top?.let { swapped(it, at) }
+    }
+
+    private fun land(now: Long) {
+        if (phase == Phase.Exit) swap(now)
+        rest()
+        clock = now
+    }
+
+    private fun rest() {
+        move.stop()
+        phase = Phase.Rest
+        turn = null
+        waiting = false
+        val g = gone.toList()
+        gone.clear()
+        g.forEach(drop)
+    }
+
+    fun frame(now: Long) {
+        clock = now
+        while (asks.isNotEmpty()) asks.removeFirst()(now)
+        if (phase == Phase.Exit && now >= move.swapAt) {
+            if (moveHeld(now)) swapHeld = true else swap(now)
+        }
+        if (phase == Phase.Enter && now >= move.endAt) rest()
+        if (waiting && turn?.to?.let(ready) == true) {
+            waiting = false
+            arrive(now)
+        }
+        val o = overlay
+        o?.rise(now)
+        if (o != null && o.done(now)) dropOverlay()
+        jumpSettled = overlay?.let { it.kind == OverKind.Jump && !it.closing && !it.moving(now) } == true
+    }
+}
+
+@Composable
+fun <P : Any> PageStackClock(stack: PageStack<P>, popKind: (Turn<P>) -> MoveKind) {
+    LaunchedEffect(stack, stack.asked) {
+        withFrameMillis { stack.frame(it) }
+        while (stack.moving) withFrameMillis { stack.frame(it) }
+    }
+    PredictiveBackHandler(enabled = stack.canBack) { progress ->
+        progress.collect {}
+        stack.back(true, popKind)
+    }
+}

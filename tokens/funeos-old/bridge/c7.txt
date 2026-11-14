@@ -1,0 +1,15 @@
+old motion.t2PivotDelay
+old motion.t3mFadeDelay
+old motion.t3mFade
+old motion.morphScale
+old motion.morphRowPenDelay
+old motion.morphRowPen
+old motion.morphRowPopDelay
+old motion.morphRowPop
+old motion.rowsFade
+old motion.contentHubRows
+old motion.contentPageRows
+old motion.t3aFadeDelay
+old motion.t3aFade
+old motion.tileBack
+old motion.t3cFade

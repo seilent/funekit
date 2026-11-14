@@ -1,0 +1,7 @@
+old type.jumpExit.size
+old motion.sheet
+old motion.jumpIn
+old motion.jumpOut
+old motion.toastIn
+old motion.toastOut
+old motion.toastTravel

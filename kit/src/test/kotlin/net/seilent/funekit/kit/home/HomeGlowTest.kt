@@ -1,0 +1,133 @@
+package net.seilent.funekit.kit.home
+
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Canvas
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.createFontFamilyResolver
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
+import net.seilent.funekit.Insets
+import net.seilent.funekit.Nav
+import net.seilent.funekit.Roles
+import net.seilent.funekit.Surface
+import net.seilent.funekit.Window
+import net.seilent.funekit.gen.Tok
+import net.seilent.funekit.kit.Glow
+import net.seilent.funekit.kit.Ink
+import net.seilent.funekit.kit.pen64
+import net.seilent.funekit.kit.penFloor
+import net.seilent.funekit.kit.penPx
+import net.seilent.funekit.kit.roleStyle
+import net.seilent.funekit.kit.word
+import net.seilent.funekit.px
+import net.seilent.funekit.scale
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
+
+private const val GROW = 3
+private const val HALF_LEVEL = 128
+private const val ALPHA_SHIFT = 24
+private const val EDGE_LEVEL = 4
+
+private enum class Key(override val word: String, override val sub: String) : HomeEntry {
+    Music("music", "albums artists playlists songs genres"),
+    Playlists("playlists", "now playing saved"),
+    History("history", "recent new"),
+    Apps("apps", "no apps"),
+    Settings("settings", "output library display power"),
+    ;
+
+    override val ring: Boolean get() = this == Music
+}
+
+@RunWith(RobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(sdk = [35])
+class HomeGlowTest {
+    private val none = Insets(0, 0, 0, 0)
+    private val s = scale(Window(720, 1280, 35, none, none, none, none, none), Nav.None, Surface.Home, false)
+
+    @Test
+    fun aGlowingItemAtRestDrawsOneMaskAcrossFrames() {
+        val density = Density(1f)
+        val fonts = createFontFamilyResolver(RuntimeEnvironment.getApplication())
+        val m = TextMeasurer(fonts, density, LayoutDirection.Ltr)
+        val keys = Key.entries
+        val ink = homeInk(m, fonts, s, density, keys) { if (it == Key.Apps) "" else it.sub }
+        val geo = HomeGeo(s, keys.size)
+        val menu = HomeMenu(keys.size)
+        val mask = Glow::class.java.getDeclaredField("mask").apply { isAccessible = true }
+        val img = ImageBitmap(s.widthPx, geo.contentPx)
+        fun draw(t: Long): Any? {
+            CanvasDrawScope().draw(density, LayoutDirection.Ltr, Canvas(img), Size(s.widthPx.toFloat(), geo.contentPx.toFloat())) {
+                homeMenu(ink, menu, geo, menu.restAt(t, false), null)
+            }
+            return mask.get(menu.glow)
+        }
+        menu.down(1, 1000L)
+        val first = draw(1016L)
+        assertNotNull(first)
+        assertSame(first, draw(1032L))
+        assertSame(first, draw(1048L))
+    }
+
+    @Test
+    fun aPressGlowsPastTheNameAndKeepsTheItemFace() {
+        val density = Density(1f)
+        val fonts = createFontFamilyResolver(RuntimeEnvironment.getApplication())
+        val m = TextMeasurer(fonts, density, LayoutDirection.Ltr)
+        val keys = Key.entries
+        val ink = homeInk(m, fonts, s, density, keys) { if (it == Key.Apps) "" else it.sub }
+        val geo = HomeGeo(s, keys.size)
+        val menu = HomeMenu(keys.size)
+        val sp = s.stdPpu
+        val w = s.widthPx
+        val h = geo.contentPx
+        val x64 = pen64(Tok.homeTextX, sp)
+        val base = px(geo.baseline(1), sp)
+        val band = base - px(Tok.capHeight * Roles.homeItem.size, sp) until base
+        val cols = ink.rect(1).x0 until w
+        fun unzoomed(t: Long): HomeRest = menu.restAt(t, false).let { r -> r.copy(items = r.items.map { it.copy(zoom = 1f) }) }
+        fun draw(block: DrawScope.() -> Unit): IntArray {
+            val img = ImageBitmap(w, h)
+            CanvasDrawScope().draw(density, LayoutDirection.Ltr, Canvas(img), Size(w.toFloat(), h.toFloat()), block)
+            return IntArray(w * h).also { img.readPixels(it) }
+        }
+        fun alpha(p: IntArray, x: Int, y: Int): Int = p[y * w + x] ushr ALPHA_SHIFT
+        fun inkWidth(p: IntArray): Int {
+            val inked = cols.filter { x -> band.any { y -> alpha(p, x, y) >= HALF_LEVEL } }
+            return inked.last() - inked.first() + 1
+        }
+        menu.down(1, 1000L)
+        val glowing = draw { homeMenu(ink, menu, geo, unzoomed(1048L), null) }
+        val cut = penFloor(x64) + penFloor(maxOf(pen64(ink.names[1].width), pen64(Tok.homeSubtitleX, sp) + pen64(ink.subs[1].width))) + GROW
+        assertTrue(band.any { alpha(glowing, cut, it) > 0 })
+        assertTrue(band.all { alpha(glowing, ink.rect(1).x1 - 1, it) < EDGE_LEVEL })
+        menu.glow.clear()
+        val rest = unzoomed(1048L)
+        val a = rest.items[1].alpha
+        val pressed = inkWidth(draw { homeMenu(ink, menu, geo, rest, null) })
+        val regular = inkWidth(draw { word(ink.names[1], penPx(x64), base.toFloat(), Ink.white, a) })
+        val boldStyle = roleStyle(Roles.homeItem, s, density, Ink.white, ppu = sp).copy(fontWeight = FontWeight.Bold)
+        val bold = m.word(keys[1].word, Roles.homeItem, boldStyle, fonts, density, null)
+        val boldWidth = inkWidth(draw { word(bold, penPx(x64), base.toFloat(), Ink.white, a) })
+        assertEquals(regular.toFloat(), pressed.toFloat(), 1f)
+        assertTrue(boldWidth - pressed >= 10)
+        val zoomed = menu.restAt(1048L, false)
+        val z = zoomed.items[1].zoom
+        assertTrue(z < 1f)
+        assertEquals(regular * z, inkWidth(draw { homeMenu(ink, menu, geo, zoomed, null) }).toFloat(), 1f)
+    }
+}

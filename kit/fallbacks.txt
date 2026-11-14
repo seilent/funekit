@@ -1,0 +1,13 @@
+FB-scrub 2026-11-10 the edge scrub zone is centred on the edge band, and a drag commits to the scrub once it passes the touch slop
+FB-slide 2026-11-13 the committed swipe from home to the drawer slides home out over 300 ms and the page in over 500 ms, 200 of 480 px of the width each way, on expOut6
+FB-page 2026-11-11 a phone page takes the A105 physical size: the 407.94 ppi reference, a 0.9 deadband, a 0.5 floor and a 1.1 axis trust on the density report
+FB-lit-1 pending the pillarbox offset is half the spare width
+FB-lit-2 pending Selawik SemiLight keyed at weight 350
+FB-lit-3 pending the battery nub at a third of its height, cited at the funeOS seed set, a token at v0.4.2
+FB-lit-4 pending a dialog scales about the screen centre, cited at the funeOS seed set, not found at v0.4.2
+FB-lit-5 pending the toast expOut6 inverse in 17 bisections, cited at the funeOS seed set, absent at v0.4.2
+FB-lit-6 pending the toast text swap over two valueChange legs, cited at the funeOS seed set, absent at v0.4.2
+FB-lit-7 pending icons and software covers share 1/16 of the memory class, provisional
+FB-lit-8 pending a low RAM device gives icons and covers 1/32 of the memory class, provisional
+FB-lit-9 pending the T7 pane scales about its vertical centre, cited at the funeOS seed set, the v0.4.2 T7 differs
+FB-lit-10 pending the T7 pane scale floor of one 16.16 step, cited at the funeOS seed set, the v0.4.2 T7 differs

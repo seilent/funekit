@@ -1,0 +1,1173 @@
+package net.seilent.funekit.kit.stack
+
+import net.seilent.funekit.gen.Old
+import net.seilent.funekit.gen.Tok
+import net.seilent.funekit.kit.motion.ContentForm
+import net.seilent.funekit.kit.motion.MoveEnds
+import net.seilent.funekit.kit.motion.MoveForms
+import net.seilent.funekit.kit.motion.MoveKind
+import net.seilent.funekit.kit.motion.MoveLeg
+import net.seilent.funekit.kit.motion.OverKind
+import net.seilent.funekit.kit.motion.Overlay
+import net.seilent.funekit.kit.motion.PageMove
+import net.seilent.funekit.kit.motion.Part
+import net.seilent.funekit.kit.motion.Prop
+import net.seilent.funekit.kit.touch.Gesture
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import kotlin.math.pow
+
+class PageStackTest {
+    private val ends = MoveEnds(pivotX = 49.8f, pivotY = 28.2f)
+
+    private fun stack() = PageStack<String>(MoveForms(), { PageKind.Grid }) { ends }.also { it.pages.add("hub") }
+
+    private val pop: (Turn<String>) -> MoveKind = { MoveKind.T4 }
+
+    @Test
+    fun aPushSwapsAtTheSwapTimeAndRestsAtTheEnd() {
+        val s = stack()
+        s.push("album", MoveKind.T3)
+        s.frame(0)
+        assertEquals(Phase.Exit, s.phase)
+        s.frame(166)
+        assertEquals("hub", s.top)
+        s.frame(167)
+        assertEquals("album", s.top)
+        assertEquals(Phase.Enter, s.phase)
+        s.frame(633)
+        assertEquals(Phase.Enter, s.phase)
+        s.frame(634)
+        assertEquals(Phase.Rest, s.phase)
+    }
+
+    @Test
+    fun aBackBeforeTheSwapReversesToTheOrigin() {
+        val s = stack()
+        s.push("album", MoveKind.T3)
+        s.frame(0)
+        s.frame(100)
+        s.back(pop)
+        s.frame(110)
+        assertTrue(s.move.reversed)
+        assertEquals(Phase.Enter, s.phase)
+        assertEquals(listOf("hub"), s.pages.toList())
+        s.frame(219)
+        assertEquals(Phase.Enter, s.phase)
+        s.frame(220)
+        assertEquals(Phase.Rest, s.phase)
+        assertEquals(listOf("hub"), s.pages.toList())
+    }
+
+    @Test
+    fun aTouchDuringAMoveLandsIt() {
+        val s = stack()
+        s.push("album", MoveKind.T3)
+        s.frame(0)
+        s.touch()
+        s.frame(50)
+        assertEquals(Phase.Rest, s.phase)
+        assertEquals(listOf("hub", "album"), s.pages.toList())
+        assertFalse(s.move.live)
+    }
+
+    @Test
+    fun anOpenSheetTakesTheBackAndBlocksAPush() {
+        val s = stack()
+        s.open(Overlay(OverKind.Sheet))
+        s.frame(0)
+        s.push("album", MoveKind.T3)
+        s.frame(16)
+        assertEquals(Phase.Rest, s.phase)
+        s.back(pop)
+        s.frame(150)
+        val o = s.overlay
+        assertTrue(o != null && o.closing)
+        s.frame(150 + o!!.dur().toLong())
+        assertNull(s.overlay)
+        assertEquals(listOf("hub"), s.pages.toList())
+    }
+
+    @Test
+    fun theSwapHookSeesTheTopPageAtTheSwapAndNotForAPopToHome() {
+        val seen = mutableListOf<Pair<String, Long>>()
+        val s = PageStack<String>(MoveForms(), { PageKind.Grid }, swapped = { p, at -> seen += p to at }) { ends }.also { it.pages.add("hub") }
+        s.push("album", MoveKind.T3)
+        s.frame(0)
+        assertTrue(seen.isEmpty())
+        val push = s.move.swapAt
+        s.frame(push)
+        assertEquals(listOf("album" to push), seen)
+        s.frame(s.move.endAt)
+        assertEquals(Phase.Rest, s.phase)
+        val t0 = s.move.endAt + 100
+        s.pop(MoveKind.T4)
+        s.frame(t0)
+        val pop = s.move.swapAt
+        assertEquals(1, seen.size)
+        s.frame(pop)
+        assertEquals(listOf("album" to push, "hub" to pop), seen)
+        s.frame(s.move.endAt)
+        s.back { MoveKind.T4n }
+        s.frame(s.move.endAt + 100)
+        assertEquals(MoveKind.T4n, s.turn?.kind)
+        s.frame(s.move.swapAt)
+        assertTrue(s.pages.isEmpty())
+        assertEquals(2, seen.size)
+    }
+
+    @Test
+    fun theLastPagePopsToHomeAndThenThereIsNoBack() {
+        val s = stack()
+        assertTrue(s.canBack)
+        s.back { MoveKind.T4n }
+        s.frame(0)
+        assertEquals(MoveKind.T4n, s.turn?.kind)
+        assertNull(s.turn?.to)
+        s.frame(300)
+        assertTrue(s.pages.isEmpty())
+        assertTrue(s.canBack)
+        s.frame(332)
+        assertEquals(Phase.Enter, s.phase)
+        s.frame(333)
+        assertEquals(Phase.Rest, s.phase)
+        assertFalse(s.canBack)
+    }
+
+    @Test
+    fun aPushFromHomeCanGoBackBeforeItsSwap() {
+        val s = PageStack<String>(MoveForms(), { PageKind.Grid }) { ends }
+        assertFalse(s.canBack)
+        s.push("hub", MoveKind.T2n)
+        s.frame(0)
+        assertTrue(s.canBack)
+        s.back(pop)
+        s.frame(100)
+        assertTrue(s.move.reversed)
+        assertTrue(s.pages.isEmpty())
+        s.frame(100 + 100)
+        assertEquals(Phase.Rest, s.phase)
+        assertTrue(s.pages.isEmpty())
+    }
+
+    @Test
+    fun aBackDuringT2wReversesBeforeTheSwapAndRetargetsAfterIt() {
+        val slide = MoveEnds(peek0 = 0.6f, slideX = 300f, grounds = true)
+        fun pushed() = PageStack<String>(MoveForms(), { PageKind.Plain }) { slide }.also {
+            it.push("drawer", MoveKind.T2w)
+            it.frame(0)
+        }
+        val a = pushed()
+        a.frame(150)
+        a.back { MoveKind.T4n }
+        a.frame(150)
+        assertTrue(a.move.reversed)
+        assertTrue(a.pages.isEmpty())
+        val b = pushed()
+        b.frame(300)
+        assertEquals(Phase.Enter, b.phase)
+        b.back { MoveKind.T4n }
+        b.frame(400)
+        assertEquals(MoveKind.T4n, b.move.kind)
+        assertEquals(true, b.turn?.retarget)
+        for (p in listOf(Part.Leave, Part.LeaveHeader, Part.LeavePivots, Part.LeaveGround)) assertEquals("$p A", 0.70054, b.move.at(p, Prop.A, 400).toDouble(), 1e-4)
+    }
+
+    @Test
+    fun aSecondBackDuringThePopToHomeDoesNothing() {
+        val s = stack()
+        s.back { MoveKind.T4n }
+        s.frame(0)
+        s.back { MoveKind.T4n }
+        s.frame(50)
+        assertEquals(Phase.Rest, s.phase)
+        assertTrue(s.pages.isEmpty())
+        assertNull(s.turn)
+    }
+
+    @Test
+    fun aSettledOverlayStopsTheClock() {
+        val s = stack()
+        s.open(Overlay(OverKind.Sheet))
+        s.frame(0)
+        assertTrue(s.moving)
+        s.frame(380)
+        assertFalse(s.moving)
+        assertTrue(s.overlay != null)
+    }
+
+    @Test
+    fun aTouchLandsAnOpeningOverlay() {
+        val s = stack()
+        s.open(Overlay(OverKind.Sheet))
+        s.frame(0)
+        s.touch()
+        s.frame(100)
+        assertFalse(s.moving)
+        assertEquals(1f, s.overlay!!.sheet(100).alpha, 0f)
+    }
+
+    @Test
+    fun aBackOnAClosingOverlayLandsItAndPopsThePageUnder() {
+        val s = stack()
+        s.pages.add("album")
+        s.open(Overlay(OverKind.Sheet))
+        s.frame(0)
+        s.frame(400)
+        s.back(pop)
+        s.frame(410)
+        assertTrue(s.overlay!!.closing)
+        s.back(pop)
+        s.frame(420)
+        assertNull(s.overlay)
+        assertEquals(MoveKind.T4, s.turn?.kind)
+        assertEquals("hub", s.turn?.to)
+    }
+
+    @Test
+    fun aBackAfterTheSwapRetargetsFromTheCurrentLegValues() {
+        val s = stack()
+        s.push("album", MoveKind.T3)
+        s.frame(0)
+        s.frame(200)
+        s.back(pop)
+        s.frame(210)
+        assertEquals(Phase.Exit, s.phase)
+        assertEquals(MoveKind.T4, s.turn?.kind)
+        assertEquals(listOf("hub", "album"), s.pages.toList())
+        val q = 43.0 / 167
+        assertEquals(43.0 / 67, s.move.at(Part.LeavePivots, Prop.A, 210).toDouble(), 0.002)
+        assertEquals(49.8 * (1 - q * (2 - q)), s.move.at(Part.LeavePivots, Prop.X, 210).toDouble(), 0.01)
+        assertEquals(0.0, s.move.at(Part.LeaveHeader, Prop.A, 210).toDouble(), 0.0)
+        s.frame(210 + 167)
+        assertEquals(listOf("hub"), s.pages.toList())
+    }
+
+    @Test
+    fun theMoveStartHookRunsOnceOnTheFirstFrameOfAPushAPopARetargetedPopAndHomeAndNeverOnAReverse() {
+        val starts = mutableListOf<Pair<MoveKind, Long>>()
+        val s = PageStack<String>(MoveForms(), { PageKind.Grid }, starting = { starts += it.kind to it.at }) { ends }.also { it.pages.add("hub") }
+        s.push("album", MoveKind.T3)
+        assertTrue(starts.isEmpty())
+        s.frame(0)
+        assertEquals(listOf(MoveKind.T3 to 0L), starts)
+        var t = rest(s, 0) + STEP
+        assertEquals(1, starts.size)
+        s.pop(MoveKind.T4)
+        s.frame(t)
+        assertEquals(MoveKind.T4 to t, starts.last())
+        t = rest(s, t) + STEP
+        assertEquals(2, starts.size)
+        s.push("album", MoveKind.T3)
+        s.frame(t)
+        assertEquals(MoveKind.T3 to t, starts.last())
+        s.back(pop)
+        s.frame(t + STEP)
+        assertTrue(s.move.reversed)
+        t = rest(s, t + STEP) + STEP
+        assertEquals(3, starts.size)
+        s.push("album", MoveKind.T3)
+        s.frame(t)
+        assertEquals(4, starts.size)
+        s.frame(t + RETARGET_MS)
+        assertEquals(Phase.Enter, s.phase)
+        s.back(pop)
+        s.frame(t + RETARGET_MS + STEP)
+        assertEquals(Phase.Exit, s.phase)
+        assertEquals(true, s.turn?.retarget)
+        assertEquals(MoveKind.T4 to t + RETARGET_MS + STEP, starts.last())
+        t = rest(s, t + RETARGET_MS + STEP) + STEP
+        assertEquals(5, starts.size)
+        assertEquals(listOf("hub"), s.pages.toList())
+        s.home(MoveKind.T4n)
+        s.frame(t)
+        assertEquals(MoveKind.T4n to t, starts.last())
+        rest(s, t)
+        assertEquals(6, starts.size)
+    }
+
+    @Test
+    fun aPagePushPicksTheContentFormOfItsKind() {
+        val forms = MoveForms(pageRows = ContentForm.Rest)
+        val kinds = mapOf("albums" to PageKind.Hub, "settings" to PageKind.Plain, "grid" to PageKind.Grid)
+        fun pushed(to: String) = PageStack<String>(forms, { kinds.getValue(it) }) { ends }.also {
+            it.pages.add("hub")
+            it.push(to, MoveKind.T3)
+            it.frame(0)
+        }
+        val hub = pushed("albums")
+        val h = 209.0 / 418
+        assertEquals(0.79 + 0.21 * (1 - (1 - h).pow(1.5)), hub.move.at(Part.Content, Prop.S, 209).toDouble(), 0.002)
+        assertEquals(0.5, hub.move.at(Part.Content, Prop.A, 67).toDouble(), 0.002)
+        val plain = pushed("settings")
+        assertEquals(1f, plain.move.at(Part.Content, Prop.A, 0), 0f)
+        assertEquals(1f, plain.move.at(Part.Content, Prop.S, 0), 0f)
+        assertEquals(1f, plain.move.at(Part.Leave, Prop.A, 16), 0f)
+        assertEquals(0f, plain.move.at(Part.Leave, Prop.A, 17), 0f)
+        val grid = pushed("grid")
+        assertEquals(0.71f, grid.move.at(Part.Content, Prop.S, 434), 0.0001f)
+        assertEquals(0f, grid.move.at(Part.Content, Prop.A, 434), 0f)
+        assertEquals(0.5f, grid.move.at(Part.Content, Prop.A, 534), 0.0001f)
+    }
+
+    @Test
+    fun homeFromADeepStackRunsT4nAndLandsOnTheRoot() {
+        val s = stack().also { it.pages.add("album") }
+        s.home(MoveKind.T4n)
+        s.frame(0)
+        assertEquals(Phase.Exit, s.phase)
+        assertEquals(MoveKind.T4n, s.turn?.kind)
+        assertNull(s.turn?.to)
+        s.frame(299)
+        assertEquals(listOf("hub", "album"), s.pages.toList())
+        s.frame(300)
+        assertTrue(s.pages.isEmpty())
+        assertEquals(Phase.Enter, s.phase)
+        s.frame(332)
+        assertEquals(Phase.Enter, s.phase)
+        s.frame(333)
+        assertEquals(Phase.Rest, s.phase)
+    }
+
+    @Test
+    fun homeDropsAnOpenOverlayAndDoesNothingAtTheRoot() {
+        val s = stack()
+        s.open(Overlay(OverKind.Jump))
+        s.frame(0)
+        s.home(MoveKind.T4n)
+        s.frame(16)
+        assertNull(s.overlay)
+        assertEquals(Phase.Exit, s.phase)
+        val root = PageStack<String>(MoveForms(), { PageKind.Grid }) { ends }
+        root.home(MoveKind.T4n)
+        root.frame(0)
+        assertEquals(Phase.Rest, root.phase)
+        assertFalse(root.canBack)
+    }
+
+    @Test
+    fun aPageBackHookTakesTheBackAtRestAndNothingPops() {
+        val asked = mutableListOf<Pair<String, Long>>()
+        val s = PageStack<String>(MoveForms(), { PageKind.Grid }, pageBack = { p, now -> asked += p to now; true }) { ends }.also { it.pages.add("hub") }
+        s.back(pop)
+        s.frame(40)
+        assertEquals(listOf("hub" to 40L), asked)
+        assertEquals(Phase.Rest, s.phase)
+        assertEquals(listOf("hub"), s.pages.toList())
+    }
+
+    @Test
+    fun aPageThatIsNoRetargetLandsTheMoveAndThenAsksItsHook() {
+        val asked = mutableListOf<String>()
+        val s = PageStack<String>(MoveForms(), { PageKind.Grid }, pageBack = { p, _ -> asked += p; true }, retargets = { it != "folder" }) { ends }.also { it.pages.add("hub") }
+        s.push("folder", MoveKind.T3)
+        s.frame(0)
+        s.frame(200)
+        s.back(pop)
+        s.frame(210)
+        assertEquals(listOf("folder"), asked)
+        assertEquals(Phase.Rest, s.phase)
+        assertFalse(s.move.live)
+        assertEquals(listOf("hub", "folder"), s.pages.toList())
+    }
+
+    @Test
+    fun aHookThatDeclinesLetsThePagePop() {
+        val s = PageStack<String>(MoveForms(), { PageKind.Grid }, pageBack = { _, _ -> false }) { ends }.also { it.pages.add("hub") }
+        s.pages.add("album")
+        s.back(pop)
+        s.frame(0)
+        assertEquals(MoveKind.T4, s.turn?.kind)
+        assertEquals("album", s.turn?.from)
+        assertEquals("hub", s.turn?.to)
+    }
+
+    @Test
+    fun aHoldOnABackTargetKeepsTheSwapUntilTheHoldWindowEnds() {
+        val s = stack()
+        s.push("album", MoveKind.T3)
+        s.frame(0)
+        assertTrue(s.hold(100, target = true, band = Gesture.Edge.None))
+        s.frame(167)
+        assertEquals(Phase.Exit, s.phase)
+        assertEquals("hub", s.top)
+        s.frame(566)
+        assertEquals(Phase.Exit, s.phase)
+        s.frame(567)
+        assertEquals(Phase.Enter, s.phase)
+        assertEquals("album", s.top)
+        assertEquals(434, s.move.leg(Part.Content, Prop.A)?.delay)
+        assertEquals(634L, s.move.endAt)
+    }
+
+    @Test
+    fun aHoldThatStartsAfterTheSwapTimeKeepsNothing() {
+        val s = stack()
+        s.push("album", MoveKind.T3)
+        s.frame(0)
+        assertTrue(s.hold(167, target = true, band = Gesture.Edge.None))
+        s.frame(167)
+        assertEquals(Phase.Enter, s.phase)
+    }
+
+    @Test
+    fun aBandHoldNeverKeepsTheSwap() {
+        val s = stack()
+        s.push("album", MoveKind.T3)
+        s.frame(0)
+        assertTrue(s.hold(100, target = false, band = Gesture.Edge.Left))
+        s.frame(167)
+        assertEquals(Phase.Enter, s.phase)
+        assertEquals("album", s.top)
+    }
+
+    @Test
+    fun aHeldBackBeforeTheSwapReversesThePush() {
+        val s = stack()
+        s.push("album", MoveKind.T3)
+        s.frame(0)
+        assertTrue(s.hold(50, target = false, band = Gesture.Edge.Left))
+        s.frame(100)
+        s.heldBack(pop)
+        s.frame(120)
+        assertTrue(s.move.reversed)
+        assertEquals(Phase.Enter, s.phase)
+        assertEquals(listOf("hub"), s.pages.toList())
+        assertNull(s.held)
+    }
+
+    @Test
+    fun aHeldBackAfterTheSwapLandsThePushAndPopsIt() {
+        val s = stack()
+        s.push("album", MoveKind.T3)
+        s.frame(0)
+        assertTrue(s.hold(50, target = false, band = Gesture.Edge.Left))
+        s.frame(200)
+        s.heldBack(pop)
+        s.frame(210)
+        assertFalse(s.move.reversed)
+        assertEquals(Phase.Exit, s.phase)
+        assertEquals(MoveKind.T4, s.turn?.kind)
+        assertEquals("album", s.turn?.from)
+        assertEquals("hub", s.turn?.to)
+    }
+
+    @Test
+    fun aHeldBackFromAnEarlierMoveLandsItAndBacksOnThePageItLandsOn() {
+        val s = stack()
+        s.push("album", MoveKind.T3)
+        s.frame(0)
+        assertTrue(s.hold(50, target = false, band = Gesture.Edge.Left))
+        s.back(pop)
+        s.frame(60)
+        assertTrue(s.move.reversed)
+        s.heldBack(pop)
+        s.frame(70)
+        assertFalse(s.move.reversed)
+        assertEquals(Phase.Exit, s.phase)
+        assertEquals("hub", s.turn?.from)
+        assertNull(s.turn?.to)
+    }
+
+    @Test
+    fun aPopHoldsOnlyItsBackTargetAndATapLandsItThenFindsNoPage() {
+        val s = stack()
+        s.back { MoveKind.T4n }
+        s.frame(0)
+        assertFalse(s.hold(10, target = false, band = Gesture.Edge.Left))
+        assertTrue(s.hold(10, target = true, band = Gesture.Edge.None))
+        s.frame(100)
+        assertEquals(Phase.Exit, s.phase)
+        s.heldBack { MoveKind.T4n }
+        s.frame(110)
+        assertEquals(Phase.Rest, s.phase)
+        assertTrue(s.pages.isEmpty())
+        assertNull(s.turn)
+    }
+
+    @Test
+    fun nothingHoldsAtRestAndATouchDropsTheHold() {
+        val s = stack()
+        assertFalse(s.hold(0, target = true, band = Gesture.Edge.Left))
+        assertNull(s.held)
+        s.push("album", MoveKind.T3)
+        s.frame(0)
+        assertTrue(s.hold(100, target = true, band = Gesture.Edge.None))
+        s.touch()
+        s.frame(120)
+        assertNull(s.held)
+        assertEquals(Phase.Rest, s.phase)
+        assertEquals(listOf("hub", "album"), s.pages.toList())
+    }
+
+    @Test
+    fun aBandHoldOnAnOpeningSheetClosesItFromWhereItIs() {
+        val s = stack()
+        s.open(Overlay(OverKind.Sheet))
+        s.frame(0)
+        assertTrue(s.hold(50, target = false, band = Gesture.Edge.Right))
+        s.heldBack(pop)
+        s.frame(100)
+        assertTrue(s.overlay!!.closing)
+        assertEquals(listOf("hub"), s.pages.toList())
+    }
+
+    @Test
+    fun aSettledSheetHoldsNothing() {
+        val s = stack()
+        s.open(Overlay(OverKind.Sheet))
+        s.frame(0)
+        s.frame(400)
+        assertFalse(s.hold(400, target = false, band = Gesture.Edge.Right))
+    }
+
+    private val jumpIn = Old.motion_jumpIn.toLong()
+
+    @Test
+    fun jumpSettledIsSetOnTheFrameTheJumpGridLandsAndClearedWhenItsCloseStarts() {
+        val s = stack()
+        s.open(Overlay(OverKind.Jump))
+        s.frame(0)
+        assertFalse(s.jumpSettled)
+        s.frame(jumpIn - 1)
+        assertFalse(s.jumpSettled)
+        s.frame(jumpIn)
+        assertTrue(s.jumpSettled)
+        s.frame(jumpIn + 100)
+        assertTrue(s.jumpSettled)
+        s.close()
+        s.frame(jumpIn + 116)
+        assertFalse(s.jumpSettled)
+        s.frame(jumpIn + 1000)
+        assertNull(s.overlay)
+        assertFalse(s.jumpSettled)
+    }
+
+    @Test
+    fun aSettledSheetOrDialogIsNotAJumpGrid() {
+        for (kind in listOf(OverKind.Sheet, OverKind.Dlg)) {
+            val s = stack()
+            s.open(Overlay(kind))
+            s.frame(0)
+            s.frame(1000)
+            assertTrue(s.overlay != null)
+            assertFalse(s.jumpSettled)
+        }
+    }
+
+    @Test
+    fun aWarmHomeFromASettledGridClearsItAndAReopenStartsUnsettled() {
+        val s = stack()
+        s.open(Overlay(OverKind.Jump))
+        s.frame(0)
+        s.frame(jumpIn)
+        assertTrue(s.jumpSettled)
+        s.home(MoveKind.T4n)
+        s.frame(jumpIn + 16)
+        assertNull(s.overlay)
+        assertFalse(s.jumpSettled)
+        s.frame(jumpIn + 5000)
+        assertEquals(Phase.Rest, s.phase)
+        s.push("hub", MoveKind.T3)
+        s.frame(jumpIn + 5016)
+        s.frame(jumpIn + 10000)
+        s.open(Overlay(OverKind.Jump))
+        s.frame(jumpIn + 10016)
+        assertFalse(s.jumpSettled)
+    }
+
+    @Test
+    fun aTouchThatLandsAnOpeningGridSettlesIt() {
+        val s = stack()
+        s.open(Overlay(OverKind.Jump))
+        s.frame(0)
+        s.frame(10)
+        assertFalse(s.jumpSettled)
+        s.touch()
+        s.frame(20)
+        assertTrue(s.jumpSettled)
+    }
+
+    private class E(val entry: Long, val page: String)
+
+    private class Models {
+        val held = mutableMapOf<Long, String>()
+        val dropped = mutableListOf<Long>()
+        val entered = mutableListOf<Long>()
+        val turns = mutableListOf<MoveKind>()
+        val stack = PageStack<E>(
+            MoveForms(),
+            { PageKind.Grid },
+            enter = { e ->
+                entered += e.entry
+                held[e.entry] = e.page
+            },
+            drop = { e ->
+                dropped += e.entry
+                held.remove(e.entry)
+            },
+            started = { turns += it.kind },
+        ) { MoveEnds() }
+
+        fun open(page: String): E = E(stack.entry(), page)
+    }
+
+    private fun rest(s: PageStack<*>, from: Long): Long {
+        var t = from
+        s.frame(t)
+        while (s.phase != Phase.Rest) {
+            t += STEP
+            s.frame(t)
+        }
+        return t
+    }
+
+    private fun swapped(s: PageStack<*>, from: Long): Long {
+        var t = from
+        s.frame(t)
+        while (s.phase == Phase.Exit) {
+            t += STEP
+            s.frame(t)
+        }
+        return t
+    }
+
+    private fun Models.pushAll(pages: List<String>): Long {
+        var t = 0L
+        for (p in pages) {
+            stack.push(open(p), MoveKind.T3)
+            t = rest(stack, t) + STEP
+        }
+        return t
+    }
+
+    @Test
+    fun entriesKeepTheirOwnModelsAndAPopDropsItsModelAtItsLandNotItsSwap() {
+        val m = Models()
+        var t = m.pushAll(listOf("hub", "album5", "artist", "album5"))
+        assertEquals(listOf(0L, 1L, 2L, 3L), m.stack.pages.map { it.entry })
+        assertEquals(listOf("hub", "album5", "artist", "album5"), m.stack.pages.map { m.held.getValue(it.entry) })
+        assertEquals(4L, m.stack.entries)
+        assertEquals(listOf(0L, 1L, 2L, 3L), m.entered)
+        m.stack.pop(MoveKind.T4)
+        t = swapped(m.stack, t)
+        assertEquals(Phase.Enter, m.stack.phase)
+        assertEquals(3, m.stack.pages.size)
+        assertTrue(m.dropped.isEmpty())
+        assertTrue(3L in m.held)
+        rest(m.stack, t)
+        assertEquals(listOf(3L), m.dropped)
+        assertEquals(setOf(0L, 1L, 2L), m.held.keys)
+    }
+
+    @Test
+    fun aReversedPushDropsThePushedModelAtItsLand() {
+        val m = Models()
+        var t = m.pushAll(listOf("hub"))
+        val album = m.open("album5")
+        m.stack.push(album, MoveKind.T3)
+        m.stack.frame(t)
+        assertTrue(album.entry in m.held)
+        t += STEP
+        m.stack.back { MoveKind.T4 }
+        m.stack.frame(t)
+        assertTrue(m.stack.move.reversed)
+        assertTrue(m.dropped.isEmpty())
+        rest(m.stack, t)
+        assertEquals(listOf(album.entry), m.dropped)
+        assertEquals(listOf(0L), m.stack.pages.map { it.entry })
+    }
+
+    @Test
+    fun aRefusedPushMakesNoModelAndStartsNoTurn() {
+        val m = Models()
+        val t = m.pushAll(listOf("hub"))
+        val album = m.open("album5")
+        val artist = m.open("artist")
+        m.stack.push(album, MoveKind.T3)
+        m.stack.push(artist, MoveKind.T3)
+        m.stack.frame(t)
+        assertEquals(listOf(0L, album.entry), m.entered)
+        val r = rest(m.stack, t) + STEP
+        val queue = m.open("queue")
+        m.stack.open(Overlay(OverKind.Sheet))
+        m.stack.push(queue, MoveKind.T3)
+        m.stack.frame(r)
+        assertEquals(listOf(0L, album.entry), m.entered)
+        assertEquals(setOf(0L, album.entry), m.held.keys)
+        assertEquals(listOf(MoveKind.T3, MoveKind.T3), m.turns)
+        assertEquals(listOf(0L, album.entry), m.stack.pages.map { it.entry })
+    }
+
+    @Test
+    fun aRetargetedPushDropsItsPageAtTheLandOfThePopThatReplacedIt() {
+        val m = Models()
+        val t = m.pushAll(listOf("hub"))
+        val album = m.open("album5")
+        m.stack.push(album, MoveKind.T3)
+        m.stack.frame(t)
+        m.stack.frame(t + RETARGET_MS)
+        assertEquals(Phase.Enter, m.stack.phase)
+        m.stack.back { MoveKind.T4 }
+        m.stack.frame(t + RETARGET_MS + STEP)
+        assertEquals(Phase.Exit, m.stack.phase)
+        assertEquals(listOf(MoveKind.T3, MoveKind.T3, MoveKind.T4), m.turns)
+        val swap = swapped(m.stack, t + RETARGET_MS + STEP)
+        assertEquals(listOf(0L), m.stack.pages.map { it.entry })
+        assertTrue(m.dropped.isEmpty())
+        assertTrue(album.entry in m.held)
+        rest(m.stack, swap)
+        assertEquals(listOf(album.entry), m.dropped)
+        assertEquals(setOf(0L), m.held.keys)
+    }
+
+    @Test
+    fun homeDropsEveryModelAtItsLand() {
+        val m = Models()
+        var t = m.pushAll(listOf("hub", "album5", "artist"))
+        m.stack.home(MoveKind.T4n)
+        t = swapped(m.stack, t)
+        assertTrue(m.stack.pages.isEmpty())
+        assertTrue(m.dropped.isEmpty())
+        rest(m.stack, t)
+        assertEquals(listOf(0L, 1L, 2L), m.dropped)
+        assertTrue(m.held.isEmpty())
+    }
+
+    private fun settle(s: PageStack<String>, from: Long): Long = from + requireNotNull(s.overlay).dur().toLong()
+
+    @Test
+    fun aDialogOpenHidesTheFocusAndItsSettledCloseShowsItWithASnapshot() {
+        val s = stack()
+        s.open(Overlay(OverKind.Dlg))
+        s.frame(0)
+        assertTrue(s.hideFocus)
+        assertEquals(1, s.snap)
+        val t = settle(s, 0)
+        s.frame(t)
+        s.close()
+        s.frame(t)
+        assertTrue(s.overlay!!.closing)
+        assertFalse(s.hideFocus)
+        assertEquals(2, s.snap)
+    }
+
+    @Test
+    fun aDialogClosedWhileOpeningKeepsTheHideThroughTheReverse() {
+        val s = stack()
+        s.open(Overlay(OverKind.Dlg), hides = true)
+        s.frame(0)
+        s.frame(STEP)
+        s.close()
+        s.frame(STEP)
+        var t = STEP
+        while (s.overlay != null) {
+            assertTrue(s.overlay!!.closing)
+            assertTrue(s.hideFocus)
+            t += STEP
+            s.frame(t)
+        }
+        assertEquals(1, s.snap)
+        assertFalse(s.hideFocus)
+    }
+
+    @Test
+    fun theLyricsSheetHidesTheFocusAndItsCloseKeepsTheHide() {
+        val s = stack()
+        s.open(Overlay(OverKind.Sheet), hides = true)
+        s.frame(0)
+        assertTrue(s.hideFocus)
+        val t = settle(s, 0)
+        s.frame(t)
+        s.close()
+        s.frame(t)
+        assertTrue(s.overlay!!.closing)
+        assertTrue(s.hideFocus)
+        assertEquals(1, s.snap)
+    }
+
+    @Test
+    fun aLibrarySheetShowsTheFocusAndThePickerSwapTakesNoSnapshot() {
+        val s = stack()
+        s.open(Overlay(OverKind.Sheet))
+        s.frame(0)
+        assertFalse(s.hideFocus)
+        assertEquals(1, s.snap)
+        val t = settle(s, 0)
+        s.frame(t)
+        var at = -1L
+        s.swapMenu { at = it }
+        s.frame(t)
+        assertEquals(t, at)
+        assertFalse(s.hideFocus)
+        assertEquals(1, s.snap)
+        assertTrue(s.overlay!!.moving(t))
+        assertFalse(s.overlay!!.closing)
+        val c = settle(s, t)
+        s.frame(c)
+        s.close()
+        s.frame(c)
+        assertTrue(s.overlay!!.closing)
+        s.swapMenu {}
+        s.frame(c + STEP)
+        assertFalse(s.overlay!!.closing)
+        assertTrue(s.overlay!!.moving(c + STEP))
+        assertEquals(1, s.snap)
+    }
+
+    @Test
+    fun theDroppedHookSeesTheTopPageOnTheFrameTheOverlayGoes() {
+        val seen = mutableListOf<Pair<String, Long>>()
+        val s = PageStack<String>(MoveForms(), { PageKind.Grid }, dropped = { p, at -> seen += p to at }) { ends }.also { it.pages.add("hub") }
+        s.open(Overlay(OverKind.Sheet))
+        s.frame(0)
+        val t = settle(s, 0)
+        s.frame(t)
+        s.close()
+        s.frame(t)
+        s.frame(t + STEP)
+        assertTrue("nothing while the overlay closes", seen.isEmpty())
+        val c = settle(s, t) + STEP
+        s.frame(c)
+        assertNull(s.overlay)
+        assertEquals(listOf("hub" to c), seen)
+        s.frame(c + STEP)
+        assertEquals("once per overlay", 1, seen.size)
+        s.open(Overlay(OverKind.Jump))
+        s.frame(c + STEP)
+        s.home(MoveKind.T4n)
+        s.frame(c + STEP + STEP)
+        assertEquals("a home that drops the overlay shows the page it leaves", listOf("hub" to c, "hub" to c + STEP + STEP), seen)
+        s.frame(s.move.endAt)
+        s.home(MoveKind.T4n)
+        s.frame(s.move.endAt + STEP)
+        assertEquals("a home with no overlay drops nothing", 2, seen.size)
+    }
+
+    @Test
+    fun aDialogOpenedOverAClosingSheetFiresNoDroppedAndItsCloseFiresItOnce() {
+        val seen = mutableListOf<Pair<String, Long>>()
+        val s = PageStack<String>(MoveForms(), { PageKind.Grid }, dropped = { p, at -> seen += p to at }) { ends }.also { it.pages.add("hub") }
+        s.open(Overlay(OverKind.Sheet))
+        s.frame(0)
+        val t = settle(s, 0)
+        s.frame(t)
+        val dialog = Overlay(OverKind.Dlg)
+        s.accept()
+        s.open(dialog)
+        s.frame(t + STEP)
+        assertSame(dialog, s.overlay)
+        assertTrue("an open over a closing sheet drops it with no dropped", seen.isEmpty())
+        val r = settle(s, t + STEP)
+        s.frame(r)
+        s.close()
+        s.frame(r)
+        val c = settle(s, r) + STEP
+        s.frame(c)
+        assertNull(s.overlay)
+        assertEquals(listOf("hub" to c), seen)
+        s.frame(c + STEP)
+        assertEquals("once per drop", 1, seen.size)
+    }
+
+    @Test
+    fun aSwapForOneOverlayDoesNothingOnceItIsClosingOrAnotherIsOpen() {
+        val s = stack()
+        val first = Overlay(OverKind.Sheet)
+        s.open(first)
+        s.frame(0)
+        val t = settle(s, 0)
+        s.frame(t)
+        var swapped = 0
+        s.close()
+        s.swapMenu(first) { swapped++ }
+        s.frame(t)
+        assertEquals(0, swapped)
+        assertSame(first, s.overlay)
+        assertTrue(first.closing)
+        val c = settle(s, t) + STEP
+        s.frame(c)
+        assertNull(s.overlay)
+        val second = Overlay(OverKind.Sheet)
+        s.open(second)
+        s.frame(c)
+        val r = settle(s, c)
+        s.frame(r)
+        s.swapMenu(first) { swapped++ }
+        s.frame(r)
+        assertEquals(0, swapped)
+        assertFalse(second.moving(r))
+        s.swapMenu(second) { swapped++ }
+        s.frame(r)
+        assertEquals(1, swapped)
+    }
+
+    @Test
+    fun aSheetVerbAndAPickerPickShowTheFocusWithASnapshot() {
+        val s = stack()
+        s.open(Overlay(OverKind.Sheet), hides = true)
+        s.frame(0)
+        s.pick()
+        s.frame(STEP)
+        assertFalse(s.hideFocus)
+        assertEquals(2, s.snap)
+        val u = stack()
+        u.open(Overlay(OverKind.Sheet), hides = true)
+        u.frame(0)
+        val t = settle(u, 0)
+        u.frame(t)
+        u.accept()
+        u.frame(t)
+        assertFalse(u.hideFocus)
+        assertEquals(2, u.snap)
+        assertTrue(u.overlay!!.closing)
+    }
+
+    @Test
+    fun aJumpGridPickClosesTheGridWithNoSnapshotAndLeavesThePageLive() {
+        val s = stack()
+        s.open(Overlay(OverKind.Jump))
+        s.frame(0)
+        assertFalse(s.hideFocus)
+        assertEquals(1, s.snap)
+        val t = settle(s, 0)
+        s.frame(t)
+        assertTrue(s.jumpSettled)
+        s.close()
+        s.frame(t + STEP)
+        assertTrue(s.overlay!!.closing)
+        assertFalse(s.jumpSettled)
+        assertEquals(1, s.snap)
+        assertFalse(s.hideFocus)
+        var at = t + STEP
+        while (s.overlay != null) {
+            at += STEP
+            s.frame(at)
+        }
+        assertEquals(1, s.snap)
+        assertFalse(s.hideFocus)
+    }
+
+    companion object {
+        private const val STEP = 16L
+        private const val RETARGET_MS = 200L
+        private const val NP_POP = 200
+    }
+
+    private fun popped(hook: String): PageStack<String> {
+        val move = PageMove()
+        val s = PageStack<String>(
+            MoveForms(),
+            { PageKind.Plain },
+            move = move,
+            starting = { if (hook == "starting") move.npPop(NP_POP) },
+            legs = { if (hook == "legs") move.npPop(NP_POP) },
+        ) { ends }.also { it.pages.addAll(listOf("np", "queue")) }
+        s.pop(MoveKind.T4)
+        s.frame(0)
+        return s
+    }
+
+    @Test
+    fun theLegsHookRunsAfterTheMoveStartAndItsReleasesOnAPushAPopAndARetargetsPop() {
+        val kinds = mutableListOf<MoveKind>()
+        val s = PageStack<String>(MoveForms(), { PageKind.Plain }, legs = { kinds += it.kind }) { ends }.also { it.pages.add("hub") }
+        s.push("album", MoveKind.T3)
+        s.frame(0)
+        s.frame(300)
+        s.back(pop)
+        s.frame(310)
+        s.frame(2000)
+        s.pop(MoveKind.T4)
+        s.frame(2010)
+        assertEquals(listOf(MoveKind.T3, MoveKind.T4, MoveKind.T4), kinds)
+        val plain = popped("none")
+        val hooked = popped("legs")
+        val early = popped("starting")
+        assertTrue(plain.move.at(Part.Content, Prop.A, NP_POP - 1L) > plain.move.at(Part.Content, Prop.A, 0))
+        assertEquals(hooked.move.at(Part.Content, Prop.A, 0), hooked.move.at(Part.Content, Prop.A, NP_POP - 1L), 0f)
+        assertEquals(plain.move.at(Part.Content, Prop.A, plain.move.endAt), hooked.move.at(Part.Content, Prop.A, plain.move.endAt), 0f)
+        assertEquals(plain.move.endAt, hooked.move.endAt)
+        for (t in listOf(0L, NP_POP - 1L, NP_POP.toLong(), plain.move.endAt)) {
+            assertEquals(plain.move.at(Part.Content, Prop.A, t), early.move.at(Part.Content, Prop.A, t), 0f)
+        }
+    }
+
+    private fun waits(ready: (String) -> Boolean, kind: PageKind = PageKind.Grid, m: PageMove = PageMove(), legs: (Turn<String>) -> Unit = {}) =
+        PageStack<String>(MoveForms(), { kind }, move = m, legs = legs, ready = ready) { ends }.also { it.pages.add("hub") }
+
+    private fun legsOf(m: PageMove) = m.legs.map { listOf(it.part, it.prop, it.delay, it.dur) }
+
+    private fun content(m: PageMove): List<MoveLeg> = m.legs.filter { it.part == Part.Content }
+
+    private val held = 1f - (Tok.motion_leave - 17f) / Tok.motion_leave
+
+    @Test
+    fun aPageReadyAtTheStartReleasesAtTheStart() {
+        for (k in listOf(MoveKind.T3, MoveKind.T4)) {
+            val a = waits({ true }, PageKind.Hub)
+            val b = PageStack<String>(MoveForms(), { PageKind.Hub }) { ends }.also { it.pages.add("hub") }
+            for (x in listOf(a, b)) {
+                if (k == MoveKind.T3) {
+                    x.push("album", k)
+                } else {
+                    x.pages.add("album")
+                    x.pop(k)
+                }
+                x.frame(0)
+            }
+            assertEquals(b.move.endAt, a.move.endAt)
+            var t = 0L
+            while (t <= b.move.endAt) {
+                for (p in Part.entries) for (q in Prop.entries) assertEquals("$k $p $q $t", b.move.at(p, q, t), a.move.at(p, q, t), 1e-4f)
+                t += 16
+            }
+        }
+    }
+
+    @Test
+    fun aPageNotReadyHoldsTheContentAndClampsTheLeave() {
+        assertEquals(133f, Tok.motion_leave)
+        val s = waits({ it != "hub" }).also { it.pages.add("album") }
+        s.pop(MoveKind.T4)
+        s.frame(0)
+        s.frame(100)
+        assertEquals(0f, s.move.at(Part.Content, Prop.A, 100), 1e-4f)
+        s.frame(150)
+        assertEquals(0f, s.move.at(Part.Content, Prop.A, 150), 1e-4f)
+        assertEquals(held, s.move.at(Part.Leave, Prop.A, 150), 1e-4f)
+        s.frame(160)
+        assertEquals(held, s.move.at(Part.Leave, Prop.A, 160), 1e-4f)
+        assertTrue(s.move.held(Part.Content))
+    }
+
+    @Test
+    fun theFirstFrameThePageIsReadyReleasesIt() {
+        var ok = false
+        val s = waits({ ok }, PageKind.Hub)
+        val r = PageStack<String>(MoveForms(), { PageKind.Hub }) { ends }.also { it.pages.add("hub") }
+        s.push("album", MoveKind.T3)
+        r.push("album", MoveKind.T3)
+        s.frame(0)
+        r.frame(0)
+        s.frame(150)
+        assertEquals(held, s.move.at(Part.Leave, Prop.A, 150), 1e-4f)
+        ok = true
+        s.frame(200)
+        assertFalse(s.move.held(Part.Content))
+        assertEquals(1f - 200f / 217f, s.move.at(Part.Leave, Prop.A, 200), 1e-4f)
+        assertEquals(0f, s.move.at(Part.Leave, Prop.A, 217), 1e-4f)
+        val first = content(r.move).minOf { it.delay }
+        val d = maxOf(0, 183 - first)
+        assertTrue(d > 0)
+        val moved = content(s.move)
+        val base = content(r.move)
+        assertEquals(base.size, moved.size)
+        for (i in base.indices) {
+            assertEquals(base[i].delay + d, moved[i].delay)
+            assertEquals(base[i].dur, moved[i].dur)
+        }
+        val rest = r.move.legs.filter { it.part != Part.Content && it.part != Part.Leave }.maxOf { it.delay + it.dur }
+        val end = maxOf(rest, base.maxOf { it.delay + it.dur } + d, 217)
+        assertEquals(end.toLong(), s.move.endAt)
+        assertTrue(s.move.endAt > r.move.endAt)
+    }
+
+    @Test
+    fun aPageNeverReadyLandsAtItsEndWithNoRelease() {
+        val s = waits({ it != "album" })
+        s.push("album", MoveKind.T3)
+        s.frame(0)
+        val before = legsOf(s.move)
+        val end = s.move.endAt
+        var t = 16L
+        while (t < end) {
+            s.frame(t)
+            assertEquals(0f, s.move.at(Part.Content, Prop.A, t), 1e-4f)
+            assertEquals(Phase.Enter.takeIf { t >= s.move.swapAt } ?: Phase.Exit, s.phase)
+            t += 16
+        }
+        s.frame(t)
+        assertEquals(Phase.Rest, s.phase)
+        assertEquals(listOf("hub", "album"), s.pages.toList())
+        assertTrue(s.move.held(Part.Content))
+        assertEquals(before, legsOf(s.move))
+        assertEquals(end, s.move.endAt)
+    }
+
+    @Test
+    fun aPageReadyOnItsEndFrameLandsWithNoRelease() {
+        var ok = false
+        val s = waits({ ok })
+        s.push("album", MoveKind.T3)
+        s.frame(0)
+        val before = legsOf(s.move)
+        val end = s.move.endAt
+        s.frame(200)
+        assertEquals(Phase.Enter, s.phase)
+        ok = true
+        s.frame(end)
+        assertEquals(Phase.Rest, s.phase)
+        assertTrue(s.move.held(Part.Content))
+        assertEquals(before, legsOf(s.move))
+    }
+
+    @Test
+    fun aWaitingPopRunsTheLegsHookOnTheHeldMove() {
+        var ok = false
+        val m = PageMove()
+        val s = waits({ it != "hub" || ok }, m = m, legs = { m.npPop(200) }).also { it.pages.add("album") }
+        s.pop(MoveKind.T4)
+        s.frame(0)
+        assertTrue(content(m).isNotEmpty())
+        for (l in content(m)) assertEquals(200, l.delay)
+        s.frame(100)
+        ok = true
+        s.frame(250)
+        assertFalse(m.held(Part.Content))
+        for (l in content(m)) assertEquals(maxOf(200, 250 - 17), l.delay)
+    }
+
+    @Test
+    fun aReverseWhileWaitingReleasesNothing() {
+        var ok = false
+        var asked = 0
+        val s = waits({
+            asked++
+            ok
+        }, PageKind.Hub)
+        s.push("album", MoveKind.T3)
+        s.frame(0)
+        s.frame(100)
+        assertTrue(s.move.held(Part.Content))
+        val seen = asked
+        s.back(pop)
+        s.frame(110)
+        assertTrue(s.move.reversed)
+        val before = legsOf(s.move)
+        ok = true
+        s.frame(150)
+        assertEquals(seen, asked)
+        assertEquals(before, legsOf(s.move))
+    }
+
+    @Test
+    fun aRetargetedPopReleasesWhenThePageItReturnsToIsReady() {
+        val s = waits({ it != "album" })
+        s.push("album", MoveKind.T3)
+        s.frame(0)
+        s.frame(200)
+        assertTrue(s.move.held(Part.Content))
+        assertEquals(0f, s.move.at(Part.Content, Prop.A, 200), 1e-4f)
+        s.back(pop)
+        s.frame(210)
+        assertEquals(MoveKind.T4, s.turn?.kind)
+        assertEquals("hub", s.turn?.to)
+        assertFalse(s.move.held(Part.Content))
+        assertEquals(0f, s.move.at(Part.Leave, Prop.A, 210), 1e-4f)
+    }
+}
