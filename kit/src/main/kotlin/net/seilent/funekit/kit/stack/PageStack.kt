@@ -326,6 +326,7 @@ class PageStack<P : Any>(
         waiting = t.kind != MoveKind.T7 && t.to?.let { !ready(it) } ?: false
         if (!waiting) arrive(now)
         legs(t)
+        if (t.kind == MoveKind.T4 && t.to?.let(isNp) == true) move.npPop(Tok.motion_npContentDelay.toInt())
         phase = Phase.Exit
     }
 

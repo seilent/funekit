@@ -665,6 +665,58 @@ class PageStackTest {
         assertEquals("np", s.top)
     }
 
+    private fun popsInto(to: String, isNp: (String) -> Boolean) = PageStack<String>(MoveForms(), { PageKind.Hub }, isNp = isNp) { MoveEnds() }
+        .also { it.pages.addAll(listOf(to, "queue")) }
+
+    @Test
+    fun aT4IntoNowPlayingStartsEveryArrivingLegUnderTheContentDelayThereAndKeepsItsEnd() {
+        val d = Tok.motion_npContentDelay.toInt()
+        val plain = popsInto("np") { false }
+        val np = popsInto("np") { it == "np" }
+        for (s in listOf(plain, np)) {
+            s.pop(MoveKind.T4)
+            s.frame(0)
+            assertEquals(MoveKind.T4, s.turn?.kind)
+        }
+        val a = plain.move.legs
+        val b = np.move.legs
+        assertEquals(a.size, b.size)
+        val arrive = setOf(Part.Content, Part.Header, Part.Pivots)
+        assertTrue("an arriving leg starts under the delay", a.any { it.part in arrive && it.delay < d })
+        for (i in a.indices) {
+            val x = a[i]
+            val y = b[i]
+            assertEquals(x.part, y.part)
+            assertEquals(x.prop, y.prop)
+            if (x.part in arrive && x.delay < d) {
+                assertEquals("${x.part} ${x.prop} delay", d, y.delay)
+                assertEquals("${x.part} ${x.prop} end", maxOf(x.end, d), y.end)
+            } else {
+                assertEquals("${x.part} ${x.prop} delay", x.delay, y.delay)
+                assertEquals("${x.part} ${x.prop} dur", x.dur, y.dur)
+            }
+        }
+    }
+
+    @Test
+    fun aT4IntoAnotherPageKeepsItsLegs() {
+        val plain = popsInto("hub") { false }
+        val np = popsInto("hub") { it == "np" }
+        for (s in listOf(plain, np)) {
+            s.pop(MoveKind.T4)
+            s.frame(0)
+        }
+        assertEquals(plain.move.legs.map { listOf(it.part, it.prop, it.delay, it.dur) }, np.move.legs.map { listOf(it.part, it.prop, it.delay, it.dur) })
+    }
+
+    @Test
+    fun aT3IntoTheQueueCutsTheLeavingPageAtZero() {
+        val s = PageStack<String>(MoveForms(), { PageKind.Hub }) { MoveEnds(npQueue = true) }.also { it.pages.add("np") }
+        s.push("queue", MoveKind.T3)
+        s.frame(0)
+        for (p in listOf(Part.Leave, Part.LeaveHeader, Part.LeavePivots)) assertEquals("$p A at 0", 0f, s.move.at(p, Prop.A, 0), 0f)
+    }
+
     private class E(val entry: Long, val page: String)
 
     private class Models {
