@@ -37,7 +37,7 @@ class HeldTouchTest {
     private val ups = mutableListOf<Boolean>()
     private val stack = PageStack<String>(MoveForms(), { PageKind.Grid }) { MoveEnds() }.also { it.pages.add("hub") }
 
-    private fun content(target: (Offset) -> Boolean) {
+    private fun content(push: Boolean = true, target: (Offset) -> Boolean) {
         rule.setContent {
             Box(
                 Modifier.fillMaxSize().pointerInput(Unit) {
@@ -64,8 +64,70 @@ class HeldTouchTest {
                 )
             }
         }
-        stack.push("album", MoveKind.T3)
+        if (push) stack.push("album", MoveKind.T3)
         stack.frame(rule.mainClock.currentTime)
+    }
+
+    private fun popping(device: Boolean) {
+        content(push = false) { it.y < HEADER }
+        stack.pages.add("album")
+        stack.back(device, pop)
+        stack.frame(rule.mainClock.currentTime)
+        assertEquals(Phase.Exit, stack.phase)
+        assertEquals(true, stack.turn?.popping)
+    }
+
+    private fun heldOut() {
+        rule.onRoot().performTouchInput {
+            down(Offset(120f, 30f))
+            moveTo(Offset(120f, 90f))
+            up()
+        }
+        rule.waitForIdle()
+        frame(2000)
+    }
+
+    private fun heldTap() {
+        rule.onRoot().performTouchInput {
+            down(Offset(120f, 30f))
+            up()
+        }
+        rule.waitForIdle()
+        frame(100)
+        frame(2000)
+        frame(4000)
+    }
+
+    @Test
+    fun aHeldTargetLeftDuringADevicePopLandsItAndDropsTheRestOfTheGesture() {
+        popping(device = true)
+        heldOut()
+        assertEquals(listOf("hub"), stack.pages.toList())
+        assertEquals(listOf(true), ups)
+    }
+
+    @Test
+    fun aHeldTargetLeftDuringATouchPopLandsItAndLetsTheUpThrough() {
+        popping(device = false)
+        heldOut()
+        assertEquals(listOf("hub"), stack.pages.toList())
+        assertEquals(listOf(false), ups)
+    }
+
+    @Test
+    fun aHeldTargetTapDuringATouchPopBacksOnceMore() {
+        popping(device = false)
+        heldTap()
+        assertEquals(emptyList<String>(), stack.pages.toList())
+        assertEquals(listOf(true), ups)
+    }
+
+    @Test
+    fun aHeldTargetTapDuringADevicePopOnlyLandsIt() {
+        popping(device = true)
+        heldTap()
+        assertEquals(listOf("hub"), stack.pages.toList())
+        assertEquals(listOf(true), ups)
     }
 
     private fun frame(ms: Long) = stack.frame(stack.move.t0 + ms)
