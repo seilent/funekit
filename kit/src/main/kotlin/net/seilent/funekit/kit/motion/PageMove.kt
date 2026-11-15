@@ -1281,6 +1281,15 @@ class PageMove {
         finish()
     }
 
+    fun npRelease(at: Long): Int {
+        if (held.none { it in npInGroup }) return 0
+        held.removeAll(npInGroup)
+        val first = list.filter { it.part in npInGroup && it.prop == Prop.A }.minOfOrNull { it.delay.toLong() } ?: return 0
+        val d = max(0L, at - t0 - Moves.kTail - first).toInt()
+        npShift(d)
+        return d
+    }
+
     fun npShift(by: Int) {
         if (by <= 0) return
         for (l in list) if (l.part in npInGroup) l.delay += by

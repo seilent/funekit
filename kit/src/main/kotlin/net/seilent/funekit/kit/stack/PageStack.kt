@@ -23,13 +23,14 @@ import net.seilent.funekit.kit.motion.PageMove
 import net.seilent.funekit.kit.motion.Part
 import net.seilent.funekit.kit.motion.Prop
 import net.seilent.funekit.kit.motion.arriveGroup
+import net.seilent.funekit.kit.motion.npInGroup
 import net.seilent.funekit.kit.touch.Gesture
 
 enum class Phase { Rest, Exit, Enter }
 
 enum class PageKind { Grid, Hub, Plain }
 
-class Turn<P : Any>(val kind: MoveKind, val from: P?, val to: P?, val popping: Boolean, val retarget: Boolean = false, val at: Long = 0L, val row: Int = -1, val album: Long = -1L, val morph: Boolean = true)
+class Turn<P : Any>(val kind: MoveKind, val from: P?, val to: P?, val popping: Boolean, val retarget: Boolean = false, val at: Long = 0L, val row: Int = -1, val album: Long = -1L, val morph: Boolean = true, val keep: P? = null)
 
 class PageStack<P : Any>(
     var forms: MoveForms,
@@ -46,6 +47,8 @@ class PageStack<P : Any>(
     private val dropped: (P, Long) -> Unit = { _, _ -> },
     private val legs: (Turn<P>) -> Unit = {},
     private val ready: (P) -> Boolean = { true },
+    private val isNp: (P) -> Boolean = { false },
+    private val gate: InputGate? = null,
     private val ends: (Turn<P>) -> MoveEnds,
 ) {
     val pages = mutableStateListOf<P>()
@@ -80,6 +83,22 @@ class PageStack<P : Any>(
     private var swapHeld = false
     private var waiting = false
     private val gone = mutableListOf<P>()
+    private var opened: PlayOpen? by mutableStateOf(null)
+    private var pending = 0
+    private var replayDue = false
+    private var cutOwed = false
+
+    init {
+        gate?.host = object : GateHost {
+            override val asked: Int get() = this@PageStack.asked
+
+            override val armed: Boolean get() = opened != null
+
+            override fun cut() = npCut()
+
+            override fun back() = backKey()
+        }
+    }
 
     val top: P? get() = pages.lastOrNull()
 
@@ -92,6 +111,11 @@ class PageStack<P : Any>(
 
     val canBack: Boolean get() = pages.isNotEmpty() || overlay != null || phase != Phase.Rest
 
+    val armed: Boolean
+        get() = opened.let { it != null && (it.state == PlayOpen.State.Armed || it.state == PlayOpen.State.Released) }
+
+    internal val due: Boolean get() = replayDue
+
     private fun ask(a: (Long) -> Unit) {
         asks.addLast(a)
         asked++
@@ -103,6 +127,7 @@ class PageStack<P : Any>(
     }
 
     fun pop(kind: MoveKind, album: Long = -1L) = ask { now ->
+        armedLand(now)
         if (phase != Phase.Rest) land(now)
         if (pages.isEmpty()) return@ask
         start(Turn(kind, top, under, popping = true, album = album), now, retarget = false)
@@ -111,6 +136,7 @@ class PageStack<P : Any>(
     fun entry(): Long = entries++
 
     fun open(o: Overlay, hides: Boolean = o.kind == OverKind.Dlg, covers: Boolean = o.kind == OverKind.Sheet || o.kind == OverKind.Dlg) = ask { now ->
+        armedLand(now)
         if (phase != Phase.Rest) land(now)
         landOverlay(now, show = false)
         if (overlay != null) return@ask
@@ -163,6 +189,12 @@ class PageStack<P : Any>(
     fun back(popKind: (Turn<P>) -> MoveKind) = back(false, popKind)
 
     fun back(device: Boolean, popKind: (Turn<P>) -> MoveKind) = ask { now ->
+        if (opened != null) {
+            gate?.drop()
+            refuse(now)
+            devicePop = device
+            return@ask
+        }
         val o = overlay
         when {
             o != null && !o.closing && o.moving(now) -> closeOverlay(o, now)
@@ -227,6 +259,7 @@ class PageStack<P : Any>(
     }
 
     fun home(kind: MoveKind) = ask { now ->
+        armedLand(now, replay = false)
         dropOverlay()
         if (phase != Phase.Rest) land(now)
         if (pages.isEmpty()) return@ask
@@ -247,6 +280,7 @@ class PageStack<P : Any>(
     }
 
     private fun touch(now: Long) {
+        armedLand(now)
         val o = overlay
         if (o != null && (o.closing || o.moving(now))) landOverlay(now)
         if (phase != Phase.Rest) land(now)
@@ -265,7 +299,7 @@ class PageStack<P : Any>(
     private fun retargetable(): Boolean {
         val t = turn ?: return false
         val page = top ?: return false
-        return move.live && !move.reversed && phase == Phase.Enter && t.to != null && retargets(page)
+        return move.live && !move.reversed && phase == Phase.Enter && t.to != null && t.kind != MoveKind.T7 && retargets(page)
     }
 
     private fun formsFor(to: P?): MoveForms {
@@ -280,16 +314,16 @@ class PageStack<P : Any>(
 
     private fun start(from: Turn<P>, now: Long, retarget: Boolean) {
         devicePop = false
-        if (!from.popping) from.to?.let(enter)
+        if (!from.popping && from.keep == null) from.to?.let(enter)
         seq++
         swapHeld = false
-        val t = Turn(from.kind, from.from, from.to, from.popping, retarget, now, from.row, from.album, from.morph)
+        val t = Turn(from.kind, from.from, from.to, from.popping, retarget, now, from.row, from.album, from.morph, from.keep)
         turn = t
         started(t)
         starting(t)
         moveEnds = ends(t).copy(retarget = retarget, rows = t.to?.let { kindOf(it) != PageKind.Grid } ?: false)
         move.start(t.kind, now, moveEnds, formsFor(t.to))
-        waiting = t.to?.let { !ready(it) } ?: false
+        waiting = t.kind != MoveKind.T7 && t.to?.let { !ready(it) } ?: false
         if (!waiting) arrive(now)
         legs(t)
         phase = Phase.Exit
@@ -392,11 +426,11 @@ class PageStack<P : Any>(
             } else if (pages.isNotEmpty()) {
                 gone += pages.removeAt(pages.lastIndex)
             }
-        } else if (t.to != null) {
+        } else if (t.to != null && t.keep == null) {
             pages.add(t.to)
         }
         phase = Phase.Enter
-        top?.let { swapped(it, at) }
+        (t.keep ?: top)?.let { swapped(it, at) }
     }
 
     private fun land(now: Long) {
@@ -406,22 +440,184 @@ class PageStack<P : Any>(
     }
 
     private fun rest() {
+        val k = turn?.keep
         move.stop()
         phase = Phase.Rest
         turn = null
         waiting = false
+        if (k != null) {
+            val i = pages.lastIndexOf(k)
+            if (i >= 0) while (pages.lastIndex > i) gone += pages.removeAt(pages.lastIndex)
+        }
         val g = gone.toList()
         gone.clear()
         g.forEach(drop)
     }
 
+    fun pushOpen(page: P, tapAt: Long, boundMs: Long): PlayOpen = playOpen(OpenForm.Push, page, tapAt, boundMs)
+
+    fun cutThenPush(page: P, tapAt: Long, boundMs: Long): PlayOpen = playOpen(OpenForm.Cut, page, tapAt, boundMs)
+
+    fun popToNp(np: P, tapAt: Long, boundMs: Long): PlayOpen = playOpen(OpenForm.Keep, np, tapAt, boundMs)
+
+    private fun playOpen(form: OpenForm, page: P, tapAt: Long, boundMs: Long): PlayOpen {
+        onMain("a play open")
+        checkNotNull(gate) { "a play open needs the stack's InputGate" }
+        val h = PlayOpen(tapAt, boundMs, ::openDone, ::openFail)
+        pending++
+        gateNow()
+        ask { now -> arm(h, form, page, now) }
+        return h
+    }
+
+    private fun arm(h: PlayOpen, form: OpenForm, page: P, now: Long) {
+        pending--
+        val back = gate?.backOwed == true
+        gate?.backOwed = false
+        if (h.latch == Latch.Fail) {
+            h.state = PlayOpen.State.Refused
+            gateNow()
+            return
+        }
+        if (phase != Phase.Rest || (form != OpenForm.Cut && overlay != null)) {
+            h.state = PlayOpen.State.Local
+            gateNow()
+            return
+        }
+        if (form == OpenForm.Cut) {
+            overlay?.let { o ->
+                if (!o.closing) closing(o, now)
+                dropOverlay(show = false)
+            }
+        }
+        start(Turn(MoveKind.T7, top, page, popping = false, keep = if (form == OpenForm.Keep) page else null), now, retarget = false)
+        move.hold(npInGroup)
+        opened = h
+        if (h.latch == Latch.Done) {
+            h.doneAt = now
+            h.state = PlayOpen.State.Released
+        } else {
+            h.state = PlayOpen.State.Armed
+        }
+        if (cutOwed) cutNow()
+        if (back) {
+            gate?.drop()
+            refuse(now)
+            return
+        }
+        gateNow()
+    }
+
+    private fun openDone(h: PlayOpen) {
+        onMain("PlayOpen.done")
+        if (h.state == PlayOpen.State.Pending) {
+            if (h.latch == null) h.latch = Latch.Done
+        } else if (h === opened && h.state == PlayOpen.State.Armed) {
+            h.doneAt = clock
+            h.state = PlayOpen.State.Released
+        }
+    }
+
+    private fun openFail(h: PlayOpen) {
+        onMain("PlayOpen.fail")
+        if (h.state == PlayOpen.State.Pending) {
+            if (h.latch == null) h.latch = Latch.Fail
+        } else if (h === opened && h.state == PlayOpen.State.Armed) {
+            h.state = PlayOpen.State.Refused
+            ask { now -> if (opened === h) refuse(now) }
+        }
+    }
+
+    internal fun npCut() {
+        cutOwed = true
+        if (opened != null && move.live && move.kind == MoveKind.T7) cutNow()
+    }
+
+    private fun cutNow() {
+        cutOwed = false
+        move.land(Part.NpLeave)
+        move.land(Part.NpPeek)
+    }
+
+    private fun backKey() = ask { now -> if (opened != null) refuse(now) }
+
+    private fun gateNow() {
+        val g = gate ?: return
+        val hold = pending > 0 || opened != null
+        if (hold && !g.holding) g.hold()
+        if (!hold && g.holding) {
+            g.free()
+            cutOwed = false
+            replayDue = true
+        }
+    }
+
+    private fun opens(now: Long) {
+        val h = opened ?: return
+        when (h.state) {
+            PlayOpen.State.Armed -> if (now >= h.bound) refuse(now)
+            PlayOpen.State.Released -> {
+                val to = turn?.to
+                if ((to != null && ready(to)) || now >= h.doneAt + h.boundMs) release(now)
+            }
+            else -> Unit
+        }
+    }
+
+    private fun release(now: Long) {
+        opened = null
+        move.npRelease(now)
+        if (gate?.queued == true) land(now)
+        gateNow()
+    }
+
+    fun armedDrop() {
+        onMain("PageStack.armedDrop")
+        armedLand(clock, replay = false)
+    }
+
+    private fun armedLand(now: Long, replay: Boolean = true) {
+        val h = opened ?: return
+        opened = null
+        h.state = PlayOpen.State.Released
+        move.npRelease(now)
+        land(now)
+        if (!replay) gate?.drop()
+        gateNow()
+    }
+
+    private fun refuse(now: Long) {
+        val h = opened ?: return
+        opened = null
+        h.state = PlayOpen.State.Refused
+        if (phase == Phase.Exit) swap(now)
+        val t = turn
+        turn = null
+        rest()
+        val np = t?.to
+        val q = top
+        if (t?.keep != null) {
+            if (np != null && q != null) start(Turn(MoveKind.T8, np, q, popping = false, keep = q), now, retarget = false)
+        } else if (q != null) {
+            start(Turn(MoveKind.T8, q, under, popping = true), now, retarget = false)
+        }
+        move.clear(Part.NpOut)
+        if (gate?.queued == true) land(now)
+        gateNow()
+    }
+
     fun frame(now: Long) {
         clock = now
+        if (replayDue) {
+            replayDue = false
+            if (gate?.replay(now) == true) replayDue = true
+        }
         while (asks.isNotEmpty()) asks.removeFirst()(now)
+        opens(now)
         if (phase == Phase.Exit && now >= move.swapAt) {
             if (moveHeld(now)) swapHeld = true else swap(now)
         }
-        if (phase == Phase.Enter && now >= move.endAt) rest()
+        if (phase == Phase.Enter && now >= move.endAt && opened == null) rest()
         if (waiting && turn?.to?.let(ready) == true) {
             waiting = false
             arrive(now)
@@ -437,7 +633,7 @@ class PageStack<P : Any>(
 fun <P : Any> PageStackClock(stack: PageStack<P>, popKind: (Turn<P>) -> MoveKind) {
     LaunchedEffect(stack, stack.asked) {
         withFrameMillis { stack.frame(it) }
-        while (stack.moving) withFrameMillis { stack.frame(it) }
+        while (stack.moving || stack.due) withFrameMillis { stack.frame(it) }
     }
     PredictiveBackHandler(enabled = stack.canBack) { progress ->
         progress.collect {}

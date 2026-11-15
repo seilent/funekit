@@ -646,6 +646,41 @@ class PageMoveTest {
         assertEquals(want.maxOf { it.delay + it.dur }.toLong(), m.endAt - m.t0)
     }
 
+    @Test
+    fun npReleaseDelaysEveryNpInLegByTheShownTimeLessTheTailAndTheFirstNpInAlphaDelay() {
+        val m = started(MoveKind.T7, MoveEnds())
+        m.hold(npInGroup)
+        val d0 = m.legs.filter { it.part in npInGroup && it.prop == Prop.A }.minOf { it.delay }
+        assertEquals(300, d0)
+        val before = m.legs.map { it to it.delay }
+        val d = m.npRelease(600)
+        assertEquals(600 - Moves.kTail - d0, d)
+        assertEquals(583, 600 - Moves.kTail)
+        assertEquals(600 - Moves.kTail, m.legs.filter { it.part in npInGroup && it.prop == Prop.A }.minOf { it.delay })
+        for ((l, was) in before) {
+            assertEquals("${l.part} ${l.prop}", if (l.part in npInGroup) was + d else was, l.delay)
+        }
+        assertTrue(before.any { it.first.part == Part.NpLeave })
+        for (p in npInGroup) assertFalse("$p held", m.held(p))
+    }
+
+    @Test
+    fun npReleaseBeforeTheFirstInkAndTheTailMovesNothing() {
+        val m = started(MoveKind.T7, MoveEnds())
+        m.hold(npInGroup)
+        val before = m.legs.map { it.delay }
+        assertEquals(0, m.npRelease(300L + Moves.kTail - 1))
+        assertEquals(before, m.legs.map { it.delay })
+    }
+
+    @Test
+    fun npReleaseOfAnUnheldGroupReturnsZeroAndMovesNothing() {
+        val m = started(MoveKind.T7, MoveEnds())
+        val before = m.legs.map { it.delay }
+        assertEquals(0, m.npRelease(600))
+        assertEquals(before, m.legs.map { it.delay })
+    }
+
     private fun powOut15(t: Double) = 1 - (1 - t).pow(1.5)
 
     private fun smoothStep(t: Double) = t * t * (3 - 2 * t)
