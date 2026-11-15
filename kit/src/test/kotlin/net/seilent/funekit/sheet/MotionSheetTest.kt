@@ -489,6 +489,7 @@ class MotionSheetTest {
                 moveCase("t4h", "the artists hub back to home, its header word into the music item", t4h) { t4h.pop(MoveKind.T4h) },
                 moveCase("t4n", "the bluetooth page to home with no word", t4n) { t4n.pop(MoveKind.T4n) },
                 t5Case("t5", "pivot switch from albums to artists with the # divider focused, as main.cpp t5 (the switch at 2800, Hub::switch_pivot showing the list thumb); the leaving rows stand in for the ALBUMS grid", artists, true, mapOf(100L to "t5-100", 250L to "t5-250", 450L to "t5-450", 700L to "t5-700", 1500L to "t5-1500")),
+                t5Case("t5-off", "the same pivot switch under ACCENT OFF at the series times", artists, false, series("t5", T5_OFF)),
                 t5Case("t5-songs", "pivot switch from albums to songs with the # divider focused, as main.cpp t5:300:songs", songsEnter, false, mapOf(300L to "t5-300-songs")),
                 moveCase("t7", "the songs hub to now playing, page form", t7) { t7.push(np, MoveKind.T7) },
                 overlayCase("t13-open", "the power dialog over home, as main.cpp t13", OverKind.Dlg, null, POWER, POWER_ITEMS, false, mapOf(120L to "t13-120", 400L to "t13-400"), listOf("home.item" to HOME_TEXT, "home.watermark" to HOME_TEXT, "dialog.item" to POWER_TEXT)),
@@ -594,13 +595,20 @@ class MotionSheetTest {
         private const val ACCENT_OFF = "-accentoff"
         private const val HELD = "rowpress-0-hubsongs-held"
         private const val SERIES = "rowpress-100-hubsongs-down-series-accentoff"
+        private val T5_OFF = listOf(0L, 17L, 33L, 50L, 67L, 83L, 100L, 117L, 133L, 150L, 167L, 175L, 183L, 200L, 217L, 233L, 236L, 250L, 267L, 283L, 300L, 317L, 333L, 350L)
+        private val T5_STATIC = listOf(175L, 236L)
+
+        private fun series(kind: String, times: List<Long>, tail: String = "") = times.associateWith { "$kind-$it$tail$ACCENT_OFF" }
+
+        private fun names(m: Map<Long, String>) = m.values.toSet()
+
         private val A105_KINDS = setOf(
             "rowpress-0-hubsongs-down", "rowpress-0-hubsongs-tap", "rowpress-0-hubsongs-up", HELD, SERIES,
             "t5-100", "t5-250", "t5-450", "t5-700", "t5-1500", "t5-300-songs",
             "t13-120", "t13-400", "t13x-80", "t14-500-songs", "t14-150-songs", "t14x-120-songs",
-        )
-        private val R1_KINDS = setOf(HELD, SERIES)
-        private val V1_KINDS = setOf(HELD, SERIES)
+        ) + names(series("t5", T5_OFF))
+        private val R1_KINDS = setOf(HELD, SERIES) + names(series("t5", T5_STATIC))
+        private val V1_KINDS = setOf(HELD, SERIES) + names(series("t5", T5_STATIC))
         private const val FOLDER = "motion"
         private const val FPS = 40
         private const val STEP = 1000L / FPS
