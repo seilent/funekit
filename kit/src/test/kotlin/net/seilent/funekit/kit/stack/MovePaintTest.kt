@@ -24,6 +24,7 @@ import net.seilent.funekit.Surface
 import net.seilent.funekit.Window
 import net.seilent.funekit.gen.Glyph
 import net.seilent.funekit.kit.motion.Curves
+import net.seilent.funekit.gen.Moves
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.gen.TokBoard
 import net.seilent.funekit.kit.Band
@@ -33,6 +34,7 @@ import net.seilent.funekit.kit.JumpCells
 import net.seilent.funekit.kit.JumpGrid
 import net.seilent.funekit.kit.JumpInk
 import net.seilent.funekit.kit.Menu
+import net.seilent.funekit.kit.Metrics
 import net.seilent.funekit.kit.MenuInk
 import net.seilent.funekit.kit.MenuPlan
 import net.seilent.funekit.kit.RowInk
@@ -42,6 +44,7 @@ import net.seilent.funekit.kit.ThumbRect
 import net.seilent.funekit.kit.Word
 import net.seilent.funekit.kit.chrome
 import net.seilent.funekit.kit.chromeOf
+import net.seilent.funekit.kit.motion.MorphKind
 import net.seilent.funekit.kit.motion.MoveForms
 import net.seilent.funekit.kit.motion.MoveKind
 import net.seilent.funekit.kit.motion.NpForm
@@ -347,8 +350,10 @@ class MovePaintTest {
         val move = PageMove()
         val paint = MovePaint(move)
         var ends = 0
+        var row = -1
         val stack = PageStack<String>(forms, { PageKind.Plain }, move = move, swapped = onSwap) { t ->
             ends++
+            row = t.row
             paint.ends(t, HomeSide(home, homePaint, off()), t.from?.let { PageSide(g.s, side(it)) }, t.to?.let { PageSide(g.s, side(it)) }, forms)
         }
 
@@ -391,6 +396,32 @@ class MovePaintTest {
         val r = Run(sides = mapOf("a" to { p: Boolean -> if (p) side(pivotText(), false) else null }, "b" to { p: Boolean -> if (p) null else side(B, true) }))
         assertTrue(forms.wordMorph)
         return r
+    }
+
+    private class RowWord(d: PagePaint, val text: String, val hidden: MutableList<Int>) : PagePaint by d {
+        override fun rowSide(row: Int): WordSide? = if (row == ROW) WordSide(text, ROW_S, ROW_LOOK, ROW_X, ROW_Y, -1, false, header ?: Word.none) else null
+
+        override fun hideRow(row: Int) {
+            hidden += row
+        }
+    }
+
+    private fun rowRun(text: String, hidden: MutableList<Int>, pivot: Boolean = false, bars: Map<String, Pair<ThumbRect, ThumbFade>> = emptyMap()) = Run(
+        sides = mapOf("a" to { p: Boolean -> if (p && pivot) side(A, false) else null }, "b" to { p: Boolean -> if (p) null else side(B, true) }),
+        wraps = mapOf("a" to { d: PagePaint -> RowWord(d, text, hidden) }),
+        bars = bars,
+    )
+
+    private fun rowPopped(r: Run): Long {
+        r.stack.pages.add("a")
+        r.stack.push("b", MoveKind.T3, row = ROW)
+        r.stack.frame(0L)
+        r.stack.frame(LAND)
+        r.stack.frame(LAND + FRAME)
+        r.paint.landed()
+        r.stack.pop(MoveKind.T4)
+        r.stack.frame(LAND * 2)
+        return LAND * 2
     }
 
     private fun cubicOut(p: Float): Float = 1 - (1 - p) * (1 - p) * (1 - p)
@@ -1918,6 +1949,153 @@ class MovePaintTest {
         assertEquals(0f, gone.chromes.getValue("leave.chrome")[1], 0f)
     }
 
+    @Test
+    fun aT3FromARowWhoseTitleFoldsToTheArrivingHeaderTakesTheRowForm() {
+        val hidden = mutableListOf<Int>()
+        val r = rowRun("Drawer", hidden)
+        r.stack.pages.add("a")
+        r.stack.push("b", MoveKind.T3, row = ROW)
+        r.stack.frame(0L)
+        val c = r.paint.ctx
+        val e = c.ends
+        assertTrue(e.morph)
+        assertEquals(MorphKind.Row, e.morphKind)
+        assertTrue(e.morphHeaderIn)
+        assertFalse(e.morphHeaderOut)
+        assertEquals(ROW_S, e.morphS0, 0f)
+        assertEquals(HEADER_S, e.morphS1, 0f)
+        assertEquals(ROW_Y, e.morphY0, 0f)
+        assertEquals(HEADER_Y, e.morphY1, 0f)
+        assertTrue("a row push carries the leaving header out", e.lhead)
+        assertFalse("a row push takes no tile and no tap", e.thumb)
+        assertEquals(Moves.kT3RowWordEnd, r.move.wordEnd)
+        assertEquals("the row word starts at the row's own size", ROW_S, r.move.at(Part.Word, Prop.S, 0L), 0f)
+        assertEquals(ROW, c.hideRow)
+        assertEquals("the pushed row's title is hidden while the word flies", listOf(ROW), hidden)
+        r.paint.landed()
+        assertEquals("the land shows the row's title again", listOf(ROW, -1), hidden)
+    }
+
+    @Test
+    fun aRowTitleThatDoesNotFoldToTheHeaderKeepsThePivotForm() {
+        val hidden = mutableListOf<Int>()
+        val r = rowRun("albums", hidden, pivot = true)
+        r.stack.pages.add("a")
+        r.stack.push("b", MoveKind.T3, row = ROW)
+        r.stack.frame(0L)
+        assertEquals(MorphKind.Pivot, r.paint.ctx.ends.morphKind)
+        assertEquals(-1, r.paint.ctx.hideRow)
+        assertTrue(hidden.isEmpty())
+        val f = rowRun("DRAWER", mutableListOf())
+        f.stack.pages.add("a")
+        f.stack.push("b", MoveKind.T3, row = ROW)
+        f.stack.frame(0L)
+        assertEquals("the fold is ASCII case only", MorphKind.Row, f.paint.ctx.ends.morphKind)
+    }
+
+    @Test
+    fun aT4BackToThePushedRowTakesTheRowFormAndClipsTheWordAtTheRowBottom() {
+        val hidden = mutableListOf<Int>()
+        val r = rowRun("Drawer", hidden)
+        r.stack.pages.add("a")
+        r.stack.push("b", MoveKind.T3, row = ROW)
+        r.stack.frame(0L)
+        r.stack.frame(LAND)
+        r.stack.frame(LAND + FRAME)
+        assertEquals(listOf("a", "b"), r.stack.pages.toList())
+        r.paint.landed()
+        hidden.clear()
+        r.stack.pop(MoveKind.T4)
+        r.stack.frame(LAND * 2)
+        val c = r.paint.ctx
+        val e = c.ends
+        assertEquals(MorphKind.Row, e.morphKind)
+        assertTrue(e.morphHeaderOut)
+        assertFalse(e.morphHeaderIn)
+        assertEquals(HEADER_S, e.morphS0, 0f)
+        assertEquals(ROW_S, e.morphS1, 0f)
+        assertEquals("a row pop takes the word look, not the full alpha of a lit header", HEADER_LOOK, c.morphLook, 0f)
+        val px = Math.round(ROW_S * rolePx(Roles.pageHeader, s, s.stdPpu))
+        assertEquals(Math.round(ROW_Y) + maxOf(1, Metrics.descent(px)), c.rowBottom)
+        val rec = r.draw(LAND * 2 + MORPH_AT)
+        assertEquals("the landing word is clipped at the row bottom", c.rowBottom.toFloat(), rec.wordClips.getValue("morph")[3], 0f)
+        assertEquals("the push's hide is cleared, then the arriving row's title is hidden while the word lands", listOf(-1, ROW), hidden)
+    }
+
+    @Test
+    fun aT4WithNoPushedRowKeepsThePivotForm() {
+        val r = rowRun("Drawer", mutableListOf(), pivot = true)
+        r.stack.pages.addAll(listOf("a", "b"))
+        r.stack.pop(MoveKind.T4)
+        r.stack.frame(0L)
+        assertEquals("pages put on the stack by hand carry no row", MorphKind.Pivot, r.paint.ctx.ends.morphKind)
+    }
+
+    @Test
+    fun aT4RowPopZoomsTheLeavingRowsAsOneLayerOnTheRowPopKeys() {
+        val r = rowRun("Drawer", mutableListOf())
+        val t0 = rowPopped(r)
+        val c = r.paint.ctx
+        val e = c.ends
+        assertEquals(MorphKind.Row, e.morphKind)
+        assertTrue("a row pop bands the leaving page as funeOS band_leave", e.leaveRows)
+        assertTrue(c.leaveBands != null)
+        assertEquals(c.xa, requireNotNull(c.leaveAt).xa, 0f)
+        assertEquals("a T4 pop anchors at the page top", top.toFloat(), c.leaveAnchor, 0f)
+        val v = r.move
+        for ((dt, ls, dx, dy) in listOf(Quad4(33L, 0.942f, 7.9f, 21.8f), Quad4(67L, 0.914f, 11.2f, 33.7f), Quad4(100L, 0.891f, 13.9f, 43.7f))) {
+            assertEquals("kT4RowPitch at +$dt", ls, v.at(Part.Leave, Prop.S, t0 + dt), 1e-4f)
+            assertEquals("kT4RowDx at +$dt", dx * e.pxU, v.at(Part.Leave, Prop.X, t0 + dt), 1e-3f)
+            assertEquals("kT4RowDy at +$dt", dy * e.pxU, v.at(Part.Leave, Prop.Y, t0 + dt), 1e-3f)
+        }
+    }
+
+    @Test
+    fun twoPushesOfOnePageInstanceKeepTheirOwnRowsAndARestoredStackKeepsNone() {
+        val r = rowRun("Drawer", mutableListOf())
+        r.stack.pages.add("a")
+        r.stack.push("b", MoveKind.T3, row = ROW)
+        r.stack.frame(0L)
+        r.stack.frame(LAND)
+        r.stack.frame(LAND + FRAME)
+        r.stack.push("b", MoveKind.T3, row = ROW2)
+        r.stack.frame(LAND * 2)
+        r.stack.frame(LAND * 3)
+        r.stack.frame(LAND * 3 + FRAME)
+        assertEquals(listOf("a", "b", "b"), r.stack.pages.toList())
+        r.stack.pop(MoveKind.T4)
+        r.stack.frame(LAND * 4)
+        assertEquals("the top slot pops with its own row", ROW2, r.row)
+        r.stack.frame(LAND * 5)
+        r.stack.frame(LAND * 5 + FRAME)
+        r.stack.pop(MoveKind.T4)
+        r.stack.frame(LAND * 6)
+        assertEquals("the slot under it keeps the first push's row", ROW, r.row)
+        r.stack.frame(LAND * 7)
+        r.stack.frame(LAND * 7 + FRAME)
+        r.stack.push("b", MoveKind.T3, row = ROW)
+        r.stack.frame(LAND * 8)
+        r.stack.frame(LAND * 9)
+        r.stack.frame(LAND * 9 + FRAME)
+        r.stack.pages.clear()
+        r.stack.pages.addAll(listOf("a", String(charArrayOf('b'))))
+        r.stack.pop(MoveKind.T4)
+        r.stack.frame(LAND * 10)
+        assertEquals("pages restored by hand carry no row, so the pop takes the pivot form", -1, r.row)
+    }
+
+    @Test
+    fun aT4RowPopDrawsTheArrivingThumbAtItsTurnStartValue() {
+        val fade = ThumbFade()
+        val r = rowRun("Drawer", mutableListOf(), bars = mapOf("a" to (bar to fade)))
+        val t0 = rowPopped(r)
+        assertEquals("a thumb not shown since the push reads 0 at the turn start", 0f, r.paint.ctx.arriveThumb, 0f)
+        r.draw(t0 + THUMB_AT)
+        assertTrue("no arriving thumb ink while the row pop runs", r.drawn.none { it.name.endsWith(".thumb") && it.alpha > 0f })
+    }
+
+    private data class Quad4(val dt: Long, val s: Float, val x: Float, val y: Float)
+
     companion object {
         private const val FRAME = 16L
         private const val ROWS = 40
@@ -1935,6 +2113,15 @@ class MovePaintTest {
         private const val HEADER_LOOK = 0.9f
         private const val HEADER_X = 20f
         private const val HEADER_Y = 100f
+        private const val ROW = 3
+        private const val ROW_S = 0.7f
+        private const val ROW_LOOK = 1f
+        private const val ROW_X = 60f
+        private const val ROW_Y = 520f
+        private const val LAND = 5000L
+        private const val MORPH_AT = 100L
+        private const val ROW2 = 5
+        private const val THUMB_AT = 517L
         private const val ROW_PARTS = 4f
         private const val ROW_H = 20f
         private const val PROBE = 8

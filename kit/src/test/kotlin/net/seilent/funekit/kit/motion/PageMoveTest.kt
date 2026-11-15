@@ -685,6 +685,21 @@ class PageMoveTest {
 
     private fun smoothStep(t: Double) = t * t * (3 - 2 * t)
 
+    @Test
+    fun aPlainT4BringsTheContentInFromTheLeaveToTheHeaderEndPlusTheAfter() {
+        val m = started(MoveKind.T4, MoveEnds())
+        m.release(Part.Content, 0)
+        near(0.0, m.at(Part.Content, Prop.A, 133), "content A from motion.leave 133")
+        near(0.5, m.at(Part.Content, Prop.A, 228), "content A linear over 133 to 323")
+        near(1.0, m.at(Part.Content, Prop.A, 323), "content A at max(headerDelay 138 + header 135, leave 133) + contentAfter 50")
+        near(0.71, m.at(Part.Content, Prop.S, 133), "content S from motion.contentScale 0.71")
+        near(0.71 + 0.29 * 0.75, m.at(Part.Content, Prop.S, 228), "content S EaseOut, p (2 - p) at p 0.5")
+        near(1.0, m.at(Part.Content, Prop.S, 323), "content S at 1 by 323")
+        val list = started(MoveKind.T4, MoveEnds(rows = true))
+        list.release(Part.Content, 0)
+        near(1.0, list.at(Part.Content, Prop.S, 133), "a list page pops in at S 1")
+    }
+
     private fun started(k: MoveKind, e: MoveEnds) = PageMove().also { it.start(k, 0, e, forms) }
 
     @Test

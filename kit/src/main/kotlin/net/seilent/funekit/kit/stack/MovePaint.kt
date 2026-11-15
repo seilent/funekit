@@ -16,6 +16,7 @@ import net.seilent.funekit.kit.Chrome
 import net.seilent.funekit.kit.ChromePart
 import net.seilent.funekit.kit.Edges
 import net.seilent.funekit.kit.Ink
+import net.seilent.funekit.kit.Metrics
 import net.seilent.funekit.kit.StatusInk
 import net.seilent.funekit.kit.Word
 import net.seilent.funekit.kit.chrome
@@ -113,6 +114,10 @@ interface PagePaint {
     fun DrawScope.row(i: Int, y: Int, now: Long, rec: DrawRecord?, name: String)
 
     fun wordSide(pivot: Boolean): WordSide? = null
+
+    fun rowSide(row: Int): WordSide? = null
+
+    fun hideRow(row: Int) {}
 
     val nowPlaying: Boolean get() = false
     val queue: Boolean get() = false
@@ -285,6 +290,8 @@ fun PagePaint.bandsAt(): Bands? {
 
 private fun PagePaint.restBand(): IntArray = intArrayOf(top, max(bottom, top + 1))
 
+internal fun foldWord(s: String): String = String(CharArray(s.length) { val c = s[it]; if (c in 'A'..'Z') c + ('a' - 'A') else c })
+
 fun PagePaint.bandsOrRest(): Bands = bandsAt() ?: Bands(-1, restBand(), IntArray(1), 0f)
 
 class HomeSide(val scale: Scale, val paint: HomePaint, val off: Float)
@@ -340,6 +347,9 @@ class MoveCtx(
     val pivotRow: Edges? = null,
     val hides: List<PageSide> = emptyList(),
     val turnEye: TurnEye? = null,
+    val rowHide: PageSide? = null,
+    val hideRow: Int = -1,
+    val rowBottom: Int = -1,
 ) {
     val scale: Scale? get() = (to ?: from)?.scale ?: home?.scale
 
@@ -382,6 +392,7 @@ class MoveCtx(
             bands, leave, fades, at, xa, cut, held, if (held != null) old.cut else leaveCut, anchor,
             old.thumbAt, old.arriveThumb, old.leaveThumb, if (slid) cx else 0f,
             face, album, tileSide, barX, if (bands != null) old.barX else leaveBarX, pivotRow, hides,
+            rowHide = rowHide, hideRow = hideRow, rowBottom = rowBottom,
         )
         if (bands != null) c.leaveTail = max(old.tail, 0)
         return c
@@ -665,39 +676,54 @@ fun moveCtx(t: Turn<*>, home: HomeSide?, from: PageSide?, to: PageSide?, forms: 
     var morphLook = 0f
     var leaveWord: LeaveWord? = null
     var pivotPush = false
+    var rowHide: PageSide? = null
+    var hideRow = -1
+    var rowBottom = -1
     if ((k == MoveKind.T3 || k == MoveKind.T4) && forms.wordMorph && from != null && to != null) {
         val push = k == MoveKind.T3
-        val a = from.paint.wordSide(push)
-        val b = to.paint.wordSide(!push)
-        if (a != null && b != null && a.text != b.text) {
+        val rp = if (push) from else to
+        val hp = if (push) to else from
+        val rs = if (t.row >= 0) rp.paint.rowSide(t.row) else null
+        val hs = if (rs != null) hp.paint.wordSide(false) else null
+        val byRow = rs != null && hs != null && hs.header && foldWord(rs.text) == foldWord(hs.text)
+        val a = if (byRow) (if (push) rs else hs) else from.paint.wordSide(push)
+        val b = if (byRow) (if (push) hs else rs) else to.paint.wordSide(!push)
+        if (a != null && b != null && (byRow || a.text != b.text)) {
             val m = Morph(a, b, push)
             morph = m
-            morphLook = if (!push && lit && a.header) Tok.alpha_full else m.word.look
+            morphLook = if (!push && !byRow && lit && a.header) Tok.alpha_full else m.word.look
+            if (byRow && rs != null) {
+                rowHide = rp
+                hideRow = t.row
+                rowBottom = Math.round(rs.y) + max(1, Metrics.descent(Math.round(rs.s * rolePx(Roles.pageHeader, hp.scale, hp.scale.stdPpu))))
+            }
             e = e.copy(
-                morph = true, morphKind = MorphKind.Pivot,
+                morph = true, morphKind = if (byRow) MorphKind.Row else MorphKind.Pivot,
                 morphS0 = a.s, morphS1 = b.s,
                 morphX0 = a.x, morphX1 = b.x, morphY0 = a.y, morphY1 = b.y,
                 morphHeaderOut = a.header, morphHeaderIn = b.header,
                 zoom = e.zoom && !(push && b.header),
             )
             if (push) {
-                pivotPush = true
+                pivotPush = !byRow
                 val fc = from.paint.chrome
                 val hw = from.paint.header
-                if (fc != null && hw != null && hw.text != m.word.text) {
+                if (fc != null && hw != null && (byRow || hw.text != m.word.text)) {
                     val base = headerBase(from.scale)
                     leaveWord = LeaveWord(hw, fc.headerRestX(), base, if (lit) Tok.alpha_full else fc.headerAlpha)
                     e = e.copy(lhead = true, lheadBase = base)
                 }
-                val fp = from.paint
-                var tapY = s.heightPx / HALF
-                if (t.row >= 0 && t.row < fp.count) tapY = fp.rowTop(t.row) + (fp.rowY(t.row + 1) - fp.rowY(t.row)) / HALF
-                e = e.copy(tapX = s.widthPx / HALF, tapY = tapY)
-                val th = if (t.row >= 0) fp.thumbRect(t.row) else null
-                val tr = if (th != null) to.paint.tileRect(album) else null
-                if (th != null && tr != null) {
-                    e = tileEnds(e, th, tr).copy(thumb = true)
-                    tileSide = to
+                if (!byRow) {
+                    val fp = from.paint
+                    var tapY = s.heightPx / HALF
+                    if (t.row >= 0 && t.row < fp.count) tapY = fp.rowTop(t.row) + (fp.rowY(t.row + 1) - fp.rowY(t.row)) / HALF
+                    e = e.copy(tapX = s.widthPx / HALF, tapY = tapY)
+                    val th = if (t.row >= 0) fp.thumbRect(t.row) else null
+                    val tr = if (th != null) to.paint.tileRect(album) else null
+                    if (th != null && tr != null) {
+                        e = tileEnds(e, th, tr).copy(thumb = true)
+                        tileSide = to
+                    }
                 }
             }
         }
@@ -710,7 +736,8 @@ fun moveCtx(t: Turn<*>, home: HomeSide?, from: PageSide?, to: PageSide?, forms: 
     if (ts != null) e = e.copy(rowsDx = stdPx(Tok.motion_rowsDx, ts))
     val cut = if (rows && ts != null && ts.navOn) px(ts.stdContentBottom, ts.stdPpu).toFloat() else null
     val zoom = if (e.zoom && toChrome != null) toChrome.header else null
-    val leaving = if ((k == MoveKind.T4h || k == MoveKind.T4n) && to == null && from != null && from.paint.kind != PageKind.Grid) from else null
+    val bandsOut = ((k == MoveKind.T4h || k == MoveKind.T4n) && to == null) || (k == MoveKind.T4 && e.morph && e.morphKind == MorphKind.Row)
+    val leaving = if (bandsOut && from != null && from.paint.kind != PageKind.Grid) from else null
     val leaveBands = leaving?.paint?.bandsOrRest()
     val anchor = if (leaving == null) 0f else PageMove.popAnchor(k, leaving.paint.top, leaving.scale.heightPx, leaving.scale.stdPpu).toFloat()
     val leaveAt = if (leaving != null) Place(1f, 0f, 0f, xa, anchor) else null
@@ -725,6 +752,7 @@ fun moveCtx(t: Turn<*>, home: HomeSide?, from: PageSide?, to: PageSide?, forms: 
         thumbAt = t.at, leaveThumb = from?.paint?.thumbFade(t.at) ?: 0f, arriveThumb = to?.paint?.thumbFade(t.at) ?: 0f,
         face = face, album = album, tileSide = tileSide, barX = ts?.let { barOf(it) } ?: Float.MAX_VALUE,
         leaveBarX = leaving?.let { barOf(it.scale) } ?: Float.MAX_VALUE, pivotRow = to?.paint?.pivotRow(), hides = hides, turnEye = turnEye,
+        rowHide = rowHide, hideRow = hideRow, rowBottom = rowBottom,
     )
 }
 
@@ -739,14 +767,17 @@ class MovePaint(private val move: PageMove) {
         this.forms = forms
         val c = moveCtx(t, home, from, to, forms, npForm)
         for (h in ctx.hides) h.paint.hide(null)
+        ctx.rowHide?.paint?.hideRow(-1)
         ctx = if (t.retarget) c.carry(ctx, move, t.at) else c
         val hide = TileHide(ctx.album, ctx.ends.thumb)
         for (h in ctx.hides) h.paint.hide(hide)
+        ctx.rowHide?.paint?.hideRow(ctx.hideRow)
         return ctx.ends
     }
 
     fun landed() {
         for (h in ctx.hides) h.paint.hide(null)
+        ctx.rowHide?.paint?.hideRow(-1)
     }
 
     private fun tailNeed(v: PageMove, hb: Int, anchor: Float, s0: Float, oy: Float): Int {
@@ -1174,7 +1205,7 @@ class MovePaint(private val move: PageMove) {
         if (mo != null && morphing && drawn) {
             val sc = v.at(Part.Word, Prop.S, now)
             val y = v.at(Part.Word, Prop.Y, now)
-            val bottom = wordBottom(s, y, sc, progress(Prop.S, sc), mo.b.header)
+            val bottom = if (!mo.push && m.rowBottom >= 0) m.rowBottom else wordBottom(s, y, sc, progress(Prop.S, sc), mo.b.header)
             spriteAt(rec, "morph", mo.word.word, sc, v.at(Part.Word, Prop.X, now), y, wa, bottom)
         }
         val span = max(1, Tok.motion_leave.toInt())

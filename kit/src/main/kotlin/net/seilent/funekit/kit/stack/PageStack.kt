@@ -52,6 +52,7 @@ class PageStack<P : Any>(
     private val ends: (Turn<P>) -> MoveEnds,
 ) {
     val pages = mutableStateListOf<P>()
+    private val pushRows = ArrayList<Pair<P, Int>?>()
     var phase by mutableStateOf(Phase.Rest)
         private set
     var turn: Turn<P>? by mutableStateOf(null)
@@ -331,7 +332,8 @@ class PageStack<P : Any>(
         if (!from.popping && from.keep == null) from.to?.let(enter)
         seq++
         swapHeld = false
-        val t = Turn(from.kind, from.from, from.to, from.popping, retarget, now, from.row, from.album, from.morph, from.keep)
+        val row = if (from.popping && from.row < 0) from.from?.let { pushedRow(it) } ?: -1 else from.row
+        val t = Turn(from.kind, from.from, from.to, from.popping, retarget, now, row, from.album, from.morph, from.keep)
         turn = t
         started(t)
         starting(t)
@@ -443,9 +445,23 @@ class PageStack<P : Any>(
             }
         } else if (t.to != null && t.keep == null) {
             pages.add(t.to)
+            keepRow(t.to, t.row)
         }
         phase = Phase.Enter
         (t.keep ?: top)?.let { swapped(it, at) }
+    }
+
+    private fun keepRow(page: P, row: Int) {
+        val i = pages.lastIndex
+        while (pushRows.size > i) pushRows.removeAt(pushRows.lastIndex)
+        while (pushRows.size < i) pushRows.add(null)
+        pushRows.add(if (row >= 0) page to row else null)
+    }
+
+    private fun pushedRow(page: P): Int {
+        val i = pages.lastIndex
+        val r = pushRows.getOrNull(i) ?: return -1
+        return if (r.first === page && pages.getOrNull(i) === page) r.second else -1
     }
 
     private fun land(now: Long) {
@@ -466,6 +482,7 @@ class PageStack<P : Any>(
         }
         val g = gone.toList()
         gone.clear()
+        while (pushRows.size > pages.size) pushRows.removeAt(pushRows.lastIndex)
         g.forEach(drop)
     }
 
