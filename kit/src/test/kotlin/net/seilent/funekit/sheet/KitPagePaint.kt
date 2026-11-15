@@ -19,6 +19,7 @@ import net.seilent.funekit.kit.stack.PagePaint
 import net.seilent.funekit.kit.stack.WordSide
 import net.seilent.funekit.kit.stack.clipped
 import net.seilent.funekit.kit.stack.shifted
+import net.seilent.funekit.kit.touch.RowTrack
 import net.seilent.funekit.px
 
 class KitPagePaint(
@@ -52,7 +53,7 @@ class KitPagePaint(
     override fun DrawScope.row(i: Int, y: Int, now: Long, rec: DrawRecord?, name: String) = rowAt(i, y, rec, name, 1f, null, null, now)
 
     private fun DrawScope.rowAt(i: Int, y: Int, rec: DrawRecord?, name: String, press: Float, glow: RowGlow?, focus: FocusTrack?, now: Long) {
-        val focused = i == page.focused
+        val focused = focus?.let { i == it.row } ?: (i == page.focused)
         val pressed = i == page.pressed
         val k = if (pressed) press else 1f
         val alpha = focus?.rowAlpha(i, now, Tok.alpha_full, Tok.type_listPrimary_alphaDim) ?: if (focused) Tok.alpha_full else Tok.type_listPrimary_alphaDim
@@ -69,6 +70,12 @@ class KitPagePaint(
             clipped(rec, 0f, 0f, wf, h.toFloat()) {
                 shifted(rec, 0f, 0f) { rowAt(i, ys[i], rec, name, press, glow, focus, now) }
             }
+        }
+    }
+
+    fun DrawScope.scrolled(rec: DrawRecord?, name: String, track: RowTrack, focus: FocusTrack, now: Long) {
+        clipped(rec, 0f, (top - track.above).toFloat(), w.toFloat(), bottom.toFloat()) {
+            page.rows.indices.forEach { i -> rowAt(i, top + track.topOf(i) - track.q, rec, name, 1f, null, focus, now) }
         }
     }
 }

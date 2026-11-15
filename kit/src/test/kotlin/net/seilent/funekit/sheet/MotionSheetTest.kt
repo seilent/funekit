@@ -80,7 +80,13 @@ import net.seilent.funekit.kit.stack.layer
 import net.seilent.funekit.kit.stack.shifted
 import net.seilent.funekit.kit.thumb
 import net.seilent.funekit.kit.toast
+import net.seilent.funekit.kit.touch.RowSpec
+import net.seilent.funekit.kit.touch.RowTrack
+import net.seilent.funekit.kit.touch.Scroll
+import net.seilent.funekit.kit.touch.Slop
+import net.seilent.funekit.kit.touch.Velocity
 import net.seilent.funekit.kit.word
+import net.seilent.funekit.fxOfPx
 import net.seilent.funekit.px
 import net.seilent.funekit.scale
 import org.junit.Test
@@ -94,6 +100,7 @@ import java.util.IdentityHashMap
 import kotlin.math.max
 import kotlin.math.roundToInt
 import net.seilent.funekit.kit.Ink as KitInk
+import net.seilent.funekit.kit.touch.Kind as TouchKind
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -111,6 +118,10 @@ class MotionSheetTest {
     private class Side(val text: String, val role: Role, val look: Float, val x: Float, val y: Float, val pivot: Int, val header: Boolean)
 
     private class Act(val at: Long, val act: () -> Unit)
+
+    private enum class TouchEv { Down, Move, Up }
+
+    private class Touch(val at: Long, val y: Int, val ev: TouchEv)
 
     private class Case(
         val name: String,
@@ -143,6 +154,7 @@ class MotionSheetTest {
         private val songsRest = KitPages.songs.at(-1, -1)
         private val songsEnter = KitPages.songs.at(0, -1)
         private val songsPress = KitPages.songs
+        private val songsLong = KitPages.songsLong
         private val songsSheet = KitPages.songs.at(SHEET_ROW, -1)
         private val np = Page("np", "now playing", "", emptyList(), -1, emptyList(), -1, -1)
 
@@ -348,6 +360,70 @@ class MotionSheetTest {
             }
         }
 
+        private fun scrollCase(name: String, note: String, touches: List<Touch>, shownAt: Long, shots: Map<Long, String>): Case {
+            val page = songsLong
+            val top = px(s.board.page_contentTop, s.ppu)
+            val bottom = px(s.stdContentBottom, s.stdPpu)
+            val spec = RowSpec.of(Tok.rowSong, s, bottom - top, Layout.above(s))
+            val track = RowTrack(spec.pitch, spec.view, 0, spec.above, spec.pitch64, spec.ppu64).also { it.count(page.listRows, 0) }
+            val scroll = Scroll(TouchKind.List, s.touchPpu, s.stdPpu, s.ppu, track)
+            val slop = Slop(px(Tok.touchSlop, s.touchPpu).toFloat(), px(Tok.gesture_swipe, s.touchPpu).toFloat())
+            val vel = Velocity(Tok.motion_flingWindow.toLong())
+            val fade = ThumbFade()
+            val focus = FocusTrack().also { it.attach() }
+            val n = page.listRows
+            var dragging = false
+            var downY = 0f
+            fun after(at: Long) = focus.afterScroll(n, fxOfPx(track.q.toFloat(), track.ppu64), fxOfPx(track.view.toFloat(), track.ppu64), track.pitch64, at)
+            fun bar() = listThumbOf(s, top, bottom, track)
+            fun touch(e: Touch) {
+                val y = e.y * s.stdPpu
+                vel.add(e.at, y)
+                when (e.ev) {
+                    TouchEv.Down -> {
+                        downY = y
+                        scroll.grab(e.at)
+                        focus.set(track.tapRow(y - top), n, e.at, true)
+                    }
+                    TouchEv.Move -> if (dragging) {
+                        scroll.drag(y)
+                        after(e.at)
+                    } else if (!slop.tap(TOUCH_X * s.stdPpu, downY, TOUCH_X * s.stdPpu, y)) {
+                        dragging = true
+                        scroll.begin(y)
+                    }
+                    TouchEv.Up -> {
+                        fade.release(e.at)
+                        if (dragging) {
+                            dragging = false
+                            scroll.release(e.at, vel.perS())
+                        }
+                    }
+                }
+            }
+            val last = shots.keys.max()
+            val frames = generateSequence(0L) { it + FRAME }.takeWhile { it <= last }.toList()
+            val steps = frames.map { t ->
+                Act(t) {
+                    val flinging = scroll.flinging
+                    scroll.step(t)
+                    if (flinging) after(t)
+                    if (t >= shownAt) fade.track(bar() != null, scroll.moving || scroll.dragging, t)
+                }
+            }
+            val st = stack(page)
+            return Case(name, note, st, touches.map { e -> Act(e.at) { touch(e) } } + steps, 0L, { last }, shots, emptyList(), false, SCROLL_QUIET) { t, rec ->
+                ground()
+                with(kit(page)) { scrolled(rec, "page", track, focus, t) }
+                chromeAt(inkOf(page).chrome, t, rec, "page.chrome")
+                bar()?.let {
+                    val a = fade.at(t)
+                    thumb(it, a)
+                    rec?.thumbParts("thumb", it, Tok.scrollbar_alpha * a, bands, accent)
+                }
+            }
+        }
+
         private fun restCase(name: String, note: String, page: Page, shots: Map<Long, String>, quiet: String): Case {
             val st = stack(page)
             return Case(name, note, st, emptyList(), 0L, { 0L }, shots, emptyList(), false, quiet) { t, rec -> world(st, t, rec) }
@@ -506,6 +582,7 @@ class MotionSheetTest {
                 t5Case("t5-off", "the same pivot switch under ACCENT OFF at the series times", artists, false, series("t5", T5_OFF)),
                 t5Case("t5-songs", "pivot switch from albums to songs with the # divider focused, as main.cpp t5:300:songs", songsEnter, false, mapOf(300L to "t5-300-songs")),
                 moveCase("t7", "the songs hub to now playing, page form", t7) { t7.push(np, MoveKind.T7) },
+                scrollCase("fling", "main.cpp fling: the songs pivot set at 2400, a down at (120, 300) u at 2800 moves up 20 u per 10 ms and lifts at 2880, a 2000 u/s fling; the focus follows the scroll to the first whole row", flingTouches, SELECT + Tok.motion_t2Swap.toLong(), FLING_SHOTS.associate { FLING_UP + it to "fling-songs-$it" }),
                 restCase("hub", "the artists hub at rest with the # divider focused as main.cpp enter_hub leaves it (main.cpp hub), the list thumb faded", artists, mapOf(0L to "hub"), ARTISTS_QUIET),
                 restCase("hub-large", "the artists hub at rest under SIZE LARGE (main.cpp large hub)", artists, mapOf(0L to "large-hub"), ARTISTS_QUIET),
                 restCase("hub-songs", "the songs hub at rest with the # divider focused (main.cpp hub songs)", songsEnter, mapOf(0L to "hub-songs"), PRESS_QUIET),
@@ -618,6 +695,36 @@ class MotionSheetTest {
         private val R1 = Dev("480x800", "funeOS R1 board", 480, 800, listOf(Nav.None))
         private val V1 = Dev("240x320", "funeOS V1 board", 240, 320, listOf(Nav.None))
         private const val ACCENT_OFF = "-accentoff"
+        private const val FRAME = 16L
+        private const val TOUCH_X = 120
+        private const val SWITCH = 2000L
+        private const val SELECT = 1000L
+        private const val FADE_DOWN = 2900L
+        private const val FADE_Y0 = 250
+        private const val FADE_Y1 = 170
+        private const val FADE_STEPS = 12
+        private const val FADE_HOLDS = 8
+        private const val FLING_DOWN = 2800L
+        private const val FLING_Y0 = 300
+        private const val FLING_DY = 20
+        private const val FLING_GAP = 10L
+        private const val FLING_MOVES = 8
+        private const val FLING_UP = FLING_DOWN + FLING_MOVES * FLING_GAP
+        private val THUMB_FADE = listOf(2700L, 4736L, 4800L, 5000L, 5236L)
+        private val FLING_SHOTS = listOf(150L, 900L)
+        private const val SCROLL_QUIET = "the kit's songs page holds 17 rows of the 1281 the thumb counts, the funeOS rows past them and their text differ"
+
+        private fun line(y0: Int, y1: Int, n: Int): List<Int> = (1..n).map { y0 + (y1 - y0) * it / n } + y1
+
+        private val fadeTouches: List<Touch> = run {
+            val ys = line(FADE_Y0, FADE_Y1, FADE_STEPS) + List(FADE_HOLDS) { FADE_Y1 }
+            listOf(Touch(FADE_DOWN, FADE_Y0, TouchEv.Down)) + ys.mapIndexed { i, y -> Touch(FADE_DOWN + (i + 1) * FRAME, y, if (i == ys.lastIndex) TouchEv.Up else TouchEv.Move) }
+        }
+
+        private val flingTouches: List<Touch> =
+            listOf(Touch(FLING_DOWN, FLING_Y0, TouchEv.Down)) +
+                (1..FLING_MOVES).map { Touch(FLING_DOWN + it * FLING_GAP, FLING_Y0 - FLING_DY * it, TouchEv.Move) } +
+                Touch(FLING_UP, FLING_Y0 - FLING_DY * FLING_MOVES, TouchEv.Up)
         private const val LARGE = "large-"
         private const val ARTISTS_QUIET = "funeOS's artist rows draw the thumb strips of their albums under the title, which the kit page does not draw"
         private const val HELD = "rowpress-0-hubsongs-held"
@@ -645,10 +752,12 @@ class MotionSheetTest {
             "rowpress-0-hubsongs-down", "rowpress-0-hubsongs-tap", "rowpress-0-hubsongs-up", HELD, SERIES,
             "t5-100", "t5-250", "t5-450", "t5-700", "t5-1500", "t5-300-songs",
             "t13-120", "t13-400", "t13x-80", "t14-500-songs", "t14-150-songs", "t14x-120-songs",
-            "t12-150", "t12-500", JUMP_HELD, "hub", "large-hub", "large-hub-songs",
+            "t12-150", "t12-500", JUMP_HELD, "hub", "large-hub", "large-hub-songs", "fling-songs-150", "fling-songs-900",
         ) + names(series("t5", T5_OFF)) + names(series("t12", T12_OFF)) + names(series("t12", T12_CLOSE, "-close")) + names(series("t14", T14_OFF, "-songs"))
-        private val R1_KINDS = setOf(HELD, SERIES, "t12-150", "t12-500", JUMP_HELD, "hub", "large-hub", "large-hub-songs") + names(series("t5", T5_STATIC)) + names(series("t12", T12_STATIC)) + names(series("t12", T12_CLOSE_R1, "-close")) + names(series("t14", T14_STATIC, "-songs"))
-        private val V1_KINDS = setOf(HELD, SERIES, "t12-150", "t12-500", "hub", "hub-songs") + names(series("t5", T5_STATIC)) + names(series("t12", T12_STATIC)) + names(series("t12", T12_CLOSE, "-close")) + names(series("t14", T14_STATIC, "-songs"))
+        private val R1_KINDS = setOf(
+            HELD, SERIES, "t12-150", "t12-500", JUMP_HELD, "hub", "large-hub", "large-hub-songs", "fling-songs-150", "fling-songs-900",
+        ) + names(series("t5", T5_STATIC)) + names(series("t12", T12_STATIC)) + names(series("t12", T12_CLOSE_R1, "-close")) + names(series("t14", T14_STATIC, "-songs"))
+        private val V1_KINDS = setOf(HELD, SERIES, "t12-150", "t12-500", "hub", "hub-songs", "fling-songs-150", "fling-songs-900") + names(series("t5", T5_STATIC)) + names(series("t12", T12_STATIC)) + names(series("t12", T12_CLOSE, "-close")) + names(series("t14", T14_STATIC, "-songs"))
         private const val FOLDER = "motion"
         private const val FPS = 40
         private const val STEP = 1000L / FPS
