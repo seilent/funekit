@@ -326,6 +326,9 @@ class Regions(
                 val sa = if (r.libSub && !r.song) Roles.listLibSecondary.alpha else Rows.secondaryRole(r).alpha
                 clip(clipL, 0f, ink.right.toFloat(), h) { word("$name.secondary", ink.secondary, penPx(lines.titleX64), lines.sub.toFloat(), sa) }
             }
+            if (ink.album.text.isNotEmpty() && lines.titleX64 + ink.albumX64 < pen64(ink.right.toFloat())) {
+                clip(clipL, 0f, ink.right.toFloat(), h) { word("$name.album", ink.album, penPx(lines.titleX64 + ink.albumX64), lines.sub.toFloat(), Rows.secondaryRole(r).alpha) }
+            }
         }
     }
 

@@ -230,6 +230,60 @@ class RowDrawTest {
         assertTrue(most(s, 60, 400, ink.lines.sub - 10, ink.lines.sub) > 0x40)
     }
 
+    private fun inkColumns(s: Shot, y0: Int, y1: Int, plain: Shot? = null): List<Int> =
+        (0 until s.w).filter { x -> (y0 until y1).any { y -> if (plain == null) s.red(x, y) > bg else s.px[y * s.w + x] != plain.px[y * s.w + x] } }
+
+    private fun inkRows(s: Shot, x0: Int, x1: Int, plain: Shot? = null): List<Int> =
+        (0 until s.px.size / s.w).filter { y -> (x0 until x1).any { x -> if (plain == null) s.red(x, y) > bg else s.px[y * s.w + x] != plain.px[y * s.w + x] } }
+
+    @Test
+    fun aSongRowDrawsItsAlbumOneGutterRightOfTheArtistInkOnTheSubBaseline() {
+        val gutter = 36f
+        val artist = RowModel(primary = "Slow Comet", secondary = "Amber Field", song = true)
+        val r = artist.copy(album = "Moon Hall")
+        val ink = rowInk(measurer, fonts, r, a105, unitDensity, false, null)
+        val left = penPx(ink.lines.titleX64 + ink.albumX64) + ink.album.inkLeft
+        val want = penPx(ink.lines.titleX64) + ink.secondary.inkRight + gutter
+        assertTrue("album ink left $left want $want", abs(left - want) <= 1f / 64)
+        val plain = row(artist)
+        val s = row(r)
+        val y0 = ink.lines.title + 4
+        val h = Rows.pitch(a105, r)
+        val artistRight = inkColumns(plain, y0, h).last()
+        val albumCols = inkColumns(s, y0, h, plain)
+        assertTrue("album columns from ${albumCols.first()} want ${artistRight + 1 + gutter.toInt()}", abs(albumCols.first() - (artistRight + 1 + gutter.toInt())) <= 2)
+        val albumBottom = inkRows(s, albumCols.first(), albumCols.last() + 1, plain).last()
+        val artistBottom = inkRows(plain, ink.lines.titleX, artistRight + 1).last()
+        near(artistBottom, albumBottom, 1)
+        near(ink.lines.sub - 1, albumBottom, 1)
+        near(most(plain, ink.lines.titleX, artistRight + 1, y0, h), most(s, albumCols.first(), albumCols.last() + 1, y0, h), 2)
+    }
+
+    @Test
+    fun aSongRowWithNoArtistDrawsItsAlbumAtTheTitlePen() {
+        val r = RowModel(primary = "Slow Comet", album = "Moon Hall", song = true)
+        val ink = rowInk(measurer, fonts, r, a105, unitDensity, false, null)
+        assertEquals(0, ink.albumX64)
+        val plain = row(r.copy(album = ""))
+        val cols = inkColumns(row(r), ink.lines.title + 4, Rows.pitch(a105, r), plain)
+        near((penPx(ink.lines.titleX64) + ink.album.inkLeft).toInt(), cols.first(), 2)
+    }
+
+    @Test
+    fun anAlbumPastTheRightEdgeLeavesTheRowUnchanged() {
+        val r = RowModel(primary = "Slow Comet", secondary = "W".repeat(40), album = "Moon Hall", song = true)
+        val ink = rowInk(measurer, fonts, r, a105, unitDensity, false, null)
+        assertTrue("album pen ${ink.lines.titleX64 + ink.albumX64} right ${pen64(ink.right.toFloat())}", ink.lines.titleX64 + ink.albumX64 >= pen64(ink.right.toFloat()))
+        assertArrayEquals(row(r.copy(album = "")).px, row(r).px)
+    }
+
+    @Test
+    fun aRowThatIsNotASongDrawsNoAlbum() {
+        val r = RowModel(primary = "Slow Comet", secondary = "Amber Field", album = "Moon Hall")
+        assertTrue(rowInk(measurer, fonts, r, a105, unitDensity, false, null).album.text.isEmpty())
+        assertArrayEquals(row(r.copy(album = "")).px, row(r).px)
+    }
+
     @Test
     fun aCollectionRowDrawsItsPlayRingAndBoldTitle() {
         val r = RowModel(ring = true, collection = true, primary = "Lantern Hours")

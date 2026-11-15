@@ -40,6 +40,7 @@ data class RowModel(
     val kind: RowKind = RowKind.Item,
     val primary: String = "",
     val secondary: String = "",
+    val album: String = "",
     val number: String = "",
     val trailing: String = "",
     val countLine: Boolean = false,
@@ -176,6 +177,8 @@ class RowInk(
     val r: RowModel,
     val primary: Word,
     val secondary: Word,
+    val album: Word,
+    val albumX64: Int,
     val number: Word,
     val trailing: Word,
     val lines: RowLines,
@@ -206,10 +209,15 @@ fun rowInk(m: TextMeasurer, fonts: FontFamily.Resolver, r: RowModel, s: Scale, d
     val right = Rows.right(s)
     val tx64 = Rows.trailingX64(s, if (r.trailing.isEmpty()) 0 else pen64(trailing.width))
     val primaryRight = if (r.trailing.isEmpty()) right else penFloor(tx64) - px(Tok.gutter, s.ppu)
+    val secondary = if (divider) Word.none else text(r.secondary, Rows.secondaryRole(r))
+    val album = if (divider || !r.song || r.album.isEmpty()) Word.none else text(r.album, Rows.secondaryRole(r))
+    val albumX64 = if (r.secondary.isEmpty()) 0 else pen64(secondary.inkRight) + pen64(Tok.gutter, s.ppu) - pen64(album.inkLeft)
     return RowInk(
         r,
         primary,
-        if (divider) Word.none else text(r.secondary, Rows.secondaryRole(r)),
+        secondary,
+        album,
+        albumX64,
         number,
         trailing,
         lines,
@@ -307,6 +315,11 @@ fun DrawScope.listRow(
             val sa = if (r.libSub && !r.song) Roles.listLibSecondary.alpha else Rows.secondaryRole(r).alpha
             clipRect(clipL, 0f, ink.right.toFloat(), h.toFloat()) {
                 word(ink.secondary, penPx(lines.titleX64), lines.sub.toFloat(), Ink.white, sa)
+            }
+        }
+        if (ink.album.text.isNotEmpty() && lines.titleX64 + ink.albumX64 < pen64(ink.right.toFloat())) {
+            clipRect(clipL, 0f, ink.right.toFloat(), h.toFloat()) {
+                word(ink.album, penPx(lines.titleX64 + ink.albumX64), lines.sub.toFloat(), Ink.white, Rows.secondaryRole(r).alpha)
             }
         }
     }
