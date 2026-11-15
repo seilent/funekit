@@ -522,6 +522,130 @@ class PageMoveTest {
         assertFalse(m.held(Part.Content))
     }
 
+    @Test
+    fun startSetsTheKindTheTimeLiveAndClearsReversedAndTheBaseRow() {
+        val m = started(MoveKind.T3, MoveEnds())
+        m.set(Part.NpRing, Prop.X, 5f)
+        m.set(Part.NpRing, Prop.S, 2f)
+        m.reverse(100)
+        assertTrue(m.reversed)
+        m.stop()
+        assertFalse(m.live)
+        m.start(MoveKind.T4, 500, MoveEnds(), forms)
+        assertEquals(MoveKind.T4, m.kind)
+        assertEquals(500L, m.t0)
+        assertTrue(m.live)
+        assertFalse(m.reversed)
+        for (q in Prop.entries) assertEquals("base $q", if (q == Prop.S) 1f else 0f, m.at(Part.NpRing, q, 600), 0f)
+    }
+
+    @Test
+    fun aStopOfAMoveThatIsNotLiveChangesNothing() {
+        val m = started(MoveKind.T3, MoveEnds())
+        val legs = m.legs.map { listOf(it.part, it.prop, it.delay, it.dur) }
+        m.stop()
+        m.stop()
+        assertFalse(m.live)
+        assertEquals(MoveKind.T3, m.kind)
+        assertEquals(0L, m.t0)
+        assertEquals(legs, m.legs.map { listOf(it.part, it.prop, it.delay, it.dur) })
+        near(1 - 50.0 / 133, m.at(Part.Leave, Prop.A, 50), "leave A at 50 after the stops")
+        assertEquals(634L, m.endAt)
+    }
+
+    @Test
+    fun landPutsEachPropsLastLegToIntoTheBaseAndClearsThePart() {
+        val m = started(MoveKind.T3, MoveEnds())
+        assertTrue(m.has(Part.Leave, Prop.A))
+        val want = Prop.entries.associateWith { q -> m.last(Part.Leave, q)?.to ?: m.at(Part.Leave, q, 0) }
+        m.land(Part.Leave)
+        for (q in Prop.entries) {
+            assertFalse("leave $q cleared", m.has(Part.Leave, q))
+            for (t in listOf(0L, 50L, 1000L)) assertEquals("leave $q at $t", want.getValue(q), m.at(Part.Leave, q, t), 0f)
+        }
+        assertEquals(0f, want.getValue(Prop.A), 0f)
+    }
+
+    @Test
+    fun theEndTakesTheSwapAndTheLegEndsAndNeverShrinks() {
+        val t3 = started(MoveKind.T3, MoveEnds())
+        assertEquals(167L, t3.swapAt)
+        assertEquals(634L, t3.endAt)
+        t3.add(MoveLeg(Part.Tile, Prop.X, 0f, 1f, 5000, 100))
+        t3.shift(Part.Tile, 1)
+        assertEquals(5101L, t3.endAt)
+        t3.clear(Part.Tile)
+        t3.shift(Part.Content, 100)
+        assertEquals(5101L, t3.endAt)
+        val none = started(MoveKind.None, MoveEnds())
+        assertEquals(0L, none.endAt)
+        none.pivot(Part.Zoom, 1f, 1f, 400)
+        assertEquals(400L, none.endAt)
+    }
+
+    @Test
+    fun theEndIsTheLargestOfTheEndTheSwapAndEveryLegEnd() {
+        for (k in listOf(MoveKind.T3, MoveKind.T4, MoveKind.T2, MoveKind.T4h, MoveKind.T7, MoveKind.T8)) {
+            val m = started(k, MoveEnds())
+            val legs = m.legs.maxOf { it.end }.toLong()
+            assertEquals("$k end", maxOf(m.swapAt - m.t0, legs), m.endAt - m.t0)
+        }
+        val m = started(MoveKind.T3, MoveEnds())
+        val before = m.endAt - m.t0
+        m.shift(Part.Content, 100)
+        assertEquals(maxOf(before, m.legs.maxOf { it.end }.toLong()), m.endAt - m.t0)
+        m.npPop(0)
+        assertTrue("the end never shrinks", m.endAt - m.t0 >= before)
+    }
+
+    @Test
+    fun aReverseRebuildsEachPartPropBackwardFromItsValueAtTheElapsedTime() {
+        val m = started(MoveKind.T3, MoveEnds())
+        m.release(Part.Content, 0)
+        val now = 100L
+        class Want(val part: Part, val prop: Prop, val from: Float, val to: Float, val delay: Int, val dur: Int)
+        val want = m.legs.filter { m.leg(it.part, it.prop) === it }.map { f ->
+            val z = requireNotNull(m.last(f.part, f.prop))
+            val ran = z.end.toLong() - f.delay
+            val v = m.at(f.part, f.prop, now)
+            if (ran <= 0) {
+                Want(f.part, f.prop, v, f.from, if (now >= f.delay) (now - f.delay).toInt() else 0, 0)
+            } else {
+                Want(f.part, f.prop, v, f.from, 0, (now - f.delay).coerceIn(0L, ran).toInt())
+            }
+        }
+        assertTrue(want.isNotEmpty())
+        m.reverse(now)
+        val leave = requireNotNull(m.leg(Part.Leave, Prop.A))
+        assertEquals((1 - 100.0 / 133).toFloat(), leave.from, 1e-4f)
+        assertEquals(1f, leave.to, 0f)
+        assertEquals(0, leave.delay)
+        assertEquals(100, leave.dur)
+        val zoom = requireNotNull(m.leg(Part.Zoom, Prop.S))
+        assertEquals(1.34f, zoom.from, 1e-4f)
+        assertEquals(1.34f, zoom.to, 1e-4f)
+        assertEquals(0, zoom.delay)
+        assertEquals(0, zoom.dur)
+        val content = requireNotNull(m.leg(Part.Content, Prop.A))
+        assertEquals(0f, content.from, 0f)
+        assertEquals(0f, content.to, 0f)
+        assertEquals(0, content.dur)
+        assertEquals(200L, m.endAt)
+        assertTrue(m.reversed)
+        assertEquals(now, m.t0)
+        assertEquals(now, m.swapAt)
+        assertEquals(want.size, m.legs.size)
+        for (w in want) {
+            assertEquals("${w.part} ${w.prop} legs", 1, m.legsOf(w.part, w.prop))
+            val l = requireNotNull(m.leg(w.part, w.prop))
+            assertEquals("${w.part} ${w.prop} from", w.from, l.from, 0f)
+            assertEquals("${w.part} ${w.prop} to", w.to, l.to, 0f)
+            assertEquals("${w.part} ${w.prop} delay", w.delay, l.delay)
+            assertEquals("${w.part} ${w.prop} dur", w.dur, l.dur)
+        }
+        assertEquals(want.maxOf { it.delay + it.dur }.toLong(), m.endAt - m.t0)
+    }
+
     private fun powOut15(t: Double) = 1 - (1 - t).pow(1.5)
 
     private fun smoothStep(t: Double) = t * t * (3 - 2 * t)

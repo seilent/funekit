@@ -592,6 +592,79 @@ class PageStackTest {
         assertTrue(s.jumpSettled)
     }
 
+    @Test
+    fun aMoveStartLandsTheLiveMoveFirst() {
+        val s = stack()
+        s.push("album", MoveKind.T3)
+        s.frame(0)
+        s.frame(100)
+        assertEquals(Phase.Exit, s.phase)
+        s.pop(MoveKind.T4)
+        s.frame(116)
+        val t = requireNotNull(s.turn)
+        assertEquals(MoveKind.T4, t.kind)
+        assertEquals("album", t.from)
+        assertEquals("hub", t.to)
+        assertEquals(116L, s.move.t0)
+        assertTrue(s.move.live)
+        assertEquals(listOf("hub", "album"), s.pages.toList())
+    }
+
+    @Test
+    fun aTouchAtRestStopsNothing() {
+        val drops = mutableListOf<String>()
+        val swaps = mutableListOf<String>()
+        val s = PageStack<String>(MoveForms(), { PageKind.Grid }, drop = { drops += it }, swapped = { p, _ -> swaps += p }) { ends }
+            .also { it.pages.add("hub") }
+        s.touch()
+        s.frame(0)
+        assertEquals(Phase.Rest, s.phase)
+        assertNull(s.turn)
+        assertFalse(s.move.live)
+        assertEquals(listOf("hub"), s.pages.toList())
+        assertTrue(drops.isEmpty())
+        assertTrue(swaps.isEmpty())
+    }
+
+    @Test
+    fun aLandSwapsAnExitTurnOnceAndLandsAnEnterTurnWithNoSwap() {
+        val swaps = mutableListOf<Pair<String, Long>>()
+        val s = PageStack<String>(MoveForms(), { PageKind.Grid }, swapped = { p, at -> swaps += p to at }) { ends }.also { it.pages.add("hub") }
+        s.push("album", MoveKind.T3)
+        s.frame(0)
+        s.touch()
+        s.frame(50)
+        assertEquals(listOf("album" to 50L), swaps)
+        assertEquals(Phase.Rest, s.phase)
+        assertEquals(listOf("hub", "album"), s.pages.toList())
+        s.pop(MoveKind.T4)
+        s.frame(100)
+        val at = s.move.swapAt
+        s.frame(at)
+        assertEquals(Phase.Enter, s.phase)
+        assertEquals(listOf("album" to 50L, "hub" to at), swaps)
+        s.touch()
+        s.frame(at + STEP)
+        assertEquals(2, swaps.size)
+        assertEquals(Phase.Rest, s.phase)
+        assertEquals(listOf("hub"), s.pages.toList())
+    }
+
+    @Test
+    fun aT7SwapsAtItsStartAndALandKeepsTheNowPlayingEntryOnTop() {
+        val s = stack()
+        s.push("np", MoveKind.T7)
+        s.frame(0)
+        assertEquals(0L, s.move.swapAt)
+        assertEquals(Phase.Enter, s.phase)
+        assertEquals(listOf("hub", "np"), s.pages.toList())
+        s.touch()
+        s.frame(STEP)
+        assertEquals(Phase.Rest, s.phase)
+        assertEquals(listOf("hub", "np"), s.pages.toList())
+        assertEquals("np", s.top)
+    }
+
     private class E(val entry: Long, val page: String)
 
     private class Models {
