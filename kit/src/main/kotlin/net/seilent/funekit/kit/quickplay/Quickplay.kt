@@ -347,7 +347,7 @@ class QpPan {
     val dragged: Boolean get() = dragging
 }
 
-data class QpLook(val focus: Int, val framed: List<Boolean>, val revision: Int, val shown: Boolean = true)
+data class QpLook(val focus: Int, val framed: List<Boolean>, val revision: Int, val shown: Boolean = true, val lit: List<Float> = emptyList(), val ring: List<Float> = emptyList())
 
 class QuickplayState {
     var data by mutableStateOf(QpData.EMPTY)
@@ -488,7 +488,7 @@ class QuickplayState {
 
     fun look(l: QpLayout, now: Long, hideFocus: Boolean = false): QpLook {
         press.revision
-        return QpLook(focus, List(l.count) { press.framed(it, now) }, revision, !hideFocus)
+        return QpLook(focus, List(l.count) { press.framed(it, now) }, revision, !hideFocus, List(l.count) { press.look(it, now) }, List(l.count) { press.ring(it, now) })
     }
 
     fun animating(now: Long): Boolean = pan.moving(now) || press.stale(now)
@@ -532,7 +532,7 @@ fun DrawScope.quickplay(l: QpLayout, ink: QpInk, st: QuickplayState, boxes: QpBo
             val img = st.art(t.item.art, r.w)
             val border = if (active && look.shown && i == look.focus) b else 0
             val box = if (img == null && st.boxed(t.item.art, r.w)) boxes[i] else null
-            artTile(r, img, box, l.caption, border, look.framed[i], s)
+            artTile(r, img, box, l.caption, border, look.lit.getOrElse(i) { 0f }, look.ring.getOrElse(i) { 0f }, s)
         }
     }
 }

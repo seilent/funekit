@@ -546,7 +546,7 @@ fun DrawScope.menu(menu: Menu, ink: MenuInk, plan: MenuPlan, s: Scale, now: Long
             val right = if (clipped) r.clipX.toFloat() else w
             val bottom = if (clipped) slot.h.toFloat() else size.height
             val top = if (clipped) 0f else -slot.top.toFloat()
-            if (i == menu.pressed && !swatch && menu.glowing && menu.glow.key != null && (i != menu.mark || accentOff)) pressGlow(menu.glow, r.glow, r.glowClip, ink.ppu, menu.glow.progress(now))
+            if (i == menu.pressed && !swatch && menu.glowing && menu.glow.key != null && (i != menu.mark || accentOff)) pressGlow(menu.glow, r.glow, r.glowClip, ink.ppu, menu.glow.level(now))
             if (swatch) {
                 val sq = ink.swatch(r)
                 drawRect(menu.swatches[si], Offset(sq.x0.toFloat(), sq.y0.toFloat()), Size(sq.w.toFloat(), sq.h.toFloat()))

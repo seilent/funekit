@@ -1,5 +1,6 @@
 package net.seilent.funekit.kit
 
+import net.seilent.funekit.gen.Tok
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -48,8 +49,8 @@ class PressSlotsTest {
     fun aShownSlotIsStaleOnlyWhileItsPressMoves() {
         val p = PressSlots()
         p.down(1, 0)
-        p.show(50)
-        assertTrue(p.stale(50))
+        p.show(40)
+        assertTrue(p.stale(40))
         p.tap(100)
         p.show(500)
         assertFalse(p.stale(500))
@@ -88,6 +89,10 @@ class PressSlotsTest {
             { it.letGo(70) },
             { it.drop() },
             { it.reset() },
+            { it.down(5, 75) },
+            { it.hold(76) },
+            { it.cutRing(77) },
+            { it.untap(78) },
         )
         for (m in mutators) {
             val r = p.revision
@@ -101,5 +106,45 @@ class PressSlotsTest {
         p.draw(1, 100)
         p.stale(110)
         assertEquals(r, p.revision)
+    }
+
+    @Test
+    fun eachSlotAnswersItsOwnLitRingAndLook() {
+        val p = PressSlots()
+        p.down(1, 0)
+        p.down(2, 100)
+        assertEquals(0.5f, p.lit(1, 150), 0.0001f)
+        assertEquals(0.5f, p.ring(1, 150), 0.0001f)
+        assertEquals(1f, p.lit(2, 150), 0f)
+        assertEquals(1f, p.ring(2, 150), 0f)
+        assertEquals(0f, p.lit(3, 150), 0f)
+        assertEquals(1f, p.look(2, 150), 0f)
+        assertFalse(p.stale(2, 150))
+        assertEquals(1f, p.scale(3, 150), 0f)
+        assertTrue(p.held)
+    }
+
+    @Test
+    fun aKeyUpCutsTheLitAndATapThatDoesNotActKeepsIt() {
+        val p = PressSlots()
+        p.keyDown(1, true, 0)
+        p.keyUp(100)
+        assertEquals(0f, p.lit(1, 100), 0f)
+        assertFalse(p.held)
+        val q = PressSlots()
+        q.down(1, 0)
+        q.tap(100, acts = false)
+        assertEquals(1f, q.lit(1, 200), 0f)
+        assertEquals(0f, q.lit(1, 300), 0f)
+    }
+
+    @Test
+    fun aHoldPressesBothSlotsAtOnce() {
+        val p = PressSlots()
+        p.down(1, 0)
+        p.down(2, 10)
+        p.hold(20)
+        assertEquals(Tok.motion_pressScale, p.scale(2, 20), 0f)
+        assertEquals(1f, p.lit(2, 20), 0f)
     }
 }

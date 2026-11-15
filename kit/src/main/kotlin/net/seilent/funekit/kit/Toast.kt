@@ -16,7 +16,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.clipRect
-import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFontFamilyResolver
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -67,7 +66,7 @@ fun expOut6Inverse(e: Float): Float {
     return hi
 }
 
-class ToastLook(val y: Int, val h: Int, val stripBottom: Int, val scrim: Float, val clip: Edges, val alpha: Float, val zoom: Float)
+class ToastLook(val y: Int, val h: Int, val stripBottom: Int, val scrim: Float, val clip: Edges, val alpha: Float, val lit: Float)
 
 class Toast {
     private enum class Phase { Hidden, In, Hold, Out }
@@ -96,6 +95,7 @@ class Toast {
         private set
     private var bottomPx = 0
     val press = Press()
+    val glow = Glow()
 
     val bottom: Boolean get() = placed && place == ToastPlace.Bottom
 
@@ -264,7 +264,7 @@ class Toast {
         val h = px(Tok.toastHeight, s.ppu)
         val bottomEdge = if (bottom) min(y + h, bottomPx) else y + h
         val clip = Edges(px(Tok.edge, s.ppu), y, px(s.w - Tok.edge, s.ppu), bottomEdge)
-        return ToastLook(y, h, bottomEdge, e * Tok.scrim_overlay_alpha, clip, e * textAlpha(now), press.drawn(now.toFloat()))
+        return ToastLook(y, h, bottomEdge, e * Tok.scrim_overlay_alpha, clip, e * textAlpha(now), press.look(now.toFloat()))
     }
 }
 
@@ -274,12 +274,15 @@ fun DrawScope.toast(t: Toast, ink: ToastInk, s: Scale, now: Long) {
     val l = t.look(s, now) ?: return
     drawRect(Ink.black, Offset(0f, l.y.toFloat()), Size(size.width, (l.stripBottom - l.y).toFloat()), l.scrim)
     val c = l.clip
-    withTransform({ scale(l.zoom, l.zoom, Offset((c.x0 + c.x1) / HALF.toFloat(), (c.y0 + c.y1) / HALF.toFloat())) }) {
-        clipRect(c.x0.toFloat(), c.y0.toFloat(), c.x1.toFloat(), c.y1.toFloat()) {
-            val x = penPx(pen64(Tok.edge, s.ppu))
-            word(ink.artist, x, (l.y + px(Tok.toastArtistBaseline, s.ppu)).toFloat(), Ink.white, l.alpha * Roles.toastArtist.alpha)
-            word(ink.title, x, (l.y + px(Tok.toastTitleBaseline, s.ppu)).toFloat(), Ink.white, l.alpha * Roles.toastTitle.alpha)
+    clipRect(c.x0.toFloat(), c.y0.toFloat(), c.x1.toFloat(), c.y1.toFloat()) {
+        val x64 = pen64(Tok.edge, s.ppu)
+        val ab = l.y + px(Tok.toastArtistBaseline, s.ppu)
+        val tb = l.y + px(Tok.toastTitleBaseline, s.ppu)
+        t.glow.follow(0, l.lit * l.alpha, l.lit > 0f)?.let { g ->
+            pressGlow(g, listOf(GlowText(ink.artist, x64, ab, rolePx(Roles.toastArtist, s)), GlowText(ink.title, x64, tb, rolePx(Roles.toastTitle, s))), c, s.ppu, g.level(now))
         }
+        word(ink.artist, penPx(x64), ab.toFloat(), Ink.white, l.alpha * Roles.toastArtist.alpha)
+        word(ink.title, penPx(x64), tb.toFloat(), Ink.white, l.alpha * Roles.toastTitle.alpha)
     }
 }
 

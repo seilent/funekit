@@ -455,7 +455,7 @@ class MotionSheetTest {
             val now = t.toFloat()
             ground()
             val scale = p.drawn(now)
-            with(kit(if (t > up) songsPlaying else songsPress)) { whole(rec, "page", scale, if (p.scale(now) < 1f) RowGlow(glow, glow.progress(t)) else null, focus, t) }
+            with(kit(if (t > up) songsPlaying else songsPress)) { whole(rec, "page", scale, if (p.scale(now) < 1f) RowGlow(glow, glow.level(t)) else null, focus, t) }
             chromeAt(inkOf(songsPress).chrome, t, rec, "page.chrome")
             strip.frame(ToastPlace.Bottom, h, t)
             toast(strip, toastInk, s, t)

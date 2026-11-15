@@ -14,6 +14,8 @@ import kotlin.math.max
 class Edges(val x0: Int, val y0: Int, val x1: Int, val y1: Int) {
     val w: Int get() = x1 - x0
     val h: Int get() = y1 - y0
+
+    fun same(o: Edges): Boolean = x0 == o.x0 && y0 == o.y0 && x1 == o.x1 && y1 == o.y1
 }
 
 fun edges(x: Float, y: Float, w: Float, h: Float, ppu: Float) = Edges(px(x, ppu), px(y, ppu), px(x + w, ppu), px(y + h, ppu))

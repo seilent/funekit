@@ -294,7 +294,7 @@ class Regions(
         }
         val lines = ink.lines
         val base = lines.title.toFloat()
-        zoom(press, wf / 2, h / 2) {
+        run {
             val spot = if (focused) ink.spotFocused else ink.spot
             if (spot != null) {
                 val d = if (r.ringScale != 1f) (spot.d * r.ringScale).roundToInt() else spot.d
@@ -528,12 +528,10 @@ fun Regions.toast(name: String, t: Toast, ink: ToastInk, s: Scale, now: Long, w:
         add("$name.strip", Kind.Bar, strip, KitInk.black, l.scrim)
     }
     val c = l.clip
-    zoom(l.zoom, (c.x0 + c.x1) / 2f, (c.y0 + c.y1) / 2f) {
-        clip(c.x0.toFloat(), c.y0.toFloat(), c.x1.toFloat(), c.y1.toFloat()) {
-            val x = penPx(pen64(Tok.edge, s.ppu))
-            word("$name.artist", ink.artist, x, (l.y + px(Tok.toastArtistBaseline, s.ppu)).toFloat(), l.alpha * Roles.toastArtist.alpha)
-            word("$name.title", ink.title, x, (l.y + px(Tok.toastTitleBaseline, s.ppu)).toFloat(), l.alpha * Roles.toastTitle.alpha)
-        }
+    clip(c.x0.toFloat(), c.y0.toFloat(), c.x1.toFloat(), c.y1.toFloat()) {
+        val x = penPx(pen64(Tok.edge, s.ppu))
+        word("$name.artist", ink.artist, x, (l.y + px(Tok.toastArtistBaseline, s.ppu)).toFloat(), l.alpha * Roles.toastArtist.alpha)
+        word("$name.title", ink.title, x, (l.y + px(Tok.toastTitleBaseline, s.ppu)).toFloat(), l.alpha * Roles.toastTitle.alpha)
     }
 }
 

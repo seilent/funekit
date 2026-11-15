@@ -90,7 +90,7 @@ class KitSheetTest {
             val alpha = if (focused) Tok.alpha_full else Tok.type_listPrimary_alphaDim
             val press = if (pressed) Tok.motion_pressScale else 1f
             translate(0f, y.toFloat()) {
-                listRow(ink, s, alpha, focused, press, accent, false, if (pressed) RowGlow(glow, glow.progress(Tok.motion_pressGlow.toLong())) else null, focusShown = true)
+                listRow(ink, s, alpha, focused, press, accent, false, if (pressed) RowGlow(glow, glow.level(Tok.motion_pressGlow.toLong())) else null, focusShown = true)
             }
             rec.move(0f, y.toFloat()) { rec.row("row$i", ink, s, w, alpha, focused, press, pressed, accent, false, focusShown = true) }
             y += Rows.pitch(s, r.collection)

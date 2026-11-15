@@ -223,7 +223,7 @@ fun rememberRowInk(r: RowModel, s: Scale, accentOff: Boolean): RowInk {
     return remember(r, s, accentOff, density, fonts, covers) { rowInk(m, fonts, r, s, density, accentOff, covers) }
 }
 
-class RowGlow(val glow: Glow, val progress: Float)
+class RowGlow(val glow: Glow, val level: Float)
 
 fun DrawScope.listRow(
     ink: RowInk,
@@ -236,6 +236,7 @@ fun DrawScope.listRow(
     glow: RowGlow? = null,
     art: ImageBitmap? = null,
     focusShown: Boolean = false,
+    ringLit: Float = 0f,
 ) {
     val r = ink.r
     val h = Rows.pitch(s, r.collection)
@@ -250,7 +251,7 @@ fun DrawScope.listRow(
     }
     val lines = ink.lines
     val base = lines.title.toFloat()
-    withTransform({ scale(press, press, Offset(w / HALF, h / HALF.toFloat())) }) {
+    run {
         val spot = if (focused) ink.spotFocused else ink.spot
         if (spot != null && r.art) {
             val slot = Rows.artSlot(spot)
@@ -265,6 +266,10 @@ fun DrawScope.listRow(
             val c = Offset(spot.cx.toFloat(), spot.cy.toFloat())
             val d = if (r.ringScale != 1f) (spot.d * r.ringScale).roundToInt() else spot.d
             val stroke = spot.stroke * d.toFloat() / spot.d
+            if (ringLit > 0f) {
+                val g = ringHalo(spot.d).toFloat()
+                clipRect(-g, -g, w + g, h + g) { ringPress(spot.d, spot.stroke, spot.cx, spot.cy, ringLit) }
+            }
             clipRect(0f, 0f, w, h.toFloat()) {
                 if (!r.ringBare) ring(c, d.toFloat(), stroke, Ink.white, spot.alpha)
                 val slot = (d / HALF).toFloat()
@@ -283,7 +288,7 @@ fun DrawScope.listRow(
             }
         }
         val clipL = lines.titleX.toFloat()
-        if (glow != null && !r.hide && (!r.accent || accentOff)) pressGlow(glow.glow, ink.glowText, ink.glowClip, s.ppu, glow.progress)
+        if (glow != null && !r.hide && (!r.accent || accentOff)) pressGlow(glow.glow, ink.glowText, ink.glowClip, s.ppu, glow.level)
         if (!r.hide) {
             clipRect(clipL, 0f, ink.primaryRight.toFloat(), h.toFloat()) {
                 word(ink.primary, penPx(lines.titleX64), base, if (r.accent) accent else Ink.white, if (r.accent && (!focusShown || r.ring)) 1f else alpha)
@@ -310,7 +315,8 @@ fun ListRow(
     accentOff: Boolean = true,
     glow: (() -> RowGlow?)? = null,
     focusShown: Boolean = false,
+    ringLit: () -> Float = { 0f },
 ) {
     val ink = rememberRowInk(r, s, accentOff)
-    Canvas(modifier.pxSize(s.widthPx, Rows.pitch(s, r.collection))) { listRow(ink, s, alpha, focused, press(), accent, accentOff, glow?.invoke(), focusShown = focusShown) }
+    Canvas(modifier.pxSize(s.widthPx, Rows.pitch(s, r.collection))) { listRow(ink, s, alpha, focused, press(), accent, accentOff, glow?.invoke(), focusShown = focusShown, ringLit = ringLit()) }
 }

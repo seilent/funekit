@@ -88,12 +88,35 @@ class PressSlots {
         if (pressable) down(item, now)
     }
 
-    fun keyUp(now: Long) = cancel(now)
-
-    fun tap(now: Long) {
+    fun keyUp(now: Long) {
         revision++
-        on.p.tap(now.toFloat())
+        key = false
+        on.p.keyUp(now.toFloat())
     }
+
+    fun tap(now: Long, acts: Boolean = true) {
+        revision++
+        on.p.tap(now.toFloat(), acts)
+    }
+
+    fun untap(now: Long) {
+        revision++
+        on.p.untap(now.toFloat())
+    }
+
+    fun hold(now: Long) {
+        revision++
+        on.p.hold(now.toFloat())
+        back.p.hold(now.toFloat())
+    }
+
+    fun cutRing(now: Long) {
+        revision++
+        on.p.cutRing(now.toFloat())
+        back.p.cutRing(now.toFloat())
+    }
+
+    val held: Boolean get() = on.item >= 0 && on.p.held
 
     fun cancel(now: Long) {
         revision++
@@ -139,6 +162,24 @@ class PressSlots {
         item == back.item -> back.p.drawn(now.toFloat())
         else -> 1f
     }
+
+    private fun of(item: Int): Press? = when {
+        item < 0 -> null
+        item == on.item -> on.p
+        item == back.item -> back.p
+        else -> null
+    }
+
+    fun look(item: Int, now: Long): Float = of(item)?.look(now.toFloat()) ?: 0f
+
+    fun lit(item: Int, now: Long): Float = of(item)?.lit(now.toFloat()) ?: 0f
+
+    fun ring(item: Int, now: Long): Float = of(item)?.ring(now.toFloat()) ?: 0f
+
+    fun scale(item: Int, now: Long): Float = of(item)?.scale(now.toFloat()) ?: 1f
+
+    fun stale(item: Int, now: Long): Boolean =
+        item >= 0 && ((item == on.item && on.p.stale(now.toFloat())) || (item == back.item && back.p.stale(now.toFloat())))
 
     fun framed(item: Int, now: Long): Boolean =
         item >= 0 && ((item == on.item && on.p.framed(now.toFloat())) || (item == back.item && back.p.framed(now.toFloat())))

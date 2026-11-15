@@ -125,9 +125,48 @@ class HomeGlowTest {
         val boldWidth = inkWidth(draw { word(bold, penPx(x64), base.toFloat(), Ink.white, a) })
         assertEquals(regular.toFloat(), pressed.toFloat(), 1f)
         assertTrue(boldWidth - pressed >= 10)
-        val zoomed = menu.restAt(1048L, false)
-        val z = zoomed.items[1].zoom
-        assertTrue(z < 1f)
-        assertEquals(regular * z, inkWidth(draw { homeMenu(ink, menu, geo, zoomed, null) }).toFloat(), 1f)
+        val held = menu.restAt(1048L, false)
+        assertEquals(1f, held.items[1].zoom)
+        assertEquals(regular.toFloat(), inkWidth(draw { homeMenu(ink, menu, geo, held, null) }).toFloat(), 1f)
+    }
+
+    @Test
+    fun aRingPressDrawsItsHaloOverTheSpreadRingAndItsDiscAtScaleOne() {
+        val density = Density(1f)
+        val fonts = createFontFamilyResolver(RuntimeEnvironment.getApplication())
+        val m = TextMeasurer(fonts, density, LayoutDirection.Ltr)
+        val keys = Key.entries
+        val ink = homeInk(m, fonts, s, density, keys) { if (it == Key.Apps) "" else it.sub }
+        val geo = HomeGeo(s, keys.size)
+        val menu = HomeMenu(keys.size)
+        val sp = s.stdPpu
+        val w = s.widthPx
+        val h = geo.contentPx
+        val cx = px(Tok.homeRingX, sp)
+        val cy = px(Tok.homeRingY, sp)
+        val d = px(Tok.homeRingSize, sp)
+        val stroke = px(Tok.homeRingStroke, sp)
+        val halo = px(Tok.homeRingHalo, sp)
+        val spread = px(Tok.homeRingHaloSpread, sp)
+        assertEquals(15, spread)
+        assertEquals(17, halo)
+        fun draw(r: HomeRest): IntArray {
+            val img = ImageBitmap(w, h)
+            CanvasDrawScope().draw(density, LayoutDirection.Ltr, Canvas(img), Size(w.toFloat(), h.toFloat())) { homeMenu(ink, menu, geo, r, null) }
+            return IntArray(w * h).also { img.readPixels(it) }
+        }
+        val idle = draw(menu.restAt(5000L, false))
+        menu.ringDown(5000L)
+        val lit = menu.restAt(5050L, false)
+        assertEquals(1f, lit.ringLit)
+        val pressed = draw(lit)
+        fun at(p: IntArray, dy: Int): Int = p[(cy + dy) * w + cx] ushr ALPHA_SHIFT
+        val far = d / 2 + spread + halo / 2
+        assertEquals(0, at(idle, far))
+        assertTrue(at(pressed, far) > EDGE_LEVEL)
+        val inside = d / 2 - stroke - 2
+        assertEquals(0, at(idle, inside))
+        assertTrue(at(pressed, inside) > EDGE_LEVEL)
+        assertEquals(0, at(pressed, d / 2 + spread + halo + 2))
     }
 }

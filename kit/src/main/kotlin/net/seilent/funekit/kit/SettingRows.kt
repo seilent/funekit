@@ -204,7 +204,7 @@ fun DrawScope.settingValue(ink: SettingInk, alpha: Float, color: Color = Ink.whi
 
 fun DrawScope.settingTitle(ink: SettingInk, alpha: Float, glow: RowGlow? = null) {
     val c = ink.glowClip
-    if (glow != null) pressGlow(glow.glow, ink.glowText, c, ink.s.ppu, glow.progress)
+    if (glow != null) pressGlow(glow.glow, ink.glowText, c, ink.s.ppu, glow.level)
     clipRect(c.x0.toFloat(), c.y0.toFloat(), c.x1.toFloat(), c.y1.toFloat()) {
         for (i in ink.title.indices) word(ink.title[i], penPx(ink.titleX64), ink.titleBase[i].toFloat(), Ink.white, alpha)
     }

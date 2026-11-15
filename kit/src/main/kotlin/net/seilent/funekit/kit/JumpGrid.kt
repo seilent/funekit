@@ -18,7 +18,6 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.clipRect
-import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFontFamilyResolver
@@ -84,6 +83,8 @@ class JumpGrid {
     var focus by mutableIntStateOf(Jump.EXIT)
         private set
     val press = PressSlots()
+    val glow = Glow()
+    val backGlow = Glow()
     var fade = ThumbFade()
         private set
     var bottom = 0f
@@ -100,6 +101,8 @@ class JumpGrid {
     fun open(available: BooleanArray, section: Int, bottomU: Float) {
         available.copyInto(avail)
         press.reset()
+        glow.clear()
+        backGlow.clear()
         bottom = bottomU
         focus = if (has(section)) section else (0 until Section.count).firstOrNull { avail[it] } ?: Jump.EXIT
         offset = offsetFor(focus, 0f)
@@ -228,8 +231,11 @@ private fun DrawScope.border(t: Edges, bw: Int, alpha: Float) = Rows.letterBorde
     drawRect(Ink.white, Offset(it.x0.toFloat(), it.y0.toFloat()), Size(it.w.toFloat(), it.h.toFloat()), alpha)
 }
 
-private fun DrawScope.zoomed(t: Edges, z: Float, block: DrawScope.() -> Unit) =
-    withTransform({ scale(z, z, Offset((t.x0 + t.x1) / HALF.toFloat(), (t.y0 + t.y1) / HALF.toFloat())) }, block)
+private fun JumpGrid.glowOf(i: Int, lit: Float, now: Long): Glow? = when (i) {
+    press.on.item -> glow.follow(i, lit, press.framed(i, now))
+    press.back.item -> backGlow.follow(i, lit, press.framed(i, now))
+    else -> null
+}
 
 fun DrawScope.jumpGrid(g: JumpGrid, ink: JumpInk, cells: JumpCells, s: Scale, off: Float, now: Long) {
     val sp = s.stdPpu
@@ -246,13 +252,17 @@ fun DrawScope.jumpGrid(g: JumpGrid, ink: JumpInk, cells: JumpCells, s: Scale, of
         val focused = g.focus == Jump.SEARCH
         val bw = px(if (focused) Tok.letterTileBorderFocused else Tok.letterTileBorder, sp)
         val ba = if (focused) Tok.alpha_full else Tok.alpha_low
-        zoomed(st, g.press.draw(Jump.SEARCH, now)) {
-            border(st, bw, ba)
-            val c = Offset(((st.x0 + st.x1) / HALF).toFloat(), ((st.y0 + st.y1) / HALF).toFloat())
-            val gs = px(Tok.jumpSearchGlyph, sp).toFloat()
-            glyph(Glyphs.searchRing, c, gs, Ink.white, Roles.letterGlyph.alpha)
-            glyph(Glyphs.searchHandle, c, gs, Ink.white, Roles.letterGlyph.alpha)
-        }
+        val lit = g.press.look(Jump.SEARCH, now)
+        border(st, bw, ba)
+        val cx = (st.x0 + st.x1) / HALF
+        val cy = (st.y0 + st.y1) / HALF
+        val c = Offset(cx.toFloat(), cy.toFloat())
+        val gi = px(Tok.jumpSearchGlyph, sp)
+        val gs = gi.toFloat()
+        glyphPress(Glyphs.searchRing, gi, cx, cy, lit, sp)
+        glyphPress(Glyphs.searchHandle, gi, cx, cy, lit, sp)
+        glyph(Glyphs.searchRing, c, gs, Ink.white, Roles.letterGlyph.alpha)
+        glyph(Glyphs.searchHandle, c, gs, Ink.white, Roles.letterGlyph.alpha)
     }
     for (i in 0 until Section.count) {
         val t = cells.at(Jump.slotOf(i), off)
@@ -260,14 +270,14 @@ fun DrawScope.jumpGrid(g: JumpGrid, ink: JumpInk, cells: JumpCells, s: Scale, of
         val focused = g.focus == i
         val bw = px(if (focused) Tok.letterTileBorderFocused else Tok.letterTileBorder, sp)
         val ba = if (focused) Tok.alpha_full else Tok.alpha_low
-        val z = g.press.draw(i, now)
-        zoomed(t, z) {
-            if (z != 1f || g.avail[i]) border(t, bw, ba)
-            clipRect(t.x0.toFloat(), t.y0.toFloat(), t.x1.toFloat(), t.y1.toFloat()) {
-                val l = ink.letters[i]
-                val x = (t.x1 - px(Tok.jumpLetterInsetX, sp)) - l.width
-                word(l, x, (t.y1 - px(Tok.jumpLetterInsetBaseline, sp)).toFloat(), Ink.white, if (g.avail[i]) Roles.jumpCell.alpha else Tok.jump_emptyAlpha)
-            }
+        val lit = g.press.look(i, now)
+        if (g.avail[i]) border(t, bw, ba)
+        clipRect(t.x0.toFloat(), t.y0.toFloat(), t.x1.toFloat(), t.y1.toFloat()) {
+            val l = ink.letters[i]
+            val x = (t.x1 - px(Tok.jumpLetterInsetX, sp)) - l.width
+            val base = t.y1 - px(Tok.jumpLetterInsetBaseline, sp)
+            g.glowOf(i, lit, now)?.let { gl -> pressGlow(gl, listOf(GlowText(l, pen64(x), base, rolePx(Roles.jumpCell, s, sp))), t, sp, gl.level(now)) }
+            word(l, x, base.toFloat(), Ink.white, if (g.avail[i]) Roles.jumpCell.alpha else Tok.jump_emptyAlpha)
         }
     }
     jumpThumb(g, s, off)?.let { thumb(it, g.fade.at(now)) }

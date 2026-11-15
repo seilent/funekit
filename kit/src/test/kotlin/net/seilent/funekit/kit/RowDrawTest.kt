@@ -18,6 +18,8 @@ import net.seilent.funekit.Nav
 import net.seilent.funekit.Surface
 import net.seilent.funekit.Window
 import net.seilent.funekit.scale
+import net.seilent.funekit.gen.Tok
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -63,8 +65,9 @@ class RowDrawTest {
         accent: Color = Ink.white,
         alpha: Float = 1f,
         focusShown: Boolean = false,
+        ringLit: Float = 0f,
     ) = shot(720, Rows.pitch(a105, r.collection)) {
-        listRow(rowInk(measurer, fonts, r, a105, unitDensity, false, null), a105, alpha, focused, press, accent, false, glow, focusShown = focusShown)
+        listRow(rowInk(measurer, fonts, r, a105, unitDensity, false, null), a105, alpha, focused, press, accent, false, glow, focusShown = focusShown, ringLit = ringLit)
     }
 
     private fun near(want: Int, got: Int, tol: Int = 3) = assertTrue("want $want got $got", abs(want - got) <= tol)
@@ -139,16 +142,46 @@ class RowDrawTest {
     }
 
     @Test
+    fun aLitFrameGlowsInsideItsTileAndTheRingTakesItsAlpha() {
+        val t = Edges(300, 100, 480, 280)
+        val ring = Rows.pressFrame(t, a105)
+        val inner = ring.filter { it.h > it.w }.minBy { it.x0 }.x1
+        val top = ring.minOf { it.y0 }
+        val half = shot(720, 400) { pressFrame(t, a105, 0f, 0.5f) }
+        near(over(0.5f), half.red(305, 190), 1)
+        near(bg, half.red(inner + 1, 190), 0)
+        val lit = shot(720, 400) { pressFrame(t, a105, 1f, 1f) }
+        near(0xFF, lit.red(305, 190), 0)
+        assertTrue(lit.red(inner + 1, 190) > bg)
+        near(bg, lit.red(390, top - 2), 0)
+    }
+
+    @Test
     fun theRowRingIsIdleAtMidAlphaAndFocusedAtFull() {
         near(over(0.6f), row(RowModel(ring = true, primary = "Song")).red(116, 60))
         near(0xFF, row(RowModel(ring = true, primary = "Song"), focused = true).red(115, 60))
     }
 
     @Test
-    fun aPressScalesTheWholeRowAboutItsCentre() {
-        val s = row(RowModel(ring = true, primary = "Song"), press = 0.96f)
-        near(bg, s.red(116, 60), 0)
-        near(over(0.6f), s.red(126, 60))
+    fun aPressDrawsTheRowAtScaleOne() {
+        val r = RowModel(ring = true, primary = "Song")
+        assertArrayEquals(row(r).px, row(r, press = 0.96f).px)
+        near(over(0.6f), row(r, press = 0.96f).red(116, 60))
+    }
+
+    @Test
+    fun aLitRingDrawsItsDiscInsideAndItsHaloOutside() {
+        val r = RowModel(ring = true, primary = "Song")
+        val spot = rowInk(measurer, fonts, r, a105, unitDensity, false, null).spot!!
+        val idle = row(r)
+        val lit = row(r, ringLit = 1f)
+        val inner = spot.d - 2 * spot.stroke
+        val y = spot.cy + (spot.d / 4 + inner / 2) / 2
+        near(bg, idle.red(spot.cx, y), 0)
+        near(over(Tok.vol_discAlpha), lit.red(spot.cx, y), 2)
+        val out = spot.cx - spot.d / 2 - ringHalo(spot.d) / 2
+        near(bg, idle.red(out, spot.cy), 0)
+        assertTrue(lit.red(out, spot.cy) > bg)
     }
 
     @Test
@@ -163,8 +196,8 @@ class RowDrawTest {
     fun aPressedTitleGlowsUnderItsWordWithinThePad() {
         val r = RowModel(primary = "Hits")
         val g = Glow().also { it.down(0, 0) }
-        val lit = row(r, glow = RowGlow(g, g.progress(50)))
-        val start = row(r, glow = RowGlow(g, g.progress(0)))
+        val lit = row(r, glow = RowGlow(g, g.level(50)))
+        val start = row(r, glow = RowGlow(g, g.level(0)))
         val plain = row(r)
         near(bg, plain.red(58, 62), 0)
         near(bg, start.red(58, 62), 0)
@@ -179,11 +212,10 @@ class RowDrawTest {
     }
 
     @Test
-    fun thePressedArcScalesWithTheRing() {
+    fun thePressedArcKeepsItsRingSize() {
         val accent = Accent.forHue(Accent.defaultHue)
-        val s = row(RowModel(ring = true, primary = "Song", arc = 90), press = 0.96f, accent = accent)
-        assertEquals(accent.toArgb() and 0xFFFFFF, s.rgb(106, 36))
-        near(bg, s.red(115, 34))
+        val r = RowModel(ring = true, primary = "Song", arc = 90)
+        assertArrayEquals(row(r, accent = accent).px, row(r, press = 0.96f, accent = accent).px)
     }
 
     @Test

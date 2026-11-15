@@ -78,12 +78,15 @@ fun DrawScope.boxTile(t: Edges, ink: BoxInk, role: Role, ppu: Float) {
     }
 }
 
-fun DrawScope.artTile(t: Edges, art: ImageBitmap?, box: BoxInk?, role: Role, border: Int, frame: Boolean, s: Scale) {
+fun DrawScope.artTile(t: Edges, art: ImageBitmap?, box: BoxInk?, role: Role, border: Int, frame: Boolean, s: Scale) =
+    artTile(t, art, box, role, border, 0f, if (frame) 1f else 0f, s)
+
+fun DrawScope.artTile(t: Edges, art: ImageBitmap?, box: BoxInk?, role: Role, border: Int, lit: Float, ringA: Float, s: Scale) {
     when {
         art != null -> drawImage(art, dstOffset = IntOffset(t.x0, t.y0), dstSize = IntSize(t.w, t.h))
         box != null -> boxTile(t, box, role, s.stdPpu)
         else -> fill(t, 1f, Ink.tile)
     }
     if (border > 0) Rows.ringRects(t, border).forEach { fill(it, 1f) }
-    if (frame) pressFrame(t, s)
+    pressFrame(t, s, if (ringA > 0f) lit else 0f, ringA)
 }

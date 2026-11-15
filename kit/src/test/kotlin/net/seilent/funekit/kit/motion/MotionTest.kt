@@ -100,7 +100,7 @@ class MotionTest {
 
     @Test
     fun aShownPressIsStaleWhileItMovesAndNotOnceItsLegEnded() {
-        val p = Press()
+        val p = Press().also { it.scaled = true }
         p.down(0f)
         p.show(50f)
         assertTrue(p.stale(50f))
@@ -130,7 +130,7 @@ class MotionTest {
 
     @Test
     fun factorAtLeavesTheShownStepAlone() {
-        val p = Press()
+        val p = Press().also { it.scaled = true }
         p.down(0f)
         p.show(50f)
         val shown = p.factor()
@@ -142,7 +142,10 @@ class MotionTest {
     @Test
     fun everyPressMutatorButShowBumpsTheRevision() {
         val p = Press()
-        val mutators = listOf<(Press) -> Unit>({ it.down(0f) }, { it.tap(10f) }, { it.cancel(20f) }, { it.drop() }, { it.reset() })
+        val mutators = listOf<(Press) -> Unit>(
+            { it.down(0f) }, { it.tap(10f) }, { it.cancel(20f) }, { it.drop() }, { it.reset() },
+            { it.down(30f) }, { it.hold(31f) }, { it.cutRing(32f) }, { it.keyUp(33f) }, { it.untap(34f) },
+        )
         for (m in mutators) {
             val r = p.revision
             m(p)
@@ -154,7 +157,85 @@ class MotionTest {
         p.factorAt(40f)
         p.drawn(50f)
         p.stale(60f)
+        p.look(70f)
+        p.lit(80f)
+        p.ring(90f)
         assertEquals(r, p.revision)
+    }
+
+    @Test
+    fun theLitRisesOverThePressGlowAndATapThatActsCutsItAtTheTap() {
+        val p = Press()
+        p.down(0f)
+        assertEquals(Curves.cubicOut.at(0.5f), p.lit(25f), 0.0001f)
+        assertEquals(1f, p.lit(Tok.motion_pressGlow), 0f)
+        assertEquals(1f, p.ring(60f), 0f)
+        p.tap(100f)
+        assertEquals(0f, p.lit(100f), 0f)
+        assertEquals(0f, p.ring(100f), 0f)
+        assertTrue(p.framed(299f))
+        assertFalse(p.framed(300f))
+    }
+
+    @Test
+    fun aTapThatDoesNotActKeepsTheLitAndTheRingUntilTheRelease() {
+        val p = Press()
+        p.down(0f)
+        p.tap(100f, acts = false)
+        assertEquals(1f, p.lit(150f), 0f)
+        assertEquals(1f, p.ring(299f), 0f)
+        assertEquals(0f, p.lit(300f), 0f)
+        assertEquals(0f, p.ring(300f), 0f)
+    }
+
+    @Test
+    fun aCancelFadesTheLitAndTheRingTogether() {
+        val p = Press()
+        p.down(0f)
+        p.cancel(50f)
+        assertEquals(0.5f, p.lit(100f), 0.0001f)
+        assertEquals(0.5f, p.ring(100f), 0.0001f)
+        assertEquals(0f, p.ring(150f), 0f)
+        p.down(200f)
+        p.cancel(250f)
+        p.cutRing(260f)
+        assertEquals(0f, p.ring(270f), 0f)
+        assertTrue(p.lit(270f) > 0f)
+    }
+
+    @Test
+    fun aHoldSetsThePressedStateAndAKeyUpCutsTheLitAndReturns() {
+        val p = Press()
+        p.down(0f)
+        p.hold(10f)
+        assertEquals(Tok.motion_pressScale, p.scale(10f), 0f)
+        assertEquals(1f, p.lit(10f), 0f)
+        p.keyUp(100f)
+        assertFalse(p.held)
+        assertEquals(0f, p.lit(100f), 0f)
+        assertEquals(lerp(Tok.motion_pressScale, 1f, 0.5f), p.scale(150f), 0.0001f)
+    }
+
+    @Test
+    fun anUnscaledPressMovesOnlyWhileItsGlowRuns() {
+        val p = Press()
+        p.down(0f)
+        assertTrue(p.moving(40f))
+        assertFalse(p.moving(60f))
+        p.scaled = true
+        assertTrue(p.moving(60f))
+        assertFalse(p.moving(100f))
+    }
+
+    @Test
+    fun theBridgeFactorKeepsThePressScaleStepsAndLookReturnsTheLit() {
+        val p = Press()
+        p.down(0f)
+        p.show(50f)
+        assertEquals(1 - (1 - Tok.motion_pressScale) * 8 / 16, p.factor(), 0.0001f)
+        assertEquals(p.factorAt(50f), p.factor(), 0f)
+        assertEquals(1f, p.look(50f), 0f)
+        assertEquals(1 - (1 - Tok.motion_pressScale) * 8 / 16, p.factor(), 0.0001f)
     }
 
     @Test

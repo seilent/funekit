@@ -1,6 +1,8 @@
 package net.seilent.funekit.kit
 
+import androidx.compose.ui.unit.Density
 import net.seilent.funekit.gen.Tok
+import net.seilent.funekit.kit.motion.Curves
 import net.seilent.funekit.px
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -63,5 +65,49 @@ class GlowTest {
         assertTrue(g.off())
         assertEquals(null, g.key)
         assertFalse(g.off())
+    }
+
+    @Test
+    fun theLevelRisesOnTheCubicAndAFadeTakesItToZeroOverThePress() {
+        val g = Glow()
+        g.down(3, 1000)
+        assertEquals(Curves.cubicOut.at(0.5f), g.level(1025), 0.0001f)
+        g.fade(1050)
+        assertTrue(g.fading)
+        assertEquals(0.5f, g.level(1100), 0.0001f)
+        assertTrue(g.moving(1100))
+        assertEquals(0f, g.level(1150), 0f)
+        assertFalse(g.moving(1150))
+    }
+
+    @Test
+    fun anIdleUpHoldsTheGlowForTheTouchReturnAndASetLevelWins() {
+        val g = Glow()
+        g.down(3, 1000)
+        g.idleUp(1100)
+        assertEquals(1300L, g.due(1100))
+        assertTrue(g.live(1200))
+        assertEquals(1f, g.level(1299), 0f)
+        assertEquals(0f, g.level(1300), 0f)
+        val f = Glow()
+        assertEquals(null, f.follow(5, 0f, false))
+        assertEquals(f, f.follow(5, 0.4f, true))
+        assertEquals(5, f.key)
+        assertEquals(0.4f, f.level(2000), 0f)
+        assertEquals(null, f.follow(5, 0f, false))
+        assertEquals(null, f.key)
+    }
+
+    @Test
+    fun theMaskIsKeptPerTextClipAndPpu() {
+        val g = Glow()
+        val d = Density(1f)
+        g.mask(d, emptyList(), Edges(0, 0, 10, 10), 3f)
+        g.mask(d, emptyList(), Edges(0, 0, 10, 10), 3f)
+        assertEquals(1, g.builds)
+        g.mask(d, emptyList(), Edges(0, 0, 10, 12), 3f)
+        assertEquals(2, g.builds)
+        g.mask(d, emptyList(), Edges(0, 0, 10, 12), 2f)
+        assertEquals(3, g.builds)
     }
 }

@@ -154,63 +154,131 @@ fun pivotAt(e: Float, dir: Int): Pivot {
     return Pivot(stripDx, stripAlpha, dx, (k / Old.motion_pivotRowFade).coerceIn(0f, 1f), true)
 }
 
+class Tw {
+    var start = 0f
+        private set
+    var dur = 0f
+        private set
+    var from = 0f
+        private set
+    var to = 0f
+        private set
+    private var curve: Curve = Curves.linear
+
+    fun set(v: Float) {
+        from = v
+        to = v
+        dur = 0f
+    }
+
+    fun run(now: Float, f: Float, t: Float, ms: Float, c: Curve) {
+        start = now
+        dur = ms
+        from = f
+        to = t
+        curve = c
+    }
+
+    fun at(now: Float): Float {
+        val e = now - start
+        if (dur <= 0f || e >= dur) return to
+        if (e <= 0f) return from
+        return lerp(from, to, curve.at(e / dur))
+    }
+
+    fun end(): Float = if (dur <= 0f) 0f else start + dur
+
+    fun done(now: Float): Boolean = dur <= 0f || now - start >= dur
+}
+
 class Press {
     var revision by mutableIntStateOf(0)
         private set
-    private var leg = Leg(1f, 1f, 0f, 0f)
-    private var t0 = 0f
+    private val t = Tw().apply { set(1f) }
+    private val g = Tw().apply { set(0f) }
     private var releaseAt: Float? = null
+    private var cutAt: Float? = null
+    private var shown = 0
+    private var litShown = 0f
+    private var ringShown = 0f
+    private var framedShown = false
+    private var ringCut = false
+    var scaled = false
 
-    private val to: Float get() = leg.to
+    val held: Boolean get() = t.to != 1f && releaseAt == null
 
-    val held: Boolean get() = to != 1f && releaseAt == null
-
-    fun framed(now: Float): Boolean = to != 1f && releaseAt.let { it == null || now < it }
-
-    private fun shrink(now: Float): Float = leg.at(now - t0)
-
-    private fun run(now: Float, from: Float, to: Float) {
-        leg = Leg(from, to, 0f, Tok.motion_press)
-        t0 = now
-    }
+    fun framed(now: Float): Boolean = t.to != 1f && releaseAt.let { it == null || now < it }
 
     fun scale(now: Float): Float {
         val r = releaseAt
-        if (r == null || now < r) return shrink(now)
+        if (r == null || now < r) return t.at(now)
         val e = now - r
         if (e >= Tok.motion_press) return 1f
-        return lerp(shrink(r), 1f, e / Tok.motion_press)
+        return lerp(t.at(r), 1f, e / Tok.motion_press)
+    }
+
+    fun lit(now: Float): Float = if (cutAt.let { it != null && now >= it }) 0f else g.at(now)
+
+    fun ring(now: Float): Float {
+        if (framed(now)) return if (cutAt.let { it != null && now >= it }) 0f else 1f
+        if (t.to != 1f || cutAt != null || ringCut || g.to != 0f || g.from <= 0f) return 0f
+        return g.at(now) / g.from
     }
 
     fun down(now: Float) {
         revision++
         val v = scale(now)
+        val l = lit(now)
         releaseAt = null
-        run(now, v, Tok.motion_pressScale)
+        cutAt = null
+        ringCut = false
+        t.run(now, v, Tok.motion_pressScale, Tok.motion_press, Curves.linear)
+        g.run(now, l, 1f, Tok.motion_pressGlow, Curves.cubicOut)
     }
 
-    fun tap(now: Float) {
+    fun tap(now: Float, acts: Boolean = true) {
         revision++
-        if (to != 1f && releaseAt == null) releaseAt = now + Tok.motion_touchReturnDelay
+        if (t.to != 1f && releaseAt == null) {
+            val r = now + Tok.motion_touchReturnDelay
+            releaseAt = r
+            cutAt = if (acts) now else r
+        }
+    }
+
+    fun keyUp(now: Float) {
+        revision++
+        if (!held) return
+        val v = scale(now)
+        releaseAt = null
+        cutAt = now
+        if (v == 1f) t.set(1f) else t.run(now, v, 1f, Tok.motion_press, Curves.linear)
     }
 
     fun cancel(now: Float) {
         revision++
         if (!held) return
         val v = scale(now)
+        val l = lit(now)
         releaseAt = null
-        if (v == 1f) leg = Leg(1f, 1f, 0f, 0f) else run(now, v, 1f)
+        cutAt = null
+        if (v == 1f) t.set(1f) else t.run(now, v, 1f, Tok.motion_press, Curves.linear)
+        if (l == 0f) g.set(0f) else g.run(now, l, 0f, Tok.motion_press, Curves.linear)
+    }
+
+    fun untap(now: Float) {
+        revision++
+        if (releaseAt == null) return
+        releaseAt = null
+        cutAt = null
+        cancel(now)
     }
 
     fun reset() {
         revision++
-        leg = Leg(1f, 1f, 0f, 0f)
+        t.set(1f)
+        g.set(0f)
         releaseAt = null
-    }
-
-    fun moving(now: Float): Boolean {
-        val r = releaseAt
-        return now - t0 < leg.end || (r != null && now >= r && now < r + Tok.motion_press)
+        cutAt = null
     }
 
     fun drop() {
@@ -218,7 +286,18 @@ class Press {
         if (held) reset()
     }
 
-    private var shown = 0
+    fun hold(now: Float) {
+        revision++
+        if (t.to != 1f && releaseAt.let { it == null || now < it }) {
+            t.set(Tok.motion_pressScale)
+            g.set(1f)
+        }
+    }
+
+    fun cutRing(now: Float) {
+        revision++
+        if (!framed(now)) ringCut = true
+    }
 
     private fun step(now: Float): Int {
         val span = 1 - Tok.motion_pressScale
@@ -227,20 +306,41 @@ class Press {
 
     private fun factorOf(step: Int): Float = 1 - (1 - Tok.motion_pressScale) * step / PRESS_STEPS
 
-    fun show(now: Float) {
+    fun draw(now: Float): Float {
+        framedShown = framed(now)
+        litShown = lit(now)
+        ringShown = ring(now)
         shown = step(now)
+        return factorOf(shown)
+    }
+
+    fun look(now: Float): Float {
+        draw(now)
+        return litShown
+    }
+
+    fun show(now: Float) {
+        draw(now)
     }
 
     fun factor(): Float = factorOf(shown)
 
     fun factorAt(now: Float): Float = factorOf(step(now))
 
-    fun drawn(now: Float): Float {
-        show(now)
-        return factor()
+    fun drawn(now: Float): Float = draw(now)
+
+    fun rest(now: Float): Boolean = !moving(now) && scale(now) == 1f
+
+    fun moving(now: Float): Boolean {
+        if (!scaled) return !g.done(now)
+        val r = releaseAt
+        return !t.done(now) || !g.done(now) || (r != null && now >= r && now < r + Tok.motion_press)
     }
 
-    fun stale(now: Float): Boolean = moving(now) || step(now) != shown
+    fun stale(now: Float): Boolean =
+        moving(now) || (scaled && step(now) != shown) || lit(now) != litShown || framed(now) != framedShown || ring(now) != ringShown
+
+    fun end(): Float = releaseAt?.let { it + Tok.motion_press } ?: max(t.end(), g.end())
 
     fun due(now: Float): Float? = releaseAt?.takeIf { it > now }
 }

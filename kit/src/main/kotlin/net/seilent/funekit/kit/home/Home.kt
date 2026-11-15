@@ -13,7 +13,6 @@ import androidx.compose.ui.unit.Density
 import net.seilent.funekit.Roles
 import net.seilent.funekit.Scale
 import net.seilent.funekit.gen.Glyphs
-import net.seilent.funekit.gen.Old
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.Edges
 import net.seilent.funekit.kit.FocusTrack
@@ -33,10 +32,10 @@ import net.seilent.funekit.kit.penFloor
 import net.seilent.funekit.kit.penPx
 import net.seilent.funekit.kit.pressGlow
 import net.seilent.funekit.kit.ring
+import net.seilent.funekit.kit.ringPress
 import net.seilent.funekit.kit.rolePx
 import net.seilent.funekit.kit.roleStyle
 import net.seilent.funekit.kit.stack.DrawRecord
-import net.seilent.funekit.kit.stack.zoomed
 import net.seilent.funekit.kit.word
 import net.seilent.funekit.px
 import kotlin.math.ceil
@@ -263,25 +262,37 @@ class HomeMenu(val count: Int) {
         val out = (0 until count).map { i ->
             val e = enterAt(i, now)
             val f = focus.rowAlpha(i, now, Roles.homeItem.alpha, Tok.type_homeItem_alphaDim)
-            val a = if (i == 0 && ring.held) Old.homeRingPressDim else if (lit.on(i, now)) Tok.alpha_full else f
+            val a = if (lit.on(i, now)) Tok.alpha_full else f
             HomeItemRest(
                 e,
                 e * a,
                 f,
                 e * Roles.homeSubtitle.alpha,
-                items.factorAt(i, now),
-                if (g == i) glow.progress(now) else null,
+                1f,
+                if (g == i) items.lit(i, now) else null,
             )
         }
-        return HomeRest(out, ringAlpha(ringLit, now), ring.factorAt(now.toFloat()))
+        return HomeRest(out, ringAlpha(ringLit, now), ring.lit(now.toFloat()))
     }
 }
 
 data class HomeItemRest(val enter: Float, val alpha: Float, val focus: Float, val sub: Float, val zoom: Float, val glow: Float?)
 
-data class HomeRest(val items: List<HomeItemRest>, val ring: Float, val press: Float)
+data class HomeRest(val items: List<HomeItemRest>, val ring: Float, val ringLit: Float)
 
 class HomeLook(val items: Float, val sel: Int, val selAlpha: Float, val sub: Float, val ring: Float = items, val mark: Float = items)
+
+fun homeGlowReach(s: Scale): Int = px(s.board.homeGlowDilate, s.stdPpu) + px(s.board.homeGlow, s.stdPpu)
+
+fun homeRingHaloReach(ppu: Float): Int = px(Tok.homeRingHalo, ppu) + px(Tok.homeRingHaloSpread, ppu)
+
+fun homeRingRect(s: Scale, off: Float, halo: Boolean = true): Edges {
+    val sp = s.stdPpu
+    val cx = px(Tok.homeRingX, sp)
+    val cy = px(Tok.homeRingY - off, sp)
+    val r = px(Tok.homeRingSize, sp) / HALF + 1 + if (halo) homeRingHaloReach(sp) else 0
+    return Edges(cx - r, cy - r, cx + r, cy + r)
+}
 
 private fun itemRect(ink: HomeInk, i: Int, x64: Int, base: Int, s: Scale): Edges {
     val sp = s.stdPpu
@@ -289,9 +300,9 @@ private fun itemRect(ink: HomeInk, i: Int, x64: Int, base: Int, s: Scale): Edges
     val subPx = rolePx(Roles.homeSubtitle, s, sp)
     val subBase = base + px(Tok.homeSubtitleDrop + Tok.capHeight * Roles.homeSubtitle.size, sp)
     val x = penFloor(x64)
-    val reach = px(Tok.pressGlowDilate, sp) + px(Tok.pressGlow, sp)
+    val reach = homeGlowReach(s)
     val w = penFloor(maxOf(pen64(ink.names[i].width) + pen64(reach.toFloat()), pen64(Tok.homeSubtitleX, sp) + pen64(ink.subs[i].width)))
-    return Edges(x - GROW, base - Metrics.ascent(ip) - GROW, x + w + GROW, subBase + Metrics.descent(subPx) + GROW)
+    return Edges(x - GROW, base - Metrics.ascent(ip) - reach - GROW, x + w + GROW, subBase + Metrics.descent(subPx) + GROW)
 }
 
 fun DrawScope.homeMenu(ink: HomeInk, m: HomeMenu, geo: HomeGeo, rest: HomeRest, look: HomeLook?, off: Float = 0f, rec: DrawRecord? = null) {
@@ -307,10 +318,10 @@ fun DrawScope.homeMenu(ink: HomeInk, m: HomeMenu, geo: HomeGeo, rest: HomeRest, 
     val c = Offset(px(Tok.homeRingX, sp).toFloat(), px(Tok.homeRingY - off, sp).toFloat())
     val d = px(Tok.homeRingSize, sp).toFloat()
     val ra = rest.ring * ringA
-    val ps = if (look == null) rest.press else 1f
     val stroke = px(Tok.homeRingStroke, sp).toFloat()
-    ring(c, d, stroke, Ink.white, ra, ps)
-    glyph(Glyphs.play, c, (d.toInt() / HALF).toFloat(), Ink.white, ra, ps)
+    if (look == null) ringPress(d.toInt(), stroke.toInt(), c.x.toInt(), c.y.toInt(), rest.ringLit, ra, px(Tok.homeRingHalo, sp), px(Tok.homeRingHaloSpread, sp), Tok.homeRingHaloAlpha)
+    ring(c, d, stroke, Ink.white, ra)
+    glyph(Glyphs.play, c, (d.toInt() / HALF).toFloat(), Ink.white, ra)
     rec?.ring("home.ring", c, d, ra)
     rec?.glyphs("home.ring.glyph", listOf(Glyphs.play), c, (d.toInt() / HALF).toFloat(), ra, d, stroke)
     val drop = px(Tok.homeSubtitleDrop + Tok.capHeight * Roles.homeSubtitle.size, sp)
@@ -331,10 +342,10 @@ fun DrawScope.homeMenu(ink: HomeInk, m: HomeMenu, geo: HomeGeo, rest: HomeRest, 
         }
         val still = x64 == x0 && off == 0f
         val r = if (still) ink.rect(i) else itemRect(ink, i, x64, base, s)
-        val z = if (look == null) item.zoom else 1f
         val w = ink.names[i]
-        zoomed(rec, z, (r.x0 + r.x1) / HALF.toFloat(), (r.y0 + r.y1) / HALF.toFloat()) {
+        run {
             val g = item.glow
+            if (look == null && g != null) m.glow.tune(s.board.homeGlowDilate, s.board.homeGlow, s.board.homeGlowAlpha)
             if (look == null && g != null) pressGlow(m.glow, if (still) ink.glowText(i) else listOf(GlowText(w, x64, base, ip)), r, sp, g)
             word(w, penPx(x64), base.toFloat(), Ink.white, a)
             rec?.word("home.item$i", w, penPx(x64), base.toFloat(), a)

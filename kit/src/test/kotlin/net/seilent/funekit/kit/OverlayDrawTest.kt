@@ -20,6 +20,7 @@ import net.seilent.funekit.Surface
 import net.seilent.funekit.Window
 import net.seilent.funekit.px
 import net.seilent.funekit.scale
+import net.seilent.funekit.gen.Tok
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -69,6 +70,30 @@ class OverlayDrawTest {
         near(0x11, red(px, 368, 130), 0)
         near(Math.round(0x11 + (0xFF - 0x11) * 0.4f), red(px, 535, 130))
         near(0x11, red(px, 538, 130), 0)
+    }
+
+    @Test
+    fun aPressedLetterKeepsItsTileAndGlowsItsLetterAtScaleOne() {
+        fun style(r: Role) = roleStyle(r, a105, unitDensity, Ink.white, ppu = 3f)
+        val ink = JumpInk(
+            measurer.word("exit", Roles.jumpExit, style(Roles.jumpExit), fonts, unitDensity, null),
+            (0 until Section.count).map { measurer.word(Section.letter(it), Roles.jumpCell, style(Roles.jumpCell), fonts, unitDensity, covers) },
+        )
+        val cells = JumpCells(a105)
+        val t = cells.at(Jump.slotOf(2), 0f)
+        val plain = JumpGrid().also { it.open(BooleanArray(Section.count) { true }, 0, 1280 / 3f) }
+        val pressed = JumpGrid().also { it.open(BooleanArray(Section.count) { true }, 0, 1280 / 3f) }
+        pressed.press.down(2, 0)
+        val a = shot { jumpGrid(plain, ink, cells, a105, 0f, 100) }
+        val b = shot { jumpGrid(pressed, ink, cells, a105, 0f, 100) }
+        for (x in t.x0 until t.x1) assertEquals(red(a, x, t.y0), red(b, x, t.y0))
+        val bw = px(Tok.letterTileBorder, 3f)
+        fun lit(p: IntArray): Int {
+            var n = 0
+            for (y in t.y0 + bw until t.y1 - bw) for (x in t.x0 + bw until t.x1 - bw) if (red(p, x, y) > 0x11) n++
+            return n
+        }
+        assertTrue("${lit(b)} against ${lit(a)}", lit(b) > lit(a))
     }
 
     @Test
