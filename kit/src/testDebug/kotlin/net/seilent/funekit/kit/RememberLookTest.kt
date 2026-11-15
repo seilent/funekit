@@ -115,6 +115,25 @@ class RememberLookTest {
         assertEquals(1, look.last().value)
     }
 
+    @Test
+    fun aCoveredPageDrawsNoFocusUnderASheetAndDrawsItAgainWhenTheSheetGoes() {
+        val s = pageStack()
+        val look = ArrayList<State<Int>>()
+        rule.setContent { look += rememberLook(s.hideFocus, s.covered, s.snap, covered = frozen(s)) { if (s.focusShown) 1 else 0 } }
+        rule.waitForIdle()
+        assertEquals(1, look.last().value)
+        step(s, 0L) { s.open(Overlay(OverKind.Sheet)) }
+        assertTrue(frozen(s))
+        assertEquals(0, look.last().value)
+        var t = STEP
+        step(s, t) { s.close() }
+        while (s.overlay != null) {
+            t += STEP
+            step(s, t) {}
+        }
+        assertEquals(1, look.last().value)
+    }
+
     companion object {
         private const val STEP = 16L
     }

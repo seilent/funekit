@@ -427,9 +427,9 @@ class MovePaintTest {
         assertEquals(ya, c.ya, 0f)
         assertEquals(Tok.motion_rowsDx * s.stdPpu, c.ends.rowsDx, 0f)
         val typed = listOf(
-            listOf(17f, 0.80268f, 58f, 69.839f, 231.674f, 520.64f),
-            listOf(100f, 0.86065f, 41f, 49.361f, 163.607f, 473.44f),
-            listOf(200f, 0.92091f, 23f, 27.746f, 92.864f, 424.39f),
+            listOf(17f, 0.80375f, 57f, 68.775f, 230.412f, 519.76f),
+            listOf(100f, 0.86625f, 39f, 47.025f, 157.036f, 468.89f),
+            listOf(200f, 0.93005f, 20f, 24.197f, 82.128f, 416.95f),
         )
         for (row in typed) {
             val t = row[0]
@@ -481,14 +481,14 @@ class MovePaintTest {
         assertEquals(px(120f, ps.stdPpu), g.top)
         val at = 17L
         val sy = r.move.at(Part.Content, Prop.S, at)
-        assertEquals(0.80268f, sy, 1e-4f)
+        assertEquals(0.80375f, sy, 1e-4f)
         assertEquals(57f, Math.round(r.move.at(Part.Content, Prop.X, at)).toFloat(), 0f)
         r.draw(at)
         val a = r.arrive()
         assertTrue(a.isNotEmpty())
         for (d in a) {
-            assertEquals(68.70f, d.dx, 0.01f)
-            assertEquals(405.56f + sy * d.y, d.top, 0.02f)
+            assertEquals(68.64f, d.dx, 0.01f)
+            assertEquals(403.35f + sy * d.y, d.top, 0.02f)
         }
     }
 
@@ -759,14 +759,14 @@ class MovePaintTest {
         val half = (Tok.motion_t4mDelay + Tok.motion_morphPush / 2).toLong()
         val v = r.move
         assertEquals(Tok.motion_t4mDelay + Tok.motion_morphPush, v.wordEnd.toFloat(), 0f)
-        assertEquals(0.5f, v.at(Part.LeaveWord, Prop.A, half), 1e-4f)
-        assertEquals(0.5f, v.at(Part.Word, Prop.A, half), 1e-4f)
+        for (q in Prop.entries) assertFalse("leave word $q", v.has(Part.LeaveWord, q))
+        assertEquals(1f, v.at(Part.Word, Prop.A, half), 0f)
         assertEquals(PIVOT_S + (HEADER_S - PIVOT_S) * cubicOut(0.5f), v.at(Part.Word, Prop.S, half), 1e-4f)
         assertEquals(PIVOT_X + (HEADER_X - PIVOT_X) * cubicOut(0.5f), v.at(Part.Word, Prop.X, half), 1e-3f)
-        assertEquals(PIVOT_Y + (HEADER_Y - PIVOT_Y) * cubicOut(0.5f), v.at(Part.LeaveWord, Prop.Y, half), 1e-3f)
+        assertEquals(PIVOT_Y + (HEADER_Y - PIVOT_Y) * cubicOut(0.5f), v.at(Part.Word, Prop.Y, half), 1e-3f)
         val rec = r.draw(half)
-        assertEquals(PIVOT_LOOK * 0.5f, rec.alphas.getValue("morph.leave"), 1e-4f)
-        assertEquals(HEADER_LOOK * 0.5f, rec.alphas.getValue("morph.arrive"), 1e-4f)
+        assertTrue("morph.leave" !in rec.words)
+        assertEquals(HEADER_LOOK, rec.alphas.getValue("morph.arrive"), 1e-4f)
         assertTrue("word" !in rec.words)
     }
 
@@ -780,13 +780,15 @@ class MovePaintTest {
         assertTrue(e.morph)
         assertTrue(e.morphHeaderOut)
         assertFalse(e.morphHeaderIn)
-        val half = (Tok.motion_t4mDelay + Tok.motion_morphPop / 2).toLong()
+        val at = 100L
         val v = r.move
-        assertEquals(0.5f, v.at(Part.LeaveWord, Prop.A, half), 1e-4f)
-        assertEquals(HEADER_S + (PIVOT_S - HEADER_S) * cubicOut(0.5f), v.at(Part.Word, Prop.S, half), 1e-4f)
-        val rec = r.draw(half)
-        assertEquals(HEADER_LOOK * 0.5f, rec.alphas.getValue("morph.leave"), 1e-4f)
-        assertEquals(PIVOT_LOOK * 0.5f, rec.alphas.getValue("morph.arrive"), 1e-4f)
+        assertEquals(183, v.wordEnd)
+        assertFalse(v.has(Part.LeaveWord, Prop.A))
+        assertEquals(0.35f, v.at(Part.Word, Prop.A, at), 1e-4f)
+        assertEquals(HEADER_S + (PIVOT_S - HEADER_S) * cubicOut((at - Tok.motion_t4mDelay) / Tok.motion_morphPop), v.at(Part.Word, Prop.S, at), 1e-4f)
+        val rec = r.draw(at)
+        assertTrue("morph.leave" !in rec.words)
+        assertEquals(PIVOT_LOOK * 0.35f, rec.alphas.getValue("morph.arrive"), 1e-4f)
     }
 
     @Test
@@ -830,9 +832,10 @@ class MovePaintTest {
         assertEquals(PIVOT_LOOK * mla, c.fades[0].a, 1e-4f)
         assertEquals(HEADER_LOOK * mwa, c.fades[1].a, 1e-4f)
         assertEquals(HEADER_S, requireNotNull(r.move.leg(Part.Word, Prop.S)).from, 0f)
+        assertEquals(0f, mla, 0f)
         val rec = r.draw(at + 1)
         val k = 1 - 1f / Tok.motion_leave
-        assertEquals(PIVOT_LOOK * mla * k, rec.alphas.getValue("fade.leave"), 1e-4f)
+        assertTrue("fade.leave" !in rec.words)
         assertEquals(HEADER_LOOK * mwa * k, rec.alphas.getValue("fade.arrive"), 1e-4f)
     }
 
@@ -1165,11 +1168,11 @@ class MovePaintTest {
         assertEquals(1f, c.arriveThumb, 0f)
         r.draw(17L)
         val d = requireNotNull(thumbOf(r, "arrive"))
-        assertEquals(0.80268f, d.k, 1e-4f)
-        assertEquals(638.13f, d.dx + d.k * bar.x0, 0.01f)
-        assertEquals(647.77f, d.dx + d.k * bar.x1, 0.01f)
-        assertEquals(520.64f, d.top, 0.01f)
-        assertEquals(706.86f, d.bottom, 0.01f)
+        assertEquals(0.80375f, d.k, 1e-4f)
+        assertEquals(637.83f, d.dx + d.k * bar.x0, 0.01f)
+        assertEquals(647.48f, d.dx + d.k * bar.x1, 0.01f)
+        assertEquals(519.76f, d.top, 0.01f)
+        assertEquals(706.23f, d.bottom, 0.01f)
         assertEquals(Tok.motion_rowsT2Alpha, d.alpha, 1e-4f)
         assertEquals(0.6f, d.alpha, 1e-4f)
     }

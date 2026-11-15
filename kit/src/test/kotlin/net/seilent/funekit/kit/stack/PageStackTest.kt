@@ -128,12 +128,12 @@ class PageStackTest {
         s.frame(0)
         assertEquals(MoveKind.T4n, s.turn?.kind)
         assertNull(s.turn?.to)
-        s.frame(300)
+        s.frame(167)
         assertTrue(s.pages.isEmpty())
         assertTrue(s.canBack)
-        s.frame(332)
+        s.frame(299)
         assertEquals(Phase.Enter, s.phase)
-        s.frame(333)
+        s.frame(300)
         assertEquals(Phase.Rest, s.phase)
         assertFalse(s.canBack)
     }
@@ -302,7 +302,8 @@ class PageStackTest {
         val hub = pushed("albums")
         val h = 209.0 / 418
         assertEquals(0.79 + 0.21 * (1 - (1 - h).pow(1.5)), hub.move.at(Part.Content, Prop.S, 209).toDouble(), 0.002)
-        assertEquals(0.5, hub.move.at(Part.Content, Prop.A, 67).toDouble(), 0.002)
+        assertEquals(0.0, hub.move.at(Part.Content, Prop.A, 24).toDouble(), 0.002)
+        assertEquals(0.5, hub.move.at(Part.Content, Prop.A, 166).toDouble(), 0.002)
         val plain = pushed("settings")
         assertEquals(1f, plain.move.at(Part.Content, Prop.A, 0), 0f)
         assertEquals(1f, plain.move.at(Part.Content, Prop.S, 0), 0f)
@@ -322,14 +323,14 @@ class PageStackTest {
         assertEquals(Phase.Exit, s.phase)
         assertEquals(MoveKind.T4n, s.turn?.kind)
         assertNull(s.turn?.to)
-        s.frame(299)
+        s.frame(166)
         assertEquals(listOf("hub", "album"), s.pages.toList())
-        s.frame(300)
+        s.frame(167)
         assertTrue(s.pages.isEmpty())
         assertEquals(Phase.Enter, s.phase)
-        s.frame(332)
+        s.frame(299)
         assertEquals(Phase.Enter, s.phase)
-        s.frame(333)
+        s.frame(300)
         assertEquals(Phase.Rest, s.phase)
     }
 
@@ -753,6 +754,66 @@ class PageStackTest {
         s.frame(t)
         assertTrue(s.overlay!!.closing)
         assertFalse(s.hideFocus)
+        assertEquals(2, s.snap)
+    }
+
+    @Test
+    fun aSheetOrADialogCoversThePageAndOnlyADialogHidesItsFocus() {
+        val s = stack()
+        assertTrue(s.focusShown)
+        s.open(Overlay(OverKind.Sheet))
+        s.frame(0)
+        assertFalse(s.hideFocus)
+        assertTrue(s.covered)
+        assertFalse(s.focusShown)
+        val t = settle(s, 0)
+        s.frame(t)
+        s.accept()
+        s.frame(t)
+        assertTrue(s.covered)
+        assertEquals(2, s.snap)
+        while (s.overlay != null) s.frame(s.clock + STEP)
+        assertFalse(s.covered)
+        assertTrue(s.focusShown)
+        s.open(Overlay(OverKind.Dlg))
+        s.frame(s.clock + STEP)
+        assertTrue(s.hideFocus)
+        assertTrue(s.covered)
+        val d = settle(s, s.clock)
+        s.frame(d)
+        s.close()
+        s.frame(d)
+        assertFalse(s.hideFocus)
+        assertFalse(s.covered)
+        assertTrue(s.focusShown)
+        while (s.overlay != null) s.frame(s.clock + STEP)
+        s.open(Overlay(OverKind.Jump))
+        s.frame(s.clock + STEP)
+        assertFalse(s.covered)
+        assertTrue(s.focusShown)
+    }
+
+    @Test
+    fun aReadyPageReleasesTheHeldHeaderAndPivotsOfAPageZoom() {
+        val s = stack()
+        s.push("album", MoveKind.T3z)
+        s.frame(0)
+        assertFalse(s.move.held(Part.Header))
+        assertFalse(s.move.held(Part.Pivots))
+        assertFalse(s.move.held(Part.Content))
+        assertEquals(1f, s.move.at(Part.Header, Prop.A, 417), 0f)
+        assertEquals(1f, s.move.at(Part.Pivots, Prop.A, 417), 0f)
+    }
+
+    @Test
+    fun aPickerPickKeepsThePageCovered() {
+        val s = stack()
+        s.open(Overlay(OverKind.Sheet))
+        s.frame(0)
+        s.pick()
+        s.frame(STEP)
+        assertFalse(s.hideFocus)
+        assertTrue(s.covered)
         assertEquals(2, s.snap)
     }
 

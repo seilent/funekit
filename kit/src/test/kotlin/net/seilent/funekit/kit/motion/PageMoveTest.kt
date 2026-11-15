@@ -34,33 +34,51 @@ class PageMoveTest {
 
     @Test
     fun theBoardFormsAreTheTokenModes() {
-        val b = MoveForms.board(TokBoard.v1)
-        assertTrue(b.leaveFade)
-        assertEquals(ContentForm.Zoom, b.content)
-        assertTrue(b.chromeSlide)
-        assertTrue(b.headerZoom)
-        assertTrue(b.t3mFade)
-        assertTrue(b.wordMorph)
+        for (board in listOf(TokBoard.v1, TokBoard.r1, TokBoard.a105)) {
+            val b = MoveForms.board(board)
+            assertTrue(b.leaveFade)
+            assertEquals(ContentForm.Zoom, b.content)
+            assertTrue(b.chromeSlide)
+            assertTrue(b.headerZoom)
+            assertTrue(b.t3mFade)
+            assertTrue(b.wordMorph)
+            assertEquals("$board hub rows", ContentForm.Zoom, b.hubRows)
+            assertEquals("$board page rows", ContentForm.Zoom, b.pageRows)
+        }
+        assertEquals(157.3f, MoveForms.board(TokBoard.v1).t2PivotY, 0f)
+        assertEquals(163.8f, MoveForms.board(TokBoard.r1).t2PivotY, 0f)
+        assertEquals(163.8f, MoveForms.board(TokBoard.a105).t2PivotY, 0f)
+        assertEquals(163.8f, MoveForms().t2PivotY, 0f)
     }
 
     @Test
-    fun t4At200() {
+    fun aPivotPopRunsTheV042PivotPopKeys() {
         val m = PageMove()
         m.start(MoveKind.T4, 1000, pop, forms)
         m.release(Part.Content, 1000)
         val t = 1200L
         assertEquals(1167L, m.swapAt)
+        assertEquals(183, m.wordEnd)
         near(cubicOut(212.0 / 400), m.at(Part.Word, Prop.S, t), "word S")
-        near(0.47, m.at(Part.LeaveWord, Prop.A, t), "leave word A")
-        near(0.53, m.at(Part.Word, Prop.A, t), "word A")
-        near(1.34 - 0.34 * easeOut(62.0 / 135), m.at(Part.Zoom, Prop.S, t), "zoom S")
-        near(49.8 * (1 - easeOut(33.0 / 167)), m.at(Part.Pivots, Prop.X, t), "pivot X")
-        near(28.2 * (1 - easeOut(33.0 / 167)), m.at(Part.Pivots, Prop.Y, t), "pivot Y")
-        near(33.0 / 67, m.at(Part.Pivots, Prop.A, t), "pivot A")
+        near(0.35, m.at(Part.Word, Prop.A, 1100), "word A at 100")
+        near(0.0, m.at(Part.Word, Prop.A, t), "word A gone at 183")
+        assertFalse(m.has(Part.LeaveWord, Prop.S))
+        near(0.35, m.at(Part.Leave, Prop.A, 1100), "leave A at 100")
+        near(0.0, m.at(Part.Leave, Prop.A, t), "leave A at 200")
+        near(19.9 * easeOut(25.0 / 50), m.at(Part.LeavePivots, Prop.X, 1025), "leave pivots X at 25")
+        near(19.9, m.at(Part.LeavePivots, Prop.X, t), "leave pivots X")
+        near(26.5, m.at(Part.LeavePivots, Prop.Y, t), "leave pivots Y")
+        near(0.55, m.at(Part.LeavePivots, Prop.A, 1050), "leave pivots A at 50")
+        near(0.34, m.at(Part.Zoom, Prop.A, t), "zoom A at 200")
+        near(1.34 - 0.34 * easeOut(17.0 / 117), m.at(Part.Zoom, Prop.S, t), "zoom S")
+        near(0.0, m.at(Part.Header, Prop.A, 1299), "header before 300")
+        near(1.0, m.at(Part.Header, Prop.A, 1300), "header at 300")
+        near(0.79, m.at(Part.Pivots, Prop.A, 1333), "pivots A at 333")
         near(33.0 / 133, m.at(Part.Ground, Prop.A, t), "ground A")
-        near(0.0, m.at(Part.Leave, Prop.A, t), "leave A")
-        near(67.0 / 305, m.at(Part.Content, Prop.A, t), "content A")
-        near(0.71 + 0.29 * easeOut(67.0 / 305), m.at(Part.Content, Prop.S, t), "content S")
+        near(0.0, m.at(Part.Content, Prop.A, 1332), "content before 333")
+        near(0.16, m.at(Part.Content, Prop.A, 1333), "content A at 333")
+        near(0.67, m.at(Part.Content, Prop.A, 1400), "content A at 400")
+        near(1.0, m.at(Part.Content, Prop.S, t), "content S")
     }
 
     @Test
@@ -107,7 +125,7 @@ class PageMoveTest {
         assertEquals(300L, m.swapAt)
         rowsInk(m, Part.Content)
         near(0.0, m.at(Part.Home, Prop.A, 100), "home A")
-        near(49.8, m.at(Part.Pivots, Prop.X, 100), "pivots before their delay")
+        near(-33.5, m.at(Part.Pivots, Prop.X, 100), "pivots before their first key")
     }
 
     @Test
@@ -131,18 +149,51 @@ class PageMoveTest {
     }
 
     @Test
-    fun theRowsScaleAndShiftRunOverMotionRows() {
+    fun theT2RowsScaleAndShiftRunOverRowsT2() {
         val m = released(MoveKind.T2, t2Ends)
         tight(0.79, m.at(Part.Content, Prop.S, 0), "S at 0")
-        tight(0.80268, m.at(Part.Content, Prop.S, 17), "S at 17")
-        tight(0.86065, m.at(Part.Content, Prop.S, 100), "S at 100")
-        tight(0.92091, m.at(Part.Content, Prop.S, 200), "S at 200")
-        tight(1.0, m.at(Part.Content, Prop.S, 418), "S at 418")
+        tight(0.80375, m.at(Part.Content, Prop.S, 17), "S at 17")
+        tight(0.86625, m.at(Part.Content, Prop.S, 100), "S at 100")
+        tight(0.93005, m.at(Part.Content, Prop.S, 200), "S at 200")
+        tight(1.0, m.at(Part.Content, Prop.S, 385), "S at 385")
         tight(61.5, m.at(Part.Content, Prop.X, 0), "X at 0")
         for (t in listOf(17, 100, 200)) {
-            near(61.5 * (1 - powOut15(t / 418.0)), m.at(Part.Content, Prop.X, t.toLong()), "X at $t")
+            near(61.5 * (1 - powOut15(t / 385.0)), m.at(Part.Content, Prop.X, t.toLong()), "X at $t")
         }
-        tight(0.0, m.at(Part.Content, Prop.X, 418), "X at 418")
+        tight(0.0, m.at(Part.Content, Prop.X, 385), "X at 385")
+    }
+
+    @Test
+    fun theT2PivotsZoomInOnTheT2PivKeysAboutThePivotPoint() {
+        val m = released(MoveKind.T2, t2Ends.copy(pxU = 2f))
+        near(0.0, m.at(Part.Pivots, Prop.A, 232), "pivots A before 233")
+        near(0.10, m.at(Part.Pivots, Prop.A, 233), "pivots A at 233")
+        near(0.54, m.at(Part.Pivots, Prop.A, 300), "pivots A at 300")
+        near(1.0, m.at(Part.Pivots, Prop.A, 483), "pivots A at 483")
+        near(0.48, m.at(Part.Pivots, Prop.S, 233), "pivots S at 233")
+        near(0.754, m.at(Part.Pivots, Prop.S, 300), "pivots S at 300")
+        near(1.0, m.at(Part.Pivots, Prop.S, 450), "pivots S at 450")
+        near(-67.0, m.at(Part.Pivots, Prop.X, 233), "pivots X at 233")
+        near(-7.8, m.at(Part.Pivots, Prop.X, 300), "pivots X at 300")
+        near(0.0, m.at(Part.Pivots, Prop.X, 367), "pivots X at 367")
+        near(378.0, m.at(Part.Pivots, Prop.PX, 300), "pivots PX")
+        near(327.6, m.at(Part.Pivots, Prop.PY, 300), "pivots PY")
+        val step = PageMove().also { it.start(MoveKind.T2, 0, t2Ends, forms.copy(chromeSlide = false)) }
+        assertFalse(step.has(Part.Pivots, Prop.S))
+        near(0.0, step.at(Part.Pivots, Prop.A, 482), "stepped pivots before 483")
+        near(1.0, step.at(Part.Pivots, Prop.A, 483), "stepped pivots at 483")
+    }
+
+    @Test
+    fun theFaceGoesAt17OnT2AndComesBackFrom200OnT4h() {
+        val m = released(MoveKind.T2, t2Ends)
+        near(1.0, m.at(Part.Face, Prop.A, 0), "T2 face at 0")
+        near(1 - 8.0 / 17, m.at(Part.Face, Prop.A, 8), "T2 face at 8")
+        near(0.0, m.at(Part.Face, Prop.A, 17), "T2 face at 17")
+        val h = started(MoveKind.T4h, back)
+        near(0.0, h.at(Part.Face, Prop.A, 200), "T4h face at 200")
+        near(41.0 / 83, h.at(Part.Face, Prop.A, 241), "T4h face at 241")
+        near(1.0, h.at(Part.Face, Prop.A, 283), "T4h face at 283")
     }
 
     @Test
@@ -305,13 +356,13 @@ class PageMoveTest {
     }
 
     @Test
-    fun t4hHomeComesBackAtTheSwap() {
+    fun t4nHomeComesBackAtTheContentEnd() {
         val m = PageMove()
         m.start(MoveKind.T4n, 0, MoveEnds(sub = 0.6f, peek1 = 1f), forms)
-        assertEquals(300L, m.swapAt)
-        near(0.0, m.at(Part.Home, Prop.A, 300), "home at the swap")
-        near(17.0 / 33, m.at(Part.Home, Prop.A, 317), "home A")
-        near(0.6 * 17.0 / 33, m.at(Part.Sub, Prop.A, 317), "sub A")
+        assertEquals(167L, m.swapAt)
+        near(0.0, m.at(Part.Home, Prop.A, 167), "home at the swap")
+        near(17.0 / 133, m.at(Part.Home, Prop.A, 184), "home A")
+        near(0.6 * 17.0 / 133, m.at(Part.Sub, Prop.A, 184), "sub A")
     }
 
     private val leaving = MoveEnds(leaveRows = true, pxU = 3f)
@@ -415,25 +466,36 @@ class PageMoveTest {
         near(1.0, m.at(Part.Word, Prop.A, 613), "word before 614")
         near(0.0, m.at(Part.Word, Prop.A, 614), "word off at 614")
         near(1.0, m.at(Part.Header, Prop.A, 614), "header on at 614")
-        near(0.5, m.at(Part.Content, Prop.A, 625), "content A")
-        assertEquals(750L, m.endAt)
+        near(0.0, m.at(Part.Content, Prop.A, 634), "content before 634")
+        near(66.0 / 133, m.at(Part.Content, Prop.A, 700), "content A")
+        assertEquals(767L, m.endAt)
     }
 
     @Test
-    fun t4mShrinksTheWordAndBringsTheTileBack() {
+    fun t4mShrinksTheWordThenFadesTheContentInFromTheWordEnd() {
         val m = started(MoveKind.T4m, MoveEnds(word = true, wordS0 = 1f, wordS1 = 0.4f, tileBack = true, tileS0 = 1f, tileS1 = 0.2f))
         m.release(Part.Content, 0)
         near(1 - 0.6 * cubicOut(112.0 / 360), m.at(Part.Word, Prop.S, 100), "word S")
         near(0.0, m.at(Part.Word, Prop.A, 348), "word off at 348")
-        near(1 - 0.8 * cubicOut(0.5), m.at(Part.Tile, Prop.S, 75), "tile S")
-        near(67.0 / 265, m.at(Part.Content, Prop.A, 200), "content A")
+        assertFalse(m.has(Part.Tile, Prop.S))
+        near(0.0, m.at(Part.Content, Prop.A, 348), "content at the word end")
+        near(117.0 / 233, m.at(Part.Content, Prop.A, 465), "content A")
+        near(1.0, m.at(Part.Content, Prop.S, 200), "content S")
+        near(0.02, m.at(Part.Pivots, Prop.A, 317), "pivots A at 317")
+        near(0.79, m.at(Part.Pivots, Prop.A, 333), "pivots A at 333")
+        val col = started(MoveKind.T4m, MoveEnds(word = true, colBack = true))
+        col.release(Part.Content, 0)
+        near(0.0, col.at(Part.Content, Prop.A, 300), "column back content at 300")
+        near(83.0 / 167, col.at(Part.Content, Prop.A, 383), "column back content A")
     }
 
     @Test
     fun t3cFadesTheContentInFromTheWordScaleEnd() {
         val m = started(MoveKind.T3c, MoveEnds(word = true, wordS0 = 0.5f, wordS1 = 1f))
+        assertTrue(m.cut)
         m.release(Part.Content, 0)
-        near(0.5, m.at(Part.Content, Prop.A, 594), "content A")
+        near(0.0, m.at(Part.Content, Prop.A, 494), "content at the word scale end")
+        near(0.5, m.at(Part.Content, Prop.A, 544), "content A")
         near(1.0, m.at(Part.Header, Prop.A, 614), "header at the word end")
         assertEquals(167L, m.swapAt)
     }
@@ -441,9 +503,12 @@ class PageMoveTest {
     @Test
     fun t3aGrowsTheArtAndFadesTheContentIn() {
         val m = started(MoveKind.T3a, MoveEnds(word = true, tileS0 = 0.2f, tileS1 = 1f))
-        m.release(Part.Content, 0)
+        assertFalse(m.held(Part.Content))
         near(0.2 + 0.8 * cubicOut(144.0 / 595), m.at(Part.Tile, Prop.S, 100), "tile S")
-        near(0.5, m.at(Part.Content, Prop.A, 625), "content A")
+        near(0.0, m.at(Part.Content, Prop.A, 83), "content A at 83")
+        near(183.0 / 367, m.at(Part.Content, Prop.A, 266), "content A")
+        near(((0.2 + 0.8 * cubicOut(44.0 / 595)) / 2 - 0.5) * 0.85, m.at(Part.Content, Prop.Y, 0), "content Y rides the art")
+        near(0.0, m.at(Part.Content, Prop.Y, 450), "content Y lands at 450")
         near(1.0, m.at(Part.Header, Prop.A, 614), "header at the word end")
     }
 
@@ -451,20 +516,26 @@ class PageMoveTest {
     fun t4aWithTheColumnHeldHasNoSwap() {
         val m = started(MoveKind.T4a, MoveEnds(word = true, colHold = true, tileBack = true, tileS0 = 1f, tileS1 = 0.2f))
         assertEquals(0L, m.swapAt)
-        near(1.0, m.at(Part.Content, Prop.A, 0), "content shown")
-        near(0.0, m.at(Part.Header, Prop.A, 149), "header before the tile is back")
-        near(1.0, m.at(Part.Header, Prop.A, 150), "header with the tile back")
-        assertEquals(150L, m.endAt)
+        m.release(Part.Content, 0)
+        near(0.0, m.at(Part.Content, Prop.A, 267), "content before the cut")
+        near(0.5, m.at(Part.Content, Prop.A, 283), "content A at 283")
+        near(1.0, m.at(Part.Content, Prop.A, 300), "content A at 300")
+        near(1.0, m.at(Part.Header, Prop.A, 0), "header at once")
+        near(1 - 0.8 * cubicOut(0.3), m.at(Part.Tile, Prop.S, 75), "tile S")
+        assertEquals(300L, m.endAt)
     }
 
     private val back = MoveEnds(word = true, wordS0 = 1f, wordS1 = 119f / 450, wordX0 = 0f, wordX1 = 1f, wordY0 = 200f, wordY1 = 600f, sub = 0.6f, peek1 = 1f)
 
     @Test
     fun t4hWithAWordBringsTheLookAndTheSubtitleIn() {
-        val m = started(MoveKind.T4h, back)
-        near(1.0, m.at(Part.Word, Prop.A, 332), "word before 333")
-        near(0.0, m.at(Part.Word, Prop.A, 333), "word off at 333")
-        near(17.0 / 33, m.at(Part.Look, Prop.A, 317), "look A")
+        val m = started(MoveKind.T4h, back.copy(look = 0.4f))
+        near(1.0, m.at(Part.Word, Prop.A, 299), "word before 300")
+        near(0.0, m.at(Part.Word, Prop.A, 300), "word off at 300")
+        near(0.0, m.at(Part.Look, Prop.A, 299), "look before the swap")
+        near(0.4, m.at(Part.Look, Prop.A, 300), "look steps to the leaving look")
+        near(0.4 + 0.6 * 17.0 / 33, m.at(Part.Look, Prop.A, 317), "look A")
+        near(1.0, m.at(Part.Look, Prop.A, 333), "look A at the items end")
         near(0.6 * easeOut(110.0 / 220), m.at(Part.Sub, Prop.A, 436), "sub A")
     }
 
@@ -494,10 +565,10 @@ class PageMoveTest {
     }
 
     @Test
-    fun theWordGoesAt333AndTheWordEndIs300() {
+    fun theWordGoesAt300AndTheWordEndIs300() {
         val m = started(MoveKind.T4h, back)
-        near(1.0, m.at(Part.Word, Prop.A, 332), "word A at 332")
-        near(0.0, m.at(Part.Word, Prop.A, 333), "word A at 333")
+        near(1.0, m.at(Part.Word, Prop.A, 299), "word A at 299")
+        near(0.0, m.at(Part.Word, Prop.A, 300), "word A at 300")
         assertEquals(300, m.wordEnd)
     }
 
@@ -513,9 +584,9 @@ class PageMoveTest {
     }
 
     @Test
-    fun t4nEndsAt333AndT4hAt546() {
-        assertEquals(333L, started(MoveKind.T4n, MoveEnds(sub = 0.6f, peek1 = 1f)).endAt)
-        assertEquals(333L, started(MoveKind.T4n, MoveEnds(sub = 0.6f)).endAt)
+    fun t4nEndsAt300AndT4hAt546() {
+        assertEquals(300L, started(MoveKind.T4n, MoveEnds(sub = 0.6f, peek1 = 1f)).endAt)
+        assertEquals(300L, started(MoveKind.T4n, MoveEnds(sub = 0.6f)).endAt)
         assertEquals(546L, started(MoveKind.T4h, back).endAt)
     }
 
@@ -543,18 +614,152 @@ class PageMoveTest {
     }
 
     @Test
-    fun aRowMorphPushStepsTheLeavingHeaderOutWhenTheWordReachesTheBand() {
-        val m = started(MoveKind.T3, MoveEnds(morph = true, morphKind = MorphKind.Row, morphS0 = 0f, morphS1 = 1f, morphX0 = 0f, morphX1 = 1f, morphY0 = 100f, morphY1 = 0f, rowAscent = 0f, rowBand = 50f))
-        near(0.75, m.at(Part.Word, Prop.S, 75), "word S")
-        near(0.0, m.at(Part.Word, Prop.X, 138), "word X before its delay")
-        near(0.75, m.at(Part.Word, Prop.X, 304), "word X")
-        near(0.5, m.at(Part.LeaveWord, Prop.A, 235), "leave word A")
-        near(1.0, m.at(Part.Leave, Prop.A, 0), "leave held with the content")
+    fun aRowPushRunsTheRowWordKeysAndCutsTheLeavingPage() {
+        val m = started(MoveKind.T3, MoveEnds(morph = true, morphKind = MorphKind.Row, morphS0 = 0f, morphS1 = 1f, morphX0 = 0f, morphX1 = 1f, morphY0 = 100f, morphY1 = 0f))
+        assertTrue(m.cut)
+        assertEquals(434, m.wordEnd)
+        near(0.0, m.at(Part.Word, Prop.S, 0), "word S at 0")
+        near(0.235, m.at(Part.Word, Prop.S, 17), "word S at 17")
+        near(1.0, m.at(Part.Word, Prop.S, 434), "word S at 434")
+        near(0.75, m.at(Part.Word, Prop.X, 50), "word X")
+        near(100 - 53.6 * easeOut(0.5), m.at(Part.Word, Prop.Y, 50), "word Y drops to the row word mid")
+        near(46.4, m.at(Part.Word, Prop.Y, 100), "word Y at the mid")
+        near(46.4 * (1 - 0.542), m.at(Part.Word, Prop.Y, 200), "word Y on the base keys")
+        near(0.72, m.at(Part.Word, Prop.A, 0), "word A at 0")
+        near(1.0, m.at(Part.Word, Prop.A, 433), "word A before the end")
+        near(0.0, m.at(Part.Word, Prop.A, 434), "word A at the end")
+        near(0.0, m.at(Part.Leave, Prop.A, 0), "the leaving page cut while the content is held")
+        near(0.0, m.at(Part.Header, Prop.A, 433), "header before the word end")
+        near(1.0, m.at(Part.Header, Prop.A, 434), "header at the word end")
+        val l = started(MoveKind.T3, MoveEnds(morph = true, morphKind = MorphKind.Row, lhead = true, pxU = 2f, sw = 200f, lheadBase = 50f))
+        near(1.13, l.at(Part.LeaveWord, Prop.S, 33), "old header S")
+        near(-111.6, l.at(Part.LeaveWord, Prop.Y, 83), "old header rise")
+        near(1.0, l.at(Part.LeaveWord, Prop.A, 82), "old header before 83")
+        near(0.0, l.at(Part.LeaveWord, Prop.A, 83), "old header off at 83")
+        near(80.0, l.at(Part.LeaveWord, Prop.PX, 0), "old header pivot X")
+        near(50.0, l.at(Part.LeaveWord, Prop.PY, 0), "old header pivot Y")
+        near(0.0, l.at(Part.LeaveHeader, Prop.A, 0), "leave header off")
+    }
+
+    @Test
+    fun aPivotPushZoomsTheListAtTheTapAndBringsThePivotRowIn() {
+        val m = started(MoveKind.T3, MoveEnds(morph = true, morphKind = MorphKind.Pivot, morphS0 = 0.5f, morphS1 = 1f, tapX = 120f, tapY = 600f, sw = 720f, sh = 1280f))
+        assertFalse(m.cut)
+        assertEquals(438, m.wordEnd)
+        near(1.11, m.at(Part.Leave, Prop.S, 117), "leave S at 117")
+        near(0.65, m.at(Part.Leave, Prop.A, 83), "leave A at 83")
+        near(120.0, m.at(Part.Leave, Prop.PX, 0), "leave pivot X")
+        near(600.0, m.at(Part.Leave, Prop.PY, 0), "leave pivot Y")
+        near(0.5 + 0.5 * cubicOut(112.0 / 450), m.at(Part.Word, Prop.S, 100), "word S")
+        near(1.0, m.at(Part.Word, Prop.A, 437), "word A before 438")
+        near(0.0, m.at(Part.Word, Prop.A, 438), "word A at 438")
+        near(1.0, m.at(Part.Header, Prop.A, 438), "header at 438")
+        near(0.63, m.at(Part.Pivots, Prop.S, 267), "pivots S at 267")
+        near(0.0, m.at(Part.Pivots, Prop.A, 266), "pivots A before 267")
+        near(0.2, m.at(Part.Pivots, Prop.A, 267), "pivots A at 267")
+        near(1.0, m.at(Part.Pivots, Prop.A, 400), "pivots A at 400")
+        near(0.59 * 720, m.at(Part.Pivots, Prop.PX, 300), "pivots pivot X")
+        near(0.46 * 1280, m.at(Part.Pivots, Prop.PY, 300), "pivots pivot Y")
         m.release(Part.Content, 0)
-        near(1.0, m.at(Part.Leave, Prop.A, 16), "leave before the frame after the shown time")
-        near(0.0, m.at(Part.Leave, Prop.A, 17), "leave cut one frame after the shown time")
-        near(1.0, m.at(Part.LeaveHeader, Prop.A, 50), "leave header before")
-        near(0.0, m.at(Part.LeaveHeader, Prop.A, 51), "leave header at the band")
+        near(0.0, m.at(Part.Content, Prop.A, 399), "content before 400")
+        near(1.0, m.at(Part.Content, Prop.A, 400), "content at 400")
+    }
+
+    @Test
+    fun aRowPopShrinksTheLeavingRowsAndRunsTheRowWordToTheRow() {
+        val m = started(MoveKind.T4, MoveEnds(morph = true, morphKind = MorphKind.Row, morphS0 = 8f, morphS1 = 1f, morphX0 = 0f, morphX1 = 70f, morphY0 = 0f, morphY1 = 140f, leaveRows = true, pxU = 3f, sw = 720f, zoomBase = 154f))
+        assertEquals(316, m.wordEnd)
+        m.release(Part.Content, 0)
+        near(0.984, m.at(Part.Leave, Prop.S, 0), "leave S at 0")
+        near(0.883, m.at(Part.Leave, Prop.S, 117), "leave S at 117")
+        near(3.3 * 3, m.at(Part.Leave, Prop.X, 0), "leave X at 0")
+        near(13.9 * 3, m.at(Part.Leave, Prop.X, 100), "leave X at 100")
+        near(7.9 * 3, m.at(Part.Leave, Prop.Y, 0), "leave Y at 0")
+        near(47.6 * 3, m.at(Part.Leave, Prop.Y, 117), "leave Y at 117")
+        near(0.5, m.at(Part.Leave, Prop.A, 83), "leave A at 83")
+        near(8 - 1.7 * easeOut(33.0 / 67), m.at(Part.Word, Prop.S, 33), "word S eases to its first key")
+        near(6.3, m.at(Part.Word, Prop.S, 67), "word S at 67")
+        near(70 * 1.7 / 7, m.at(Part.Word, Prop.X, 67), "word X at 67")
+        near(140 * 1.7 / 7, m.at(Part.Word, Prop.Y, 67), "word Y at 67")
+        near(1.0, m.at(Part.Word, Prop.S, 300), "word S at 300")
+        near(70.0, m.at(Part.Word, Prop.X, 300), "word X at 300")
+        near(0.51, m.at(Part.Word, Prop.A, 0), "word A at 0")
+        near(0.25, m.at(Part.Word, Prop.A, 315), "word A before 316")
+        near(0.0, m.at(Part.Word, Prop.A, 316), "word A at 316")
+        near(1.115, m.at(Part.Zoom, Prop.S, 217), "zoom S at 217")
+        near(0.04, m.at(Part.Zoom, Prop.A, 217), "zoom A at 217")
+        near(0.36 * 720, m.at(Part.Zoom, Prop.PX, 217), "zoom pivot X")
+        near(154.0, m.at(Part.Zoom, Prop.PY, 217), "zoom pivot Y")
+        near(1.0, m.at(Part.Header, Prop.A, 283), "header at 283")
+        near(easeOut(83.0 / 167), m.at(Part.Content, Prop.A, 383), "content A")
+    }
+
+    @Test
+    fun aT3IntoTheQueueCutsTheLeavingPage() {
+        val m = started(MoveKind.T3, MoveEnds(npQueue = true))
+        assertTrue(m.cut)
+        assertTrue(m.held(Part.Content))
+        for (p in listOf(Part.Leave, Part.LeaveHeader, Part.LeavePivots)) {
+            assertEquals("$p A legs", 1, m.legsOf(p, Prop.A))
+            near(0.0, m.at(p, Prop.A, 0), "$p A at 0")
+            near(0.0, m.at(p, Prop.A, 50), "$p A at 50 while the content is held")
+        }
+        val plain = started(MoveKind.T3, MoveEnds())
+        assertFalse(plain.cut)
+        near(1 - 50.0 / 133, plain.at(Part.Leave, Prop.A, 50), "a plain T3 fades the leaving page")
+    }
+
+    @Test
+    fun onlyT3mAndT3aStartWithTheContentFree() {
+        for (k in listOf(MoveKind.T3, MoveKind.T4, MoveKind.T3c, MoveKind.T4m, MoveKind.T4a, MoveKind.T2, MoveKind.T3z, MoveKind.T4z)) {
+            assertTrue("$k holds", started(k, MoveEnds(word = true)).held(Part.Content))
+        }
+        for (k in listOf(MoveKind.T3m, MoveKind.T3a)) assertFalse("$k holds no content", started(k, MoveEnds(word = true)).held(Part.Content))
+    }
+
+    @Test
+    fun t3zZoomsTheArrivingPageInAndT4zFadesTheLeavingPageDown() {
+        val z = started(MoveKind.T3z, MoveEnds(sw = 720f, sh = 1280f))
+        assertEquals(167L, z.swapAt)
+        near(1.0, z.at(Part.Leave, Prop.A, 17), "leave held while the content is held")
+        z.release(arriveGroup, 0)
+        near(1.0, z.at(Part.Leave, Prop.A, 16), "leave before the cut")
+        near(0.0, z.at(Part.Leave, Prop.A, 17), "leave cut at 17")
+        near(0.45, z.at(Part.Content, Prop.S, 50), "content S at 50")
+        near(0.04, z.at(Part.Content, Prop.A, 33), "content A at 33")
+        near(0.69 * 720, z.at(Part.Content, Prop.PX, 100), "content pivot X at 100")
+        near(0.55 * 720, z.at(Part.Content, Prop.PX, 417), "content pivot X at 417")
+        near(0.84 * 1280, z.at(Part.Content, Prop.PY, 0), "content pivot Y")
+        near(0.0, z.at(Part.Header, Prop.A, 416), "header before 417")
+        near(1.0, z.at(Part.Header, Prop.A, 417), "header at 417")
+        near(1.0, z.at(Part.Pivots, Prop.A, 417), "pivots at 417")
+        val f = started(MoveKind.T4z, MoveEnds(pxU = 3f))
+        f.release(Part.Content, 0)
+        near(0.45, f.at(Part.Leave, Prop.A, 17), "leave A at 17")
+        near(13.2 * 3, f.at(Part.Leave, Prop.Y, 67), "leave drop")
+        near(0.37, f.at(Part.Header, Prop.A, 133), "header at 133")
+        near(1.0, f.at(Part.Header, Prop.A, 300), "header at 300")
+        near(0.5, f.at(Part.Content, Prop.A, 300), "content A at 300")
+    }
+
+    @Test
+    fun aPivotMovesThePartAboutANewPointKeepingItsPlace() {
+        val m = started(MoveKind.T3, MoveEnds())
+        val s = m.at(Part.Zoom, Prop.S, 200)
+        m.pivot(Part.Zoom, 40f, 20f, 200)
+        near(0.0, m.at(Part.Zoom, Prop.X, 199), "zoom X before the pivot")
+        near((1 - s) * -40.0, m.at(Part.Zoom, Prop.X, 200), "zoom X keeps its place")
+        near((1 - s) * -20.0, m.at(Part.Zoom, Prop.Y, 200), "zoom Y keeps its place")
+        near(0.0, m.at(Part.Zoom, Prop.PX, 199), "zoom pivot X before")
+        near(40.0, m.at(Part.Zoom, Prop.PX, 200), "zoom pivot X")
+        near(20.0, m.at(Part.Zoom, Prop.PY, 200), "zoom pivot Y")
+    }
+
+    @Test
+    fun thePopAnchorIsTheListTopForT4AndBelowTheScreenForTheHomePops() {
+        assertEquals(360, PageMove.popAnchor(MoveKind.T4, 360, 1280, 3f))
+        assertEquals(1280 + 164, PageMove.popAnchor(MoveKind.T4h, 360, 1280, 3f))
+        assertEquals(1280 + 164, PageMove.popAnchor(MoveKind.T4n, 360, 1280, 3f))
     }
 
     @Test
@@ -563,7 +768,8 @@ class PageMoveTest {
         m.release(Part.Content, 0)
         near(0.79 + 0.21 * powOut15(209.0 / 418), m.at(Part.Content, Prop.S, 209), "rows S")
         near(20.5 * (1 - powOut15(209.0 / 418)), m.at(Part.Content, Prop.X, 209), "rows X")
-        near(smoothStep(0.5), m.at(Part.Content, Prop.A, 67), "rows A")
+        near(0.0, m.at(Part.Content, Prop.A, 24), "rows A at the fade delay")
+        near(smoothStep(0.5), m.at(Part.Content, Prop.A, 166), "rows A")
     }
 
     @Test

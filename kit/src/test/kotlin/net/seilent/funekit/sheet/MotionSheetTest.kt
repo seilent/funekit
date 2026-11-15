@@ -118,7 +118,6 @@ class MotionSheetTest {
     private val headerBase = px(Tok.page_headerBaseline, s.stdPpu).toFloat()
 
     private val artists = KitPages.artists
-    private val artistsKnob = KitPages.artists.at(KNOB_ROW, -1)
     private val bt = KitPages.bt.at(-1, -1)
     private val songsRest = KitPages.songs.at(-1, -1)
     private val songsEnter = KitPages.songs.at(0, -1)
@@ -484,17 +483,11 @@ class MotionSheetTest {
 
     private fun cases(): List<Case> {
         val t2n = stack()
-        val t3 = stack(artistsKnob)
-        val t4 = stack(artistsKnob, bt)
         val t4h = stack(artists)
         val t4n = stack(bt)
         val t7 = stack(songsRest)
         return listOf(
-            moveCase("t2n", "home to the bluetooth page with no home word, as main.cpp t2n opens Bluetooth from the pull down; $T2_HYBRID", t2n) { t2n.push(bt, MoveKind.T2n) },
-            moveCase("t3", "the artists hub (focus on the first artist, one knob step from the # row) to the bluetooth page, the artists pivot morphing into the header", t3) { t3.push(bt, MoveKind.T3) },
-            moveCase("t4", "the bluetooth page back to the artists hub, the header morphing into the artists pivot; main.cpp t4 backs from the artist page of the first artist", t4, mapOf(100L to "t4-100", 200L to "t4-200", 400L to "t4-400"), listOf("leave." to T4_LEAVE, "morph.leave" to T4_LEAVE)) {
-                t4.pop(MoveKind.T4)
-            },
+            moveCase("t2n", "home to the bluetooth page with no home word, as main.cpp t2n opens Bluetooth from the pull down; $T2_ROWS", t2n) { t2n.push(bt, MoveKind.T2n) },
             moveCase("t4h", "the artists hub back to home, its header word into the music item", t4h) { t4h.pop(MoveKind.T4h) },
             moveCase("t4n", "the bluetooth page to home with no word", t4n) { t4n.pop(MoveKind.T4n) },
             t5Case("t5", "pivot switch from albums to artists with the # divider focused, as main.cpp t5 (the switch at 2800, Hub::switch_pivot showing the list thumb); the leaving rows stand in for the ALBUMS grid", artists, true, mapOf(100L to "t5-100", 250L to "t5-250", 450L to "t5-450", 700L to "t5-700", 1500L to "t5-1500")),
@@ -580,7 +573,6 @@ class MotionSheetTest {
         private const val FPS = 40
         private const val STEP = 1000L / FPS
         private const val HOME_FOCUS = 0
-        private const val KNOB_ROW = 1
         private const val CLOSE_AT = 600L
         private const val JUMP_LEAD = 17L
         private const val T13X = 80L
@@ -593,8 +585,7 @@ class MotionSheetTest {
         private const val WATERMARK = "fune"
         private const val POWER = "power"
         private val POWER_ITEMS = listOf("screen off", "power off")
-        private const val T2_HYBRID = "the rows zoom in as one layer as funeOS v0.4.2 draws them, at the step alpha of the seed set's A105 board (the bridge until the page move port)"
-        private const val T4_LEAVE = "funeOS t4 leaves the artist page of the first artist; the kit has no artist page, so this case leaves the bluetooth page"
+        private const val T2_ROWS = "the rows zoom in as one layer and fade in from 17 ms, as funeOS v0.4.2 draws them on every board"
         private const val T5_GRID = "funeOS t5 leaves the ALBUMS grid; the kit has no grid page, so the songs rows stand in"
         private const val MOVE_QUIET = "page moves and pivot switches draw funeOS content the kit has no page or part for (the ALBUMS grid, the artist page, the artist row thumb strips)"
         private const val OVERLAY_QUIET = "the page or home under the overlay shows funeOS fixture rows and home items the kit page does not draw"

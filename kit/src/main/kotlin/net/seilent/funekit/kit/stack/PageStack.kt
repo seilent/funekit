@@ -22,6 +22,7 @@ import net.seilent.funekit.kit.motion.Overlay
 import net.seilent.funekit.kit.motion.PageMove
 import net.seilent.funekit.kit.motion.Part
 import net.seilent.funekit.kit.motion.Prop
+import net.seilent.funekit.kit.motion.arriveGroup
 import net.seilent.funekit.kit.touch.Gesture
 
 enum class Phase { Rest, Exit, Enter }
@@ -62,6 +63,8 @@ class PageStack<P : Any>(
         private set
     var hideFocus by mutableStateOf(false)
         private set
+    var covered by mutableStateOf(false)
+        private set
     var snap by mutableIntStateOf(0)
         private set
     var entries = 0L
@@ -79,6 +82,8 @@ class PageStack<P : Any>(
     private val gone = mutableListOf<P>()
 
     val top: P? get() = pages.lastOrNull()
+
+    val focusShown: Boolean get() = !hideFocus && !covered
 
     private val under: P? get() = pages.getOrNull(pages.lastIndex - 1)
 
@@ -105,25 +110,25 @@ class PageStack<P : Any>(
 
     fun entry(): Long = entries++
 
-    fun open(o: Overlay, hides: Boolean = o.kind == OverKind.Dlg) = ask { now ->
+    fun open(o: Overlay, hides: Boolean = o.kind == OverKind.Dlg, covers: Boolean = o.kind == OverKind.Sheet || o.kind == OverKind.Dlg) = ask { now ->
         if (phase != Phase.Rest) land(now)
         landOverlay(now, show = false)
         if (overlay != null) return@ask
         o.open(now)
         overlay = o
         openSeq = ++seq
-        snapshot(hides)
+        snapshot(hides, covers)
     }
 
     fun close() = ask { now -> overlay?.let { closeOverlay(it, now) } }
 
     fun accept() = ask { now ->
         val o = overlay ?: return@ask
-        snapshot(false)
+        snapshot(false, true)
         closeOverlay(o, now)
     }
 
-    fun pick() = ask { if (overlay != null) snapshot(false) }
+    fun pick() = ask { if (overlay != null) snapshot(false, true) }
 
     fun swapMenu(only: Overlay? = null, swap: (Long) -> Unit) = ask { now ->
         val o = overlay
@@ -133,8 +138,9 @@ class PageStack<P : Any>(
         o.open(now)
     }
 
-    private fun snapshot(hide: Boolean) {
+    private fun snapshot(hide: Boolean, covers: Boolean) {
         hideFocus = hide
+        covered = covers
         snap++
     }
 
@@ -143,13 +149,14 @@ class PageStack<P : Any>(
         val was = o.closing
         o.close(now)
         if (!was) closing(o, now)
-        if (settled && o.kind == OverKind.Dlg) snapshot(false)
+        if (settled && o.kind == OverKind.Dlg) snapshot(false, false)
     }
 
     private fun dropOverlay(show: Boolean = true) {
         val was = overlay
         overlay = null
         hideFocus = false
+        covered = false
         if (show && was != null) top?.let { dropped(it, clock) }
     }
 
@@ -289,8 +296,7 @@ class PageStack<P : Any>(
     }
 
     private fun arrive(now: Long) {
-        move.release(Part.Content, now)
-        move.release(Part.Ground, now)
+        move.release(arriveGroup + Part.Ground, now)
     }
 
     private fun retarget(now: Long, popKind: (Turn<P>) -> MoveKind) {

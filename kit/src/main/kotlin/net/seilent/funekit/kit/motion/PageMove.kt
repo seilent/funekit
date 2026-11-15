@@ -1,33 +1,40 @@
 package net.seilent.funekit.kit.motion
 
+import net.seilent.funekit.gen.Keys
 import net.seilent.funekit.gen.Old
-import net.seilent.funekit.gen.OldBoard
 import net.seilent.funekit.gen.Moves
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.gen.TokBoard
+import net.seilent.funekit.px
 import kotlin.math.max
 import kotlin.math.min
 
-private const val TAIL = 17
 private const val SLIDE_OUT = 300
 private const val SLIDE_IN = 500
+private const val HALF = 2f
 
-enum class MoveKind { T2, T2n, T2w, T4h, T4n, T3, T4, T3m, T4m, T7, T8, T3c, T3a, T4a, None }
+enum class MoveKind { T2, T2n, T2w, T4h, T4n, T3, T4, T3m, T4m, T7, T8, T3c, T3a, T4a, T3z, T4z, None }
 
 enum class Part {
     Leave, LeaveHeader, LeavePivots, LeaveGround, LeaveWord, Content, Header, Zoom, Pivots, Ground, Word, Look, Home,
-    Sub, Peek, Tile, NpIn, NpOut, NpLeave, NpEdge, NpPeek, NpMusic, NpUnder, NpPhoto,
+    Sub, Peek, Tile, NpIn, NpOut, NpLeave, NpEdge, NpPeek, NpMusic, NpUnder, NpPhoto, Face, HomeTurn,
 }
 
-enum class Prop { A, S, X, Y, R }
+enum class Prop { A, S, X, Y, R, PX, PY }
 
 enum class ContentForm { Zoom, Step, Rest }
 
-enum class WordLeg { HomeOpen, HomeBack, Push, Pop, Grow, Shrink, Hold }
+enum class WordLeg { HomeOpen, HomeBack, Push, Pop, Grow, Shrink }
 
 enum class MorphKind { None, Pivot, Row }
 
 enum class NpForm { Page, Front, Ring }
+
+val leaveGroup: Set<Part> = setOf(Part.Leave, Part.LeaveHeader, Part.LeavePivots, Part.LeaveGround, Part.LeaveWord)
+
+val arriveGroup: Set<Part> = setOf(Part.Content, Part.Header, Part.Pivots)
+
+val wordGroup: Set<Part> = setOf(Part.Word, Part.LeaveWord)
 
 private fun ms(v: Float): Int = v.toInt()
 
@@ -37,6 +44,8 @@ private fun formOf(mode: String): ContentForm = when (mode) {
     else -> ContentForm.Zoom
 }
 
+private fun Keys.scaled(u: Float) = Keys(t, FloatArray(v.size) { v[it] * u })
+
 class MoveLeg(
     val part: Part,
     val prop: Prop,
@@ -44,7 +53,7 @@ class MoveLeg(
     val to: Float,
     var delay: Int,
     var dur: Int,
-    val curve: Curve = Curves.linear,
+    var curve: Curve = Curves.linear,
     val pin: Int = 0,
 ) {
     val end: Int get() = delay + dur
@@ -66,6 +75,7 @@ data class MoveForms(
     val wordMorph: Boolean = true,
     val hubRows: ContentForm = ContentForm.Zoom,
     val pageRows: ContentForm = ContentForm.Zoom,
+    val t2PivotY: Float = TokBoard.a105.motion_t2PivotY,
 ) {
     companion object {
         fun board(b: TokBoard.Board) = MoveForms(
@@ -75,20 +85,9 @@ data class MoveForms(
             headerZoom = Tok.motion_headerForm == "zoom",
             t3mFade = Tok.motion_t3mForm == "fade",
             wordMorph = Tok.motion_wordForm == "morph",
-            hubRows = formOf(
-                when (b) {
-                    TokBoard.r1 -> OldBoard.r1.motion_contentHubRows
-                    TokBoard.a105 -> OldBoard.a105.motion_contentHubRows
-                    else -> OldBoard.v1.motion_contentHubRows
-                },
-            ),
-            pageRows = formOf(
-                when (b) {
-                    TokBoard.r1 -> OldBoard.r1.motion_contentPageRows
-                    TokBoard.a105 -> OldBoard.a105.motion_contentPageRows
-                    else -> OldBoard.v1.motion_contentPageRows
-                },
-            ),
+            hubRows = formOf(Tok.motion_contentHubRows),
+            pageRows = formOf(Tok.motion_contentPageRows),
+            t2PivotY = b.motion_t2PivotY,
         )
     }
 }
@@ -111,6 +110,7 @@ data class MoveEnds(
     val peek0: Float = 0f,
     val peek1: Float = 0f,
     val sub: Float = 1f,
+    val look: Float = 1f,
     val morphS0: Float = 1f,
     val morphS1: Float = 1f,
     val morphX0: Float = 0f,
@@ -140,10 +140,24 @@ data class MoveEnds(
     val npLeft: Float = 0f,
     val npRight: Float = 0f,
     val npBack: Float = 0f,
+    val plug: Boolean = false,
+    val npQueue: Boolean = false,
     val colHold: Boolean = false,
     val tileBack: Boolean = false,
+    val colBack: Boolean = false,
+    val thumb: Boolean = false,
     val leaveRows: Boolean = false,
-    val pxU: Float = 0f,
+    val pxU: Float = 1f,
+    val homeU: Float = 1f,
+    val sw: Float = 0f,
+    val sh: Float = 0f,
+    val zoomX: Float = 0f,
+    val zoomY: Float = 0f,
+    val zoomBase: Float = 0f,
+    val lheadBase: Float = 0f,
+    val tapX: Float = 0f,
+    val tapY: Float = 0f,
+    val lhead: Boolean = false,
     val slideX: Float = 0f,
 )
 
@@ -154,6 +168,8 @@ fun npInk(form: NpForm, f: MoveForms): Int = when (form) {
 }
 
 class PageMove {
+    private class Off(val p: Part, val q: Prop, val at: Int, val d: Float)
+
     var kind = MoveKind.T3
         private set
     var t0 = 0L
@@ -164,6 +180,8 @@ class PageMove {
         private set
     var wordEnd = 0
         private set
+    var cut = false
+        private set
     val legs: List<MoveLeg> get() = list
 
     private var swap = 0
@@ -173,6 +191,7 @@ class PageMove {
     private var tied = mutableSetOf<Part>()
     private var morph = true
     private var list = mutableListOf<MoveLeg>()
+    private var offs = mutableListOf<Off>()
     private val base = Array(Part.entries.size) { FloatArray(Prop.entries.size) }
 
     val swapAt: Long get() = t0 + swap
@@ -194,6 +213,8 @@ class PageMove {
         return z
     }
 
+    fun legsOf(p: Part, q: Prop): Int = list.count { it.part == p && it.prop == q }
+
     fun span(p: Part, q: Prop): Pair<Float, Float>? {
         val f = leg(p, q) ?: return null
         val z = last(p, q) ?: return null
@@ -212,6 +233,10 @@ class PageMove {
         held += p
     }
 
+    fun hold(group: Set<Part>) {
+        held += group
+    }
+
     fun held(p: Part): Boolean = p in held
 
     private fun tie(p: Part) {
@@ -219,18 +244,21 @@ class PageMove {
     }
 
     private fun value(p: Part, q: Prop, at: Long): Float {
-        val f = leg(p, q) ?: return base[p.ordinal][q.ordinal]
+        val b = base[p.ordinal][q.ordinal]
+        var v = b
+        for (o in offs) if (o.p == p && o.q == q && at >= o.at) v += o.d
+        val f = leg(p, q) ?: return v
         var e = at
         if (held(p)) {
-            if (p != Part.Word && p != Part.LeaveWord) return base[p.ordinal][q.ordinal]
+            if (p !in wordGroup) return b
             e = min(e, f.delay - 1L)
-        } else if (p in tied && (held(Part.Word) || held(Part.LeaveWord))) {
+        } else if (p in tied && held.any { it in wordGroup }) {
             e = min(e, f.delay - 1L)
-        } else if (p == Part.Leave && held(Part.Content)) {
+        } else if (p == Part.Leave && held(Part.Content) && !cut) {
             val z = last(p, q) ?: f
-            e = min(e, if (z.dur > TAIL) z.end - TAIL.toLong() else z.delay - 1L)
+            e = min(e, if (z.dur > Moves.kTail) z.end - Moves.kTail.toLong() else z.delay - 1L)
         }
-        return (active(p, q, e) ?: f).at(e)
+        return v - b + (active(p, q, e) ?: f).at(e)
     }
 
     fun at(p: Part, q: Prop, t: Long): Float = value(p, q, t - t0)
@@ -255,6 +283,15 @@ class PageMove {
         list.removeAll { it.part == p && it.prop == q }
     }
 
+    fun clear(p: Part) {
+        list.removeAll { it.part == p }
+    }
+
+    fun land(p: Part) {
+        for (q in Prop.entries) last(p, q)?.let { base[p.ordinal][q.ordinal] = it.to }
+        clear(p)
+    }
+
     fun add(l: MoveLeg) {
         erase(l.part, l.prop)
         list += l
@@ -275,6 +312,25 @@ class PageMove {
         for (i in 0 until n - 1) append(MoveLeg(p, q, v[i], v[i + 1], delay + t[i], max(0, t[i + 1] - t[i]), c))
     }
 
+    private fun keys(p: Part, q: Prop, k: Keys, c: Curve = Curves.linear, delay: Int = 0) = keys(p, q, k.t, k.v, c, delay)
+
+    private fun stepKeys(p: Part, q: Prop, k: Keys, delay: Int = 0) {
+        step(p, q, 0f, k.v[0], delay + k.t[0])
+        for (i in 0 until k.t.size - 1) append(MoveLeg(p, q, k.v[i], k.v[i + 1], delay + k.t[i], k.t[i + 1] - k.t[i]))
+    }
+
+    fun pivot(p: Part, x: Float, y: Float, at: Int) {
+        val e = at.toLong()
+        val s = value(p, Prop.S, e)
+        val px0 = value(p, Prop.PX, e)
+        val py0 = value(p, Prop.PY, e)
+        offs += Off(p, Prop.X, at, (1 - s) * (px0 - x))
+        offs += Off(p, Prop.Y, at, (1 - s) * (py0 - y))
+        append(MoveLeg(p, Prop.PX, px0, x, at, 0))
+        append(MoveLeg(p, Prop.PY, py0, y, at, 0))
+        finish()
+    }
+
     private fun ramp(p: Part, q: Prop, from: Float, to: Float, delay: Int, dur: Int, c: Curve) =
         add(MoveLeg(p, q, from, to, delay, max(dur, 0), c))
 
@@ -287,26 +343,31 @@ class PageMove {
         if (endAtMs > 0) end = max(swap, endAtMs)
     }
 
-    private fun box(p: Part, s0: Float, s1: Float, x0: Float, x1: Float, y0: Float, y1: Float, d: Int, sd: Int, sl: Int, xd: Int, xl: Int, yd: Int, yl: Int, sc: Curve, xc: Curve, yc: Curve) {
-        if (!morph) return
-        ramp(p, Prop.S, s0, s1, d + sd, sl, sc)
-        ramp(p, Prop.X, x0, x1, d + xd, xl, xc)
-        ramp(p, Prop.Y, y0, y1, d + yd, yl, yc)
-    }
-
     fun wordLegs(k: WordLeg, e: MoveEnds, delay: Int = 0): Int {
-        fun pair(sd: Int, sl: Int, xd: Int, xl: Int, yd: Int, yl: Int, sc: Curve, xc: Curve, yc: Curve, ad: Int, al: Int): Int {
-            for (p in listOf(Part.LeaveWord, Part.Word)) {
-                box(p, e.morphS0, e.morphS1, e.morphX0, e.morphX1, e.morphY0, e.morphY1, delay, sd, sl, xd, xl, yd, yl, sc, xc, yc)
-            }
-            ramp(Part.LeaveWord, Prop.A, 1f, 0f, delay + ad, al, Curves.linear)
-            ramp(Part.Word, Prop.A, 0f, 1f, delay + ad, al, Curves.linear)
-            return delay + maxOf(sd + sl, xd + xl, yd + yl, ad + al)
+        fun box(p: Part, s0: Float, s1: Float, x0: Float, x1: Float, y0: Float, y1: Float, sd: Int, sl: Int, xd: Int, xl: Int, yd: Int, yl: Int, sc: Curve, xc: Curve, yc: Curve) {
+            if (!morph) return
+            ramp(p, Prop.S, s0, s1, delay + sd, sl, sc)
+            ramp(p, Prop.X, x0, x1, delay + xd, xl, xc)
+            ramp(p, Prop.Y, y0, y1, delay + yd, yl, yc)
         }
 
         fun word(sd: Int, sl: Int, xd: Int, xl: Int, yd: Int, yl: Int, sc: Curve, xc: Curve, yc: Curve, out: Int) {
-            box(Part.Word, e.wordS0, e.wordS1, e.wordX0, e.wordX1, e.wordY0, e.wordY1, delay, sd, sl, xd, xl, yd, yl, sc, xc, yc)
+            box(Part.Word, e.wordS0, e.wordS1, e.wordX0, e.wordX1, e.wordY0, e.wordY1, sd, sl, xd, xl, yd, yl, sc, xc, yc)
             step(Part.Word, Prop.A, 1f, 0f, delay + out)
+        }
+
+        fun chain(q: Prop, v0: Float, v1: Float, k: Keys, progress: Boolean, from: Int) {
+            val t = ArrayList<Int>()
+            val v = ArrayList<Float>()
+            if (from >= 0) {
+                t += from
+                v += v0
+            }
+            for (i in k.t.indices) {
+                t += k.t[i]
+                v += if (progress) lerp(v0, v1, k.v[i]) else k.v[i]
+            }
+            keys(Part.Word, q, t.toIntArray(), v.toFloatArray(), Curves.linear, delay)
         }
         val t4md = ms(Tok.motion_t4mDelay)
         return when (k) {
@@ -316,11 +377,10 @@ class PageMove {
                 val bl = ms(Tok.motion_t2Base)
                 val out = max(wl, bd + bl)
                 if (morph) {
-                    val sk = Moves.kT2Scale
-                    keys(Part.Word, Prop.S, intArrayOf(0) + sk.t, floatArrayOf(e.wordS0) + sk.v, Curves.linear, delay)
+                    chain(Prop.S, e.wordS0, e.wordS1, Moves.kT2Scale, false, 0)
                     ramp(Part.Word, Prop.X, e.wordX0, e.wordX1, delay + bd, bl, Curves.easeOut)
-                    val yk = Moves.kT2Base
-                    keys(Part.Word, Prop.Y, yk.t, FloatArray(yk.v.size) { lerp(e.wordY0, e.wordY1, yk.v[it]) }, Curves.linear, delay)
+                    chain(Prop.Y, e.wordY0, e.wordY1, Moves.kT2Base, true, -1)
+                    keys(Part.Face, Prop.A, Moves.kT2Face, Curves.linear, delay)
                 }
                 step(Part.Word, Prop.A, 1f, 0f, delay + out)
                 delay + out
@@ -331,28 +391,68 @@ class PageMove {
                     val sk = Moves.kT4hScale
                     keys(Part.Word, Prop.S, intArrayOf(0) + sk.t + Moves.kT4hScaleEnd, floatArrayOf(e.wordS0) + sk.v + e.wordS1, Curves.linear, delay)
                     ramp(Part.Word, Prop.X, e.wordX0, e.wordX1, delay, bl, Curves.powOut15)
-                    val yk = Moves.kT4hBase
-                    keys(Part.Word, Prop.Y, yk.t, FloatArray(yk.v.size) { lerp(e.wordY0, e.wordY1, yk.v[it]) }, Curves.linear, delay)
+                    chain(Prop.Y, e.wordY0, e.wordY1, Moves.kT4hBase, true, -1)
+                    keys(Part.Face, Prop.A, Moves.kT4hFace, Curves.linear, delay)
                 }
-                step(Part.Word, Prop.A, 1f, 0f, delay + ms(Tok.motion_t4hSwap) + ms(Tok.motion_t4hItems))
+                step(Part.Word, Prop.A, 1f, 0f, delay + ms(Tok.motion_t4hSwap))
                 delay + max(Moves.kT4hScaleEnd, bl)
             }
             WordLeg.Push -> if (e.morphKind == MorphKind.Row) {
-                val sl = ms(Old.motion_morphScale)
-                val pd = ms(Old.motion_morphRowPenDelay)
-                val pl = ms(Old.motion_morphRowPen)
-                pair(0, sl, pd, pl, 0, sl, Curves.easeOut, Curves.easeOut, Curves.easeOut, 0, pd + pl)
+                if (morph) {
+                    chain(Prop.S, e.morphS0, e.morphS1, Moves.kT3RowScale, false, 0)
+                    ramp(Part.Word, Prop.X, e.morphX0, e.morphX1, delay, Moves.kT3RowWordIn, Curves.easeOut)
+                    val mid = e.morphY1 + Moves.kT3RowWordDrop * e.pxU
+                    ramp(Part.Word, Prop.Y, e.morphY0, mid, delay, Moves.kT3RowWordIn, Curves.easeOut)
+                    val b = Moves.kT3RowBase
+                    for (i in 0 until b.t.size - 1) {
+                        append(MoveLeg(Part.Word, Prop.Y, lerp(mid, e.morphY1, b.v[i]), lerp(mid, e.morphY1, b.v[i + 1]), delay + b.t[i], b.t[i + 1] - b.t[i]))
+                    }
+                }
+                keys(Part.Word, Prop.A, Moves.kT3RowWordA, Curves.linear, delay)
+                append(MoveLeg(Part.Word, Prop.A, 1f, 0f, delay + Moves.kT3RowWordEnd, 0))
+                delay + Moves.kT3RowWordEnd
             } else {
                 val l = ms(Tok.motion_morphPush)
-                pair(t4md, l, t4md, l, t4md, l, Curves.cubicOut, Curves.cubicOut, Curves.cubicOut, t4md, l)
+                box(Part.Word, e.morphS0, e.morphS1, e.morphX0, e.morphX1, e.morphY0, e.morphY1, t4md, l, t4md, l, t4md, l, Curves.cubicOut, Curves.cubicOut, Curves.cubicOut)
+                step(Part.Word, Prop.A, 1f, 0f, delay + t4md + l)
+                delay + t4md + l
             }
             WordLeg.Pop -> if (e.morphKind == MorphKind.Row) {
-                val out = ms(Old.motion_morphRowPop)
-                val sd = if (e.retarget) 0 else ms(Old.motion_morphRowPopDelay)
-                pair(sd, out - sd, 0, out, 0, out, Curves.powOut15, Curves.powOut15, Curves.powOut15, 0, out)
+                if (morph) {
+                    val s0 = e.morphS0
+                    val s1 = e.morphS1
+                    val ds = s0 - s1
+                    val w = Moves.kT4RowWord
+                    val n = w.t.size + 1
+                    val t = IntArray(n)
+                    val ss = FloatArray(n)
+                    val xs = FloatArray(n)
+                    val ys = FloatArray(n)
+                    ss[0] = s0
+                    xs[0] = e.morphX0
+                    ys[0] = e.morphY0
+                    for (i in w.t.indices) {
+                        val s = w.v[i] * s1
+                        val p = if (ds != 0f) ((s0 - s) / ds).coerceIn(0f, 1f) else 1f
+                        t[i + 1] = w.t[i]
+                        ss[i + 1] = s
+                        xs[i + 1] = lerp(e.morphX0, e.morphX1, p)
+                        ys[i + 1] = lerp(e.morphY0, e.morphY1, p)
+                    }
+                    keys(Part.Word, Prop.S, t, ss, Curves.linear, delay)
+                    keys(Part.Word, Prop.X, t, xs, Curves.linear, delay)
+                    keys(Part.Word, Prop.Y, t, ys, Curves.linear, delay)
+                    for (l in list) if (l.part == Part.Word && l.delay == delay && l.prop != Prop.A) l.curve = Curves.easeOut
+                }
+                val a = Moves.kT4RowWordA
+                keys(Part.Word, Prop.A, a, Curves.linear, delay)
+                append(MoveLeg(Part.Word, Prop.A, a.v.last(), 0f, delay + Moves.kT4RowWordOut, 0))
+                delay + Moves.kT4RowWordOut
             } else {
                 val l = ms(Tok.motion_morphPop)
-                pair(t4md, l, t4md, l, t4md, l, Curves.cubicOut, Curves.cubicOut, Curves.cubicOut, t4md, l)
+                box(Part.Word, e.morphS0, e.morphS1, e.morphX0, e.morphX1, e.morphY0, e.morphY1, t4md, l, t4md, l, t4md, l, Curves.cubicOut, Curves.cubicOut, Curves.cubicOut)
+                keys(Part.Word, Prop.A, Moves.kT4PivWordA, Curves.linear, delay)
+                delay + Moves.kT4PivWordOut
             }
             WordLeg.Grow -> {
                 val ld = ms(Tok.motion_t3mLabelDelay)
@@ -368,37 +468,28 @@ class PageMove {
                 word(t4md, l, t4md, l, t4md, l, Curves.cubicOut, Curves.cubicOut, Curves.cubicOut, t4md + l)
                 delay + t4md + l
             }
-            WordLeg.Hold -> {
-                set(Part.Word, Prop.S, e.wordS0)
-                set(Part.Word, Prop.X, e.wordX0)
-                set(Part.Word, Prop.Y, e.wordY0)
-                set(Part.Word, Prop.A, 1f)
-                var out = max(end, swap)
-                for (l in list) out = max(out, l.end)
-                out
-            }
         }
     }
 
     private fun rowsIn(e: MoveEnds, f: MoveForms) {
         val t2 = kind == MoveKind.T2 || kind == MoveKind.T2n
-        list.removeAll { it.part == Part.Content }
+        clear(Part.Content)
         set(Part.Content, Prop.S, 1f)
         if (f.content == ContentForm.Rest) {
             step(Part.Content, Prop.A, 0f, 1f, 0)
             step(Part.Leave, Prop.A, 1f, 0f, 0)
         } else {
-            val rl = ms(Tok.motion_rows)
+            val rl = ms(if (t2) Tok.motion_rowsT2 else Tok.motion_rows)
             ramp(Part.Content, Prop.S, Tok.motion_rowsDy, 1f, 0, rl, Curves.powOut15)
             ramp(Part.Content, Prop.X, e.rowsDx, 0f, 0, rl, Curves.powOut15)
             when {
                 f.content == ContentForm.Step -> step(Part.Content, Prop.A, 0f, 1f, 0)
                 t2 -> {
-                    val ink = Moves.kT2RowsInk
+                    val ink = if (e.plug) Moves.kT2nPlugInk else Moves.kT2RowsInk
                     step(Part.Content, Prop.A, 0f, Tok.motion_rowsT2Alpha, ink)
-                    append(MoveLeg(Part.Content, Prop.A, Tok.motion_rowsT2Alpha, 1f, ink, ms(Tok.motion_rowsT2Fade), Curves.linear))
+                    append(MoveLeg(Part.Content, Prop.A, Tok.motion_rowsT2Alpha, 1f, ink, ms(Tok.motion_rowsT2Fade)))
                 }
-                else -> ramp(Part.Content, Prop.A, 0f, 1f, 0, ms(Old.motion_rowsFade), Curves.smoothStep)
+                else -> ramp(Part.Content, Prop.A, 0f, 1f, ms(Tok.motion_rowsT3FadeDelay), ms(Tok.motion_rowsT3Fade), Curves.smoothStep)
             }
         }
         if (t2) {
@@ -414,7 +505,16 @@ class PageMove {
         val from = ms(Tok.motion_leave)
         val word = if (wordEnd > 0) wordEnd else ms(Tok.motion_headerDelay) + ms(Tok.motion_header)
         val out = max(word + after, from + after)
-        list.removeAll { it.part == Part.Content }
+        clear(Part.Content)
+        if (kind == MoveKind.T4m || kind == MoveKind.T4a) {
+            set(Part.Content, Prop.S, 1f)
+            when {
+                e.colBack -> ramp(Part.Content, Prop.A, 0f, 1f, ms(Tok.motion_t3cBackDelay), ms(Tok.motion_t3cBack), Curves.linear)
+                f.content == ContentForm.Rest || f.content == ContentForm.Step -> step(Part.Content, Prop.A, 0f, 1f, word)
+                else -> ramp(Part.Content, Prop.A, 0f, 1f, word, ms(Tok.motion_t4mFade), Curves.linear)
+            }
+            return
+        }
         if (f.content == ContentForm.Zoom) {
             add(MoveLeg(Part.Content, Prop.A, 0f, 1f, from, out - from, Curves.linear, after))
         } else {
@@ -424,18 +524,6 @@ class PageMove {
             add(MoveLeg(Part.Content, Prop.S, Tok.motion_contentScale, 1f, from, out - from, Curves.easeOut, after))
         } else {
             set(Part.Content, Prop.S, 1f)
-        }
-    }
-
-    private fun pivotsIn(e: MoveEnds, f: MoveForms, pd: Int) {
-        val pl = ms(Tok.motion_pivotIn)
-        val pf = ms(Tok.motion_pivotFade)
-        if (f.chromeSlide) {
-            ramp(Part.Pivots, Prop.X, e.pivotX, 0f, pd, pl, Curves.easeOut)
-            ramp(Part.Pivots, Prop.Y, e.pivotY, 0f, pd, pl, Curves.easeOut)
-            ramp(Part.Pivots, Prop.A, 0f, 1f, pd, pf, Curves.linear)
-        } else {
-            step(Part.Pivots, Prop.A, 0f, 1f, pd + pl)
         }
     }
 
@@ -451,7 +539,22 @@ class PageMove {
                 step(Part.Header, Prop.A, 0f, 1f, hd + hl)
             }
         }
-        if (e.pivots) pivotsIn(e, f, ms(Tok.motion_pivotDelay))
+        set(Part.Zoom, Prop.PX, e.zoomX)
+        set(Part.Zoom, Prop.PY, e.zoomY)
+        if (e.pivots) {
+            val pd = ms(Tok.motion_pivotDelay)
+            val pl = ms(Tok.motion_pivotIn)
+            val pf = ms(Tok.motion_pivotFade)
+            when {
+                kind == MoveKind.T4m -> keys(Part.Pivots, Prop.A, Moves.kT4PivPivots)
+                f.chromeSlide -> {
+                    ramp(Part.Pivots, Prop.X, e.pivotX, 0f, pd, pl, Curves.easeOut)
+                    ramp(Part.Pivots, Prop.Y, e.pivotY, 0f, pd, pl, Curves.easeOut)
+                    ramp(Part.Pivots, Prop.A, 0f, 1f, pd, pf, Curves.linear)
+                }
+                else -> step(Part.Pivots, Prop.A, 0f, 1f, pd + pl)
+            }
+        }
         if (e.grounds) ramp(Part.Ground, Prop.A, 0f, 1f, ms(Tok.motion_groundDelay), ms(Tok.motion_ground), Curves.linear)
         if (kind == MoveKind.T4 || kind == MoveKind.T4m || kind == MoveKind.T4a) {
             popIn(e, f)
@@ -469,15 +572,22 @@ class PageMove {
         if (e.rows) rowsIn(e, f)
     }
 
-    private fun tileLegs(e: MoveEnds, d: Int, l: Int) {
-        ramp(Part.Tile, Prop.S, e.tileS0, e.tileS1, d, l, Curves.cubicOut)
-        ramp(Part.Tile, Prop.X, e.tileX0, e.tileX1, d, l, Curves.cubicOut)
-        ramp(Part.Tile, Prop.Y, e.tileY0, e.tileY1, d, l, Curves.cubicOut)
+    private fun tileBack(e: MoveEnds) {
+        if (!e.tileBack) return
+        val l = ms(Tok.motion_tileBack)
+        ramp(Part.Tile, Prop.S, e.tileS0, e.tileS1, 0, l, Curves.cubicOut)
+        ramp(Part.Tile, Prop.X, e.tileX0, e.tileX1, 0, l, Curves.cubicOut)
+        ramp(Part.Tile, Prop.Y, e.tileY0, e.tileY1, 0, l, Curves.cubicOut)
         set(Part.Tile, Prop.A, 1f)
     }
 
-    private fun tileBack(e: MoveEnds) {
-        if (e.tileBack) tileLegs(e, 0, ms(Old.motion_tileBack))
+    private fun tileIn(e: MoveEnds) {
+        val td = ms(Tok.motion_t3mTileDelay)
+        val tl = ms(Tok.motion_t3mTile)
+        ramp(Part.Tile, Prop.S, e.tileS0, e.tileS1, td, tl, Curves.cubicOut)
+        ramp(Part.Tile, Prop.X, e.tileX0, e.tileX1, td, tl, Curves.cubicOut)
+        ramp(Part.Tile, Prop.Y, e.tileY0, e.tileY1, td, tl, Curves.cubicOut)
+        set(Part.Tile, Prop.A, 1f)
     }
 
     private fun grounds(e: MoveEnds) {
@@ -490,14 +600,34 @@ class PageMove {
         }
     }
 
-    private fun fadeOrStep(p: Part, delay: Int, dur: Int, fade: Boolean) {
-        if (fade) ramp(p, Prop.A, 1f, 0f, delay, dur, Curves.linear) else step(p, Prop.A, 1f, 0f, delay)
+    private fun fadeOrStep(p: Part, dur: Int, fade: Boolean) {
+        if (fade) ramp(p, Prop.A, 1f, 0f, 0, dur, Curves.linear) else step(p, Prop.A, 1f, 0f, 0)
+    }
+
+    private fun leavePage(e: MoveEnds, f: MoveForms, dur: Int, header: Boolean) {
+        fadeOrStep(Part.Leave, dur, f.leaveFade)
+        if (header) fadeOrStep(Part.LeaveHeader, dur, f.leaveFade)
+        if (e.grounds) ramp(Part.LeaveGround, Prop.A, 1f, 0f, 0, if (f.leaveFade) dur else 0, Curves.linear) else set(Part.LeaveGround, Prop.A, 1f)
+    }
+
+    private fun leaveGround(e: MoveEnds, f: MoveForms) {
+        if (e.grounds) ramp(Part.LeaveGround, Prop.A, 1f, 0f, 0, if (f.leaveFade) ms(Tok.motion_leave) else 0, Curves.linear) else set(Part.LeaveGround, Prop.A, 1f)
+    }
+
+    private fun popGrounds(e: MoveEnds) {
+        if (e.grounds) {
+            ramp(Part.LeaveGround, Prop.A, 1f, 0f, 0, ms(Tok.motion_ground), Curves.linear)
+            ramp(Part.Ground, Prop.A, 0f, 1f, ms(Tok.motion_groundDelay), ms(Tok.motion_ground), Curves.linear)
+        } else {
+            set(Part.LeaveGround, Prop.A, 1f)
+        }
     }
 
     private fun colLegs(e: MoveEnds, f: MoveForms) {
         swap = ms(Tok.motion_swap)
+        cut = true
         step(Part.Leave, Prop.A, 1f, 0f, 0)
-        fadeOrStep(Part.LeaveHeader, 0, ms(Tok.motion_leave), f.leaveFade)
+        fadeOrStep(Part.LeaveHeader, ms(Tok.motion_leave), f.leaveFade)
         step(Part.LeavePivots, Prop.A, 1f, 0f, 0)
         grounds(e)
         var we = max(ms(Tok.motion_t3mLabelDelay) + ms(Tok.motion_t3mLabel), ms(Tok.motion_t3mBaseDelay) + ms(Tok.motion_t3mBase))
@@ -507,9 +637,9 @@ class PageMove {
         }
         step(Part.Header, Prop.A, 0f, 1f, we)
         tie(Part.Header)
-        val s = leg(Part.Word, Prop.S)
+        val s = last(Part.Word, Prop.S)
         val from = s?.end ?: (ms(Tok.motion_t3mLabelDelay) + ms(Tok.motion_t3mLabel))
-        if (f.t3mFade) ramp(Part.Content, Prop.A, 0f, 1f, from, ms(Old.motion_t3cFade), Curves.linear) else step(Part.Content, Prop.A, 0f, 1f, from)
+        if (f.t3mFade) ramp(Part.Content, Prop.A, 0f, 1f, from, ms(Tok.motion_t3cFade), Curves.linear) else step(Part.Content, Prop.A, 0f, 1f, from)
         set(Part.Content, Prop.S, 1f)
     }
 
@@ -519,39 +649,349 @@ class PageMove {
         step(Part.LeaveHeader, Prop.A, 1f, 0f, 0)
         step(Part.LeavePivots, Prop.A, 1f, 0f, 0)
         grounds(e)
-        tileLegs(e, ms(Tok.motion_t3mTileDelay), ms(Tok.motion_t3mTile))
-        val fd = ms(Old.motion_t3aFadeDelay)
-        val fl = ms(Old.motion_t3aFade)
-        if (f.t3mFade) ramp(Part.Content, Prop.A, 0f, 1f, fd, fl, Curves.linear) else step(Part.Content, Prop.A, 0f, 1f, fd)
+        tileIn(e)
+        if (f.t3mFade) {
+            ramp(Part.Content, Prop.A, 0f, 1f, Moves.kT3aIn, Moves.kT3aLand - Moves.kT3aIn, Curves.linear)
+        } else {
+            step(Part.Content, Prop.A, 0f, 1f, Moves.kT3aIn)
+        }
         set(Part.Content, Prop.S, 1f)
-        var we = fd + fl
+        val rest = e.tileY1 + e.tileS1 / HALF
+        val t = ArrayList<Int>()
+        val v = ArrayList<Float>()
+        var at = 0
+        while (at < Moves.kT3aLand) {
+            val bottom = value(Part.Tile, Prop.Y, at.toLong()) + value(Part.Tile, Prop.S, at.toLong()) / HALF
+            t += at
+            v += (bottom - rest) * Moves.kT3aRide
+            at += Moves.kTail
+        }
+        t += Moves.kT3aLand
+        v += 0f
+        keys(Part.Content, Prop.Y, t.toIntArray(), v.toFloatArray(), Curves.linear, 0)
+        if (e.colHold) {
+            step(Part.Header, Prop.A, 0f, 1f, 0)
+            return
+        }
+        var we = Moves.kT3aLand
         if (e.word) {
-            wordEnd = wordLegs(if (e.colHold) WordLeg.Hold else WordLeg.Grow, e)
+            wordEnd = wordLegs(WordLeg.Grow, e)
             we = wordEnd
         }
         step(Part.Header, Prop.A, 0f, 1f, we)
         tie(Part.Header)
     }
 
+    private fun zoomLegs(e: MoveEnds, s: Keys?, a: Keys, px: Float, header: Int) {
+        if (s != null) keys(Part.Zoom, Prop.S, s) else erase(Part.Zoom, Prop.S)
+        stepKeys(Part.Zoom, Prop.A, a)
+        set(Part.Zoom, Prop.PX, px * e.sw)
+        set(Part.Zoom, Prop.PY, e.zoomBase)
+        step(Part.Header, Prop.A, 0f, 1f, header)
+    }
+
     private fun artBackLegs(e: MoveEnds, f: MoveForms) {
-        fadeOrStep(Part.Leave, 0, ms(Tok.motion_leave), f.leaveFade)
-        step(Part.LeaveHeader, Prop.A, 1f, 0f, 0)
+        val fade = ms(Tok.motion_t4aFade)
+        fadeOrStep(Part.Leave, fade, f.leaveFade)
+        fadeOrStep(Part.LeaveHeader, fade, f.leaveFade)
         set(Part.LeaveGround, Prop.A, 1f)
         tileBack(e)
         if (e.colHold) {
             swap = 0
-            set(Part.Content, Prop.A, 1f)
+            keys(Part.Content, Prop.A, Moves.kT4aCut)
             set(Part.Content, Prop.S, 1f)
             set(Part.Pivots, Prop.A, 1f)
             set(Part.Ground, Prop.A, 1f)
-            if (e.word) wordEnd = wordLegs(WordLeg.Hold, e)
-            step(Part.Header, Prop.A, 0f, 1f, wordEnd)
-            tie(Part.Header)
+            step(Part.LeaveHeader, Prop.A, 1f, 0f, 0)
+            step(Part.Header, Prop.A, 0f, 1f, 0)
             return
         }
         swap = ms(Tok.motion_swap)
         if (e.word) wordEnd = wordLegs(WordLeg.Shrink, e)
         pageIn(e, f)
+    }
+
+    private fun pageZoom(e: MoveEnds) {
+        swap = ms(Tok.motion_swap)
+        for (p in listOf(Part.Leave, Part.LeaveHeader, Part.LeavePivots)) step(p, Prop.A, 1f, 0f, Moves.kT3zCut)
+        set(Part.LeaveGround, Prop.A, 1f)
+        keys(Part.Content, Prop.S, Moves.kT3zScale)
+        stepKeys(Part.Content, Prop.A, Moves.kT3zA)
+        keys(Part.Content, Prop.PX, Moves.kT3zX.scaled(e.sw))
+        set(Part.Content, Prop.PY, Moves.kT3zY * e.sh)
+        step(Part.Header, Prop.A, 0f, 1f, Moves.kT3zLand)
+        step(Part.Pivots, Prop.A, 0f, 1f, Moves.kT3zLand)
+        hold(Part.Header)
+        hold(Part.Pivots)
+        if (e.grounds) ramp(Part.Ground, Prop.A, 0f, 1f, ms(Tok.motion_groundDelay), ms(Tok.motion_ground), Curves.linear)
+    }
+
+    private fun pageFade(e: MoveEnds) {
+        swap = ms(Tok.motion_swap)
+        for (p in listOf(Part.Leave, Part.LeaveHeader, Part.LeavePivots)) keys(p, Prop.A, Moves.kT4zA)
+        ramp(Part.Leave, Prop.Y, 0f, Moves.kT4zDrop * e.pxU, 0, Moves.kT4zDropLen, Curves.linear)
+        set(Part.LeaveGround, Prop.A, 1f)
+        for (p in listOf(Part.Header, Part.Pivots)) {
+            step(p, Prop.A, 0f, Moves.kT4zHeader0, Moves.kT4zHeader)
+            append(MoveLeg(p, Prop.A, Moves.kT4zHeader0, 1f, Moves.kT4zHeader, Moves.kT4zHeaderLand - Moves.kT4zHeader))
+        }
+        keys(Part.Content, Prop.A, Moves.kT4zCut)
+        set(Part.Content, Prop.S, 1f)
+        if (e.grounds) ramp(Part.Ground, Prop.A, 0f, 1f, ms(Tok.motion_groundDelay), ms(Tok.motion_ground), Curves.linear)
+    }
+
+    private fun rowsOut(e: MoveEnds, home: Boolean) {
+        if (!e.leaveRows) return
+        if (home) {
+            keys(Part.Leave, Prop.S, Moves.kT4hPitch)
+            keys(Part.Leave, Prop.X, Moves.kT4hDx.scaled(e.pxU))
+            return
+        }
+        keys(Part.Leave, Prop.S, Moves.kT4RowPitch)
+        keys(Part.Leave, Prop.X, Moves.kT4RowDx.scaled(e.pxU))
+        keys(Part.Leave, Prop.Y, Moves.kT4RowDy.scaled(e.pxU))
+    }
+
+    private fun rowPush(e: MoveEnds, f: MoveForms) {
+        cut = true
+        step(Part.Leave, Prop.A, 1f, 0f, 0)
+        step(Part.LeavePivots, Prop.A, 1f, 0f, 0)
+        if (e.lhead) {
+            step(Part.LeaveHeader, Prop.A, 1f, 0f, 0)
+            keys(Part.LeaveWord, Prop.S, Moves.kT3OldHeader)
+            ramp(Part.LeaveWord, Prop.Y, 0f, Moves.kT3OldRise * e.pxU, 0, Moves.kT3OldOut, Curves.linear)
+            set(Part.LeaveWord, Prop.A, 1f)
+            step(Part.LeaveWord, Prop.A, 1f, 0f, Moves.kT3OldOut)
+            set(Part.LeaveWord, Prop.PX, Moves.kT3OldHeaderX * e.sw)
+            set(Part.LeaveWord, Prop.PY, e.lheadBase)
+        } else if (e.morphHeaderOut) {
+            step(Part.LeaveHeader, Prop.A, 1f, 0f, 0)
+        }
+        leaveGround(e, f)
+        wordEnd = wordLegs(WordLeg.Push, e)
+        pageIn(e, f)
+        if (e.rows && f.content != ContentForm.Rest) {
+            val r = Moves.kT3Rows
+            keys(Part.Content, Prop.S, r)
+            keys(Part.Content, Prop.X, Keys(r.t, FloatArray(r.v.size) { e.rowsDx * ((1 - r.v[it]) / (1 - Tok.motion_rowsDy)) }))
+        }
+        step(Part.Header, Prop.A, 0f, 1f, wordEnd)
+        tie(Part.Header)
+    }
+
+    private fun pivotPush(e: MoveEnds, f: MoveForms) {
+        if (f.leaveFade) {
+            keys(Part.Leave, Prop.S, Moves.kT3List)
+            keys(Part.Leave, Prop.A, Moves.kT3ListA)
+            set(Part.Leave, Prop.PX, e.tapX)
+            set(Part.Leave, Prop.PY, e.tapY)
+        } else {
+            step(Part.Leave, Prop.A, 1f, 0f, 0)
+        }
+        step(Part.LeavePivots, Prop.A, 1f, 0f, 0)
+        if (e.lhead) {
+            step(Part.LeaveHeader, Prop.A, 1f, 0f, 0)
+            keys(Part.LeaveWord, Prop.S, Moves.kT3PivHeader)
+            ramp(Part.LeaveWord, Prop.Y, 0f, Moves.kT3PivRise * e.pxU, 0, Moves.kT3PivRiseEnd, Curves.linear)
+            keys(Part.LeaveWord, Prop.A, Moves.kT3PivHeaderA)
+            set(Part.LeaveWord, Prop.PX, Moves.kT3PivHeaderX * e.sw)
+            set(Part.LeaveWord, Prop.PY, e.lheadBase)
+        } else if (e.morphHeaderOut) {
+            step(Part.LeaveHeader, Prop.A, 1f, 0f, 0)
+        }
+        if (e.grounds) {
+            ramp(Part.LeaveGround, Prop.A, 1f, 0f, 0, if (f.leaveFade) ms(Tok.motion_leave) else 0, Curves.linear)
+            ramp(Part.Ground, Prop.A, 0f, 1f, ms(Tok.motion_groundDelay), ms(Tok.motion_ground), Curves.linear)
+        } else {
+            set(Part.LeaveGround, Prop.A, 1f)
+        }
+        wordEnd = wordLegs(WordLeg.Push, e)
+        step(Part.Header, Prop.A, 0f, 1f, wordEnd)
+        tie(Part.Header)
+        if (e.thumb) {
+            val k = Moves.kT3Thumb
+            keys(Part.Tile, Prop.S, Keys(k.t, FloatArray(k.v.size) { e.tileS0 + (e.tileS1 - e.tileS0) * k.v[it] }))
+            keys(Part.Tile, Prop.X, Keys(k.t, FloatArray(k.v.size) { e.tileX0 + (e.tileX1 - e.tileX0) * k.v[it] }))
+            keys(Part.Tile, Prop.Y, Keys(k.t, FloatArray(k.v.size) { e.tileY0 + (e.tileY1 - e.tileY0) * k.v[it] }))
+            set(Part.Tile, Prop.A, 1f)
+        }
+        if (e.pivots) {
+            keys(Part.Pivots, Prop.S, Moves.kT3PivRow)
+            step(Part.Pivots, Prop.A, 0f, Moves.kT3PivRowA0, Moves.kT3PivRowIn)
+            append(MoveLeg(Part.Pivots, Prop.A, Moves.kT3PivRowA0, 1f, Moves.kT3PivRowIn, Moves.kT3PivRowLand - Moves.kT3PivRowIn))
+            set(Part.Pivots, Prop.PX, Moves.kT3PivRowX * e.sw)
+            set(Part.Pivots, Prop.PY, Moves.kT3PivRowY * e.sh)
+        }
+        step(Part.Content, Prop.A, 0f, 1f, Moves.kT3PivContent)
+        set(Part.Content, Prop.S, 1f)
+    }
+
+    private fun rowPop(e: MoveEnds, f: MoveForms) {
+        rowsOut(e, false)
+        if (f.leaveFade) {
+            keys(Part.Leave, Prop.A, Moves.kT4RowA)
+            if (f.chromeSlide) pivotsOut(e)
+            keys(Part.LeavePivots, Prop.A, Moves.kT4PivPivotsA)
+        } else {
+            step(Part.Leave, Prop.A, 1f, 0f, 0)
+            step(Part.LeavePivots, Prop.A, 1f, 0f, 0)
+        }
+        step(Part.LeaveHeader, Prop.A, 1f, 0f, 0)
+        popGrounds(e)
+        wordEnd = wordLegs(WordLeg.Pop, e)
+        if (e.zoom && f.headerZoom) {
+            zoomLegs(e, Moves.kT4RowZoom, Moves.kT4RowZoomA, Moves.kT4RowZoomX, Moves.kT4RowHeader)
+        } else {
+            step(Part.Header, Prop.A, 0f, 1f, Moves.kT4RowHeader)
+        }
+        if (e.pivots) ramp(Part.Pivots, Prop.A, 0f, 1f, Moves.kT4RowIn, Moves.kT4RowInLen, Curves.easeOut)
+        ramp(Part.Content, Prop.A, 0f, 1f, Moves.kT4RowIn, Moves.kT4RowInLen, Curves.easeOut)
+        set(Part.Content, Prop.S, 1f)
+    }
+
+    private fun pivotsOut(e: MoveEnds) {
+        ramp(Part.LeavePivots, Prop.X, 0f, Moves.kT4PivPivotsDx * e.pxU, 0, Moves.kT4PivPivotsMove, Curves.easeOut)
+        ramp(Part.LeavePivots, Prop.Y, 0f, Moves.kT4PivPivotsDy * e.pxU, 0, Moves.kT4PivPivotsMove, Curves.easeOut)
+    }
+
+    private fun pivotPop(e: MoveEnds, f: MoveForms) {
+        if (f.leaveFade) keys(Part.Leave, Prop.A, Moves.kT4PivLeave) else step(Part.Leave, Prop.A, 1f, 0f, 0)
+        if (f.chromeSlide) pivotsOut(e)
+        keys(Part.LeavePivots, Prop.A, Moves.kT4PivPivotsA)
+        step(Part.LeaveHeader, Prop.A, 1f, 0f, 0)
+        popGrounds(e)
+        wordEnd = wordLegs(WordLeg.Pop, e)
+        if (e.zoom && f.headerZoom) {
+            zoomLegs(e, null, Moves.kT4PivZoomA, Moves.kT4PivZoomX, Moves.kT4PivHeader)
+            ramp(Part.Zoom, Prop.S, Tok.motion_headerZoom, 1f, Moves.kT4PivZoomIn, Moves.kT4PivHeader - Moves.kT4PivZoomIn, Curves.easeOut)
+        } else {
+            step(Part.Header, Prop.A, 0f, 1f, Moves.kT4PivHeader)
+        }
+        if (e.pivots) keys(Part.Pivots, Prop.A, Moves.kT4PivPivots)
+        stepKeys(Part.Content, Prop.A, Moves.kT4PivRows)
+        set(Part.Content, Prop.S, 1f)
+    }
+
+    private fun pushPop(k: MoveKind, e: MoveEnds, f: MoveForms) {
+        swap = ms(Tok.motion_swap)
+        val row = e.morph && e.morphKind == MorphKind.Row
+        val pivot = e.morph && e.morphKind == MorphKind.Pivot
+        when {
+            k == MoveKind.T3 && row -> return rowPush(e, f)
+            k == MoveKind.T3 && pivot -> return pivotPush(e, f)
+            k == MoveKind.T4 && row -> return rowPop(e, f)
+            k == MoveKind.T4 && pivot -> return pivotPop(e, f)
+        }
+        val leave = ms(Tok.motion_leave)
+        if (k == MoveKind.T3 && e.npQueue) {
+            cut = true
+            for (p in listOf(Part.Leave, Part.LeaveHeader, Part.LeavePivots)) step(p, Prop.A, 1f, 0f, 0)
+            leaveGround(e, f)
+        } else {
+            leavePage(e, f, leave, true)
+            fadeOrStep(Part.LeavePivots, leave, f.leaveFade)
+        }
+        if (k == MoveKind.T4m && e.word) wordEnd = wordLegs(WordLeg.Shrink, e)
+        pageIn(e, f)
+    }
+
+    private fun t3m(e: MoveEnds, f: MoveForms) {
+        swap = ms(Tok.motion_swap)
+        step(Part.Leave, Prop.A, 1f, 0f, 0)
+        fadeOrStep(Part.LeaveHeader, ms(Tok.motion_leave), f.leaveFade)
+        step(Part.LeavePivots, Prop.A, 1f, 0f, 0)
+        grounds(e)
+        tileIn(e)
+        var we = max(ms(Tok.motion_t3mLabelDelay) + ms(Tok.motion_t3mLabel), ms(Tok.motion_t3mBaseDelay) + ms(Tok.motion_t3mBase))
+        if (e.word) {
+            wordEnd = wordLegs(WordLeg.Grow, e)
+            we = wordEnd
+        }
+        step(Part.Header, Prop.A, 0f, 1f, we)
+        tie(Part.Header)
+        val fd = ms(Tok.motion_t3mFadeDelay)
+        if (f.t3mFade) ramp(Part.Content, Prop.A, 0f, 1f, fd, ms(Tok.motion_t3mFade), Curves.linear) else step(Part.Content, Prop.A, 0f, 1f, fd)
+        set(Part.Content, Prop.S, 1f)
+    }
+
+    private fun t2(k: MoveKind, e: MoveEnds, f: MoveForms) {
+        val word = k == MoveKind.T2 && e.word
+        swap = ms(if (word) Tok.motion_t2Swap else Tok.motion_swap)
+        step(Part.Home, Prop.A, 1f, 0f, 0)
+        ramp(Part.Peek, Prop.A, e.peek0, 0f, 0, ms(Tok.motion_t2Peek), Curves.linear)
+        if (!word) {
+            pageIn(e, f)
+            return
+        }
+        wordEnd = wordLegs(WordLeg.HomeOpen, e)
+        step(Part.Header, Prop.A, 0f, 1f, wordEnd)
+        tie(Part.Header)
+        tie(Part.Face)
+        if (e.pivots && f.chromeSlide) {
+            keys(Part.Pivots, Prop.S, Moves.kT2PivS)
+            keys(Part.Pivots, Prop.X, Moves.kT2PivX.scaled(e.pxU))
+            stepKeys(Part.Pivots, Prop.A, Moves.kT2PivA)
+            set(Part.Pivots, Prop.PX, Tok.motion_t2PivotX * e.pxU)
+            set(Part.Pivots, Prop.PY, f.t2PivotY * e.pxU)
+        } else if (e.pivots) {
+            step(Part.Pivots, Prop.A, 0f, 1f, Moves.kT2PivA.t.last())
+        }
+        if (e.rows) {
+            rowsIn(e, f)
+            return
+        }
+        ramp(Part.Ground, Prop.A, 0f, 1f, ms(Tok.motion_t2GroundDelay), ms(Tok.motion_t2Ground), Curves.linear)
+        val cd = ms(Tok.motion_t2ContentDelay)
+        val cl = ms(Tok.motion_t2Content)
+        if (f.content == ContentForm.Rest) {
+            step(Part.Content, Prop.A, 0f, 1f, cd + cl)
+        } else {
+            ramp(Part.Content, Prop.S, Tok.motion_contentScale, 1f, cd, cl, Curves.easeOut)
+            val ad = ms(Tok.motion_t2FadeDelay)
+            if (f.content == ContentForm.Step) step(Part.Content, Prop.A, 0f, 1f, ad) else ramp(Part.Content, Prop.A, 0f, 1f, ad, ms(Tok.motion_t2Fade), Curves.linear)
+        }
+    }
+
+    private fun t2w(e: MoveEnds) {
+        swap = SLIDE_OUT
+        val c = Curves.expOut6
+        ramp(Part.Home, Prop.A, 1f, 0f, 0, SLIDE_OUT, c)
+        ramp(Part.Home, Prop.X, 0f, -e.slideX, 0, SLIDE_OUT, c)
+        set(Part.Peek, Prop.A, e.peek0)
+        for (p in listOf(Part.Content, Part.Header, Part.Pivots, Part.Ground)) ramp(p, Prop.A, 0f, 1f, SLIDE_OUT, SLIDE_IN, c)
+        ramp(Part.Content, Prop.X, e.slideX, 0f, SLIDE_OUT, SLIDE_IN, c)
+    }
+
+    private fun t4h(k: MoveKind, e: MoveEnds, f: MoveForms) {
+        val word = k == MoveKind.T4h && e.word
+        val pl = ms(Tok.motion_t4hPivot)
+        val cl = ms(Tok.motion_t4hContent)
+        swap = if (word) ms(Tok.motion_t4hSwap) else cl
+        leavePage(e, f, cl, !word)
+        rowsOut(e, true)
+        when {
+            f.leaveFade && f.chromeSlide -> {
+                ramp(Part.LeavePivots, Prop.X, 0f, e.pivotX, 0, pl, Curves.easeIn)
+                ramp(Part.LeavePivots, Prop.Y, 0f, e.pivotY, 0, pl, Curves.easeIn)
+                ramp(Part.LeavePivots, Prop.A, 1f, 0f, 0, pl, Curves.easeIn)
+            }
+            f.leaveFade -> ramp(Part.LeavePivots, Prop.A, 1f, 0f, 0, pl, Curves.easeIn)
+            else -> step(Part.LeavePivots, Prop.A, 1f, 0f, 0)
+        }
+        val hd = swap
+        val hl = if (word) ms(Tok.motion_t4hItems) else Moves.kT4nItems
+        ramp(Part.Home, Prop.A, 0f, 1f, hd, hl, Curves.linear)
+        ramp(Part.Peek, Prop.A, 0f, e.peek1, ms(Tok.motion_t4hPeekDelay), ms(Tok.motion_t4hPeek), Curves.linear)
+        if (word) {
+            wordEnd = wordLegs(WordLeg.HomeBack, e)
+            step(Part.Look, Prop.A, 0f, e.look, hd)
+            append(MoveLeg(Part.Look, Prop.A, e.look, 1f, hd, hl))
+            tie(Part.Look)
+            tie(Part.Face)
+            ramp(Part.Sub, Prop.A, 0f, e.sub, ms(Tok.motion_t4hSubDelay), ms(Tok.motion_t4hSub), Curves.easeOut)
+        } else {
+            ramp(Part.Sub, Prop.A, 0f, e.sub, hd, hl, Curves.linear)
+        }
     }
 
     private fun npLegs(k: MoveKind, e: MoveEnds, f: MoveForms) {
@@ -578,7 +1018,7 @@ class PageMove {
             return
         }
         when (e.npForm) {
-            NpForm.Page -> fadeOrStep(Part.NpLeave, 0, ms(Old.motion_t7Leave), f.leaveFade)
+            NpForm.Page -> fadeOrStep(Part.NpLeave, ms(Old.motion_t7Leave), f.leaveFade)
             NpForm.Front -> {
                 val sh = ms(Old.motion_t7PaneShift)
                 val st = ms(Old.motion_t7PaneStep)
@@ -615,150 +1055,6 @@ class PageMove {
         step(Part.NpPhoto, Prop.A, 0f, 1f, ink + ms(Tok.motion_t7Rest))
     }
 
-    private fun leavePage(e: MoveEnds, f: MoveForms, dur: Int, header: Boolean) {
-        fadeOrStep(Part.Leave, 0, dur, f.leaveFade)
-        if (header) fadeOrStep(Part.LeaveHeader, 0, dur, f.leaveFade)
-        if (e.grounds) ramp(Part.LeaveGround, Prop.A, 1f, 0f, 0, if (f.leaveFade) dur else 0, Curves.linear) else set(Part.LeaveGround, Prop.A, 1f)
-    }
-
-    private fun rowsOut(e: MoveEnds) {
-        if (!e.leaveRows) return
-        val s = Moves.kT4hPitch
-        keys(Part.Leave, Prop.S, s.t, s.v, Curves.linear, 0)
-        val x = Moves.kT4hDx
-        keys(Part.Leave, Prop.X, x.t, FloatArray(x.v.size) { x.v[it] * e.pxU }, Curves.linear, 0)
-    }
-
-    private fun pushPop(k: MoveKind, e: MoveEnds, f: MoveForms) {
-        swap = ms(Tok.motion_swap)
-        val leave = ms(Tok.motion_leave)
-        val row = k == MoveKind.T3 && e.morph && e.morphKind == MorphKind.Row
-        leavePage(e, f, leave, true)
-        fadeOrStep(Part.LeavePivots, 0, leave, f.leaveFade)
-        if (k != MoveKind.T4m && e.morph) wordEnd = wordLegs(if (k == MoveKind.T3) WordLeg.Push else WordLeg.Pop, e)
-        if (k == MoveKind.T4m && e.word) wordEnd = wordLegs(WordLeg.Shrink, e)
-        if (k == MoveKind.T4m) tileBack(e)
-        pageIn(e, f)
-        if (k != MoveKind.T4m && e.morph) {
-            if (e.morphHeaderIn) {
-                step(Part.Header, Prop.A, 0f, 1f, wordEnd)
-                tie(Part.Header)
-            }
-            if (e.morphHeaderOut) step(Part.LeaveHeader, Prop.A, 1f, 0f, 0)
-        }
-        if (!row) return
-        step(Part.Leave, Prop.A, 1f, 0f, 0)
-        val s = leg(Part.Word, Prop.S)
-        val y = leg(Part.Word, Prop.Y)
-        var out = wordEnd
-        if (s != null && y != null) {
-            var t = 0
-            while (t < wordEnd) {
-                if (y.at(t.toLong()) - e.rowAscent * s.at(t.toLong()) <= e.rowBand) {
-                    out = t
-                    break
-                }
-                t += TAIL
-            }
-        }
-        if (e.rowLive) {
-            ramp(Part.LeaveHeader, Prop.A, 1f, 0f, 0, wordEnd, Curves.linear)
-            ramp(Part.LeavePivots, Prop.A, 1f, 0f, 0, wordEnd, Curves.linear)
-        } else {
-            step(Part.LeaveHeader, Prop.A, 1f, 0f, out)
-            step(Part.LeavePivots, Prop.A, 1f, 0f, out)
-        }
-        tie(Part.LeaveHeader)
-        tie(Part.LeavePivots)
-    }
-
-    private fun t3m(e: MoveEnds, f: MoveForms) {
-        swap = ms(Tok.motion_swap)
-        step(Part.Leave, Prop.A, 1f, 0f, 0)
-        fadeOrStep(Part.LeaveHeader, 0, ms(Tok.motion_leave), f.leaveFade)
-        step(Part.LeavePivots, Prop.A, 1f, 0f, 0)
-        grounds(e)
-        tileLegs(e, ms(Tok.motion_t3mTileDelay), ms(Tok.motion_t3mTile))
-        var we = max(ms(Tok.motion_t3mLabelDelay) + ms(Tok.motion_t3mLabel), ms(Tok.motion_t3mBaseDelay) + ms(Tok.motion_t3mBase))
-        if (e.word) {
-            wordEnd = wordLegs(WordLeg.Grow, e)
-            we = wordEnd
-        }
-        step(Part.Header, Prop.A, 0f, 1f, we)
-        tie(Part.Header)
-        val fd = ms(Old.motion_t3mFadeDelay)
-        if (f.t3mFade) ramp(Part.Content, Prop.A, 0f, 1f, fd, ms(Old.motion_t3mFade), Curves.linear) else step(Part.Content, Prop.A, 0f, 1f, fd)
-        set(Part.Content, Prop.S, 1f)
-    }
-
-    private fun t2(k: MoveKind, e: MoveEnds, f: MoveForms) {
-        val word = k == MoveKind.T2 && e.word
-        swap = ms(if (word) Tok.motion_t2Swap else Tok.motion_swap)
-        step(Part.Home, Prop.A, 1f, 0f, 0)
-        ramp(Part.Peek, Prop.A, e.peek0, 0f, 0, ms(Tok.motion_t2Peek), Curves.linear)
-        if (!word) {
-            pageIn(e, f)
-            return
-        }
-        wordEnd = wordLegs(WordLeg.HomeOpen, e)
-        step(Part.Header, Prop.A, 0f, 1f, wordEnd)
-        tie(Part.Header)
-        if (e.pivots) pivotsIn(e, f, ms(Old.motion_t2PivotDelay))
-        if (e.rows) {
-            rowsIn(e, f)
-            return
-        }
-        ramp(Part.Ground, Prop.A, 0f, 1f, ms(Tok.motion_t2GroundDelay), ms(Tok.motion_t2Ground), Curves.linear)
-        val cd = ms(Tok.motion_t2ContentDelay)
-        val cl = ms(Tok.motion_t2Content)
-        if (f.content == ContentForm.Rest) {
-            step(Part.Content, Prop.A, 0f, 1f, cd + cl)
-        } else {
-            ramp(Part.Content, Prop.S, Tok.motion_contentScale, 1f, cd, cl, Curves.easeOut)
-            val ad = ms(Tok.motion_t2FadeDelay)
-            if (f.content == ContentForm.Step) step(Part.Content, Prop.A, 0f, 1f, ad) else ramp(Part.Content, Prop.A, 0f, 1f, ad, ms(Tok.motion_t2Fade), Curves.linear)
-        }
-    }
-
-    private fun t2w(e: MoveEnds) {
-        swap = SLIDE_OUT
-        val c = Curves.expOut6
-        ramp(Part.Home, Prop.A, 1f, 0f, 0, SLIDE_OUT, c)
-        ramp(Part.Home, Prop.X, 0f, -e.slideX, 0, SLIDE_OUT, c)
-        set(Part.Peek, Prop.A, e.peek0)
-        for (p in listOf(Part.Content, Part.Header, Part.Pivots, Part.Ground)) ramp(p, Prop.A, 0f, 1f, SLIDE_OUT, SLIDE_IN, c)
-        ramp(Part.Content, Prop.X, e.slideX, 0f, SLIDE_OUT, SLIDE_IN, c)
-    }
-
-    private fun t4h(k: MoveKind, e: MoveEnds, f: MoveForms) {
-        val word = k == MoveKind.T4h && e.word
-        swap = ms(Tok.motion_t4hSwap)
-        val pl = ms(Tok.motion_t4hPivot)
-        leavePage(e, f, ms(Tok.motion_t4hContent), !word)
-        rowsOut(e)
-        when {
-            f.leaveFade && f.chromeSlide -> {
-                ramp(Part.LeavePivots, Prop.X, 0f, e.pivotX, 0, pl, Curves.easeIn)
-                ramp(Part.LeavePivots, Prop.Y, 0f, e.pivotY, 0, pl, Curves.easeIn)
-                ramp(Part.LeavePivots, Prop.A, 1f, 0f, 0, pl, Curves.easeIn)
-            }
-            f.leaveFade -> ramp(Part.LeavePivots, Prop.A, 1f, 0f, 0, pl, Curves.easeIn)
-            else -> step(Part.LeavePivots, Prop.A, 1f, 0f, 0)
-        }
-        val hd = swap
-        val hl = ms(Tok.motion_t4hItems)
-        ramp(Part.Home, Prop.A, 0f, 1f, hd, hl, Curves.linear)
-        ramp(Part.Peek, Prop.A, 0f, e.peek1, ms(Tok.motion_t4hPeekDelay), ms(Tok.motion_t4hPeek), Curves.linear)
-        if (word) {
-            wordEnd = wordLegs(WordLeg.HomeBack, e)
-            ramp(Part.Look, Prop.A, 0f, 1f, hd, hl, Curves.linear)
-            tie(Part.Look)
-            ramp(Part.Sub, Prop.A, 0f, e.sub, ms(Tok.motion_t4hSubDelay), ms(Tok.motion_t4hSub), Curves.easeOut)
-        } else {
-            ramp(Part.Sub, Prop.A, 0f, e.sub, hd, hl, Curves.linear)
-        }
-    }
-
     fun start(k: MoveKind, t0: Long, e: MoveEnds, f: MoveForms) {
         kind = k
         this.t0 = t0
@@ -766,6 +1062,7 @@ class PageMove {
         reversed = false
         morph = f.wordMorph
         list = mutableListOf()
+        offs = mutableListOf()
         for (row in base) for (q in row.indices) row[q] = if (q == Prop.S.ordinal) 1f else 0f
         swap = 0
         end = 0
@@ -773,11 +1070,14 @@ class PageMove {
         endAtMs = e.endAt
         held = mutableSetOf()
         tied = mutableSetOf()
+        cut = false
         when (k) {
             MoveKind.T3, MoveKind.T4, MoveKind.T4m -> pushPop(k, e, f)
             MoveKind.T3c -> colLegs(e, f)
             MoveKind.T3a -> artLegs(e, f)
             MoveKind.T4a -> artBackLegs(e, f)
+            MoveKind.T3z -> pageZoom(e)
+            MoveKind.T4z -> pageFade(e)
             MoveKind.T3m -> t3m(e, f)
             MoveKind.T2, MoveKind.T2n -> t2(k, e, f)
             MoveKind.T2w -> t2w(e)
@@ -785,7 +1085,7 @@ class PageMove {
             MoveKind.T7, MoveKind.T8 -> npLegs(k, e, f)
             MoveKind.None -> Unit
         }
-        if (k != MoveKind.T3m && list.any { it.part == Part.Content }) hold(Part.Content)
+        if (k != MoveKind.T3m && k != MoveKind.T3a && list.any { it.part == Part.Content && it.prop == Prop.A }) hold(Part.Content)
         finish()
     }
 
@@ -808,6 +1108,7 @@ class PageMove {
             back += r
         }
         list = back
+        offs = mutableListOf()
         t0 = now
         swap = 0
         end = out
@@ -826,10 +1127,18 @@ class PageMove {
     fun release(p: Part, at: Long): Int {
         if (!held(p)) return 0
         held -= p
+        val tail = Moves.kTail.toLong()
         val shown = at - t0
-        val r = max(shown - TAIL, 0L)
-        val first = list.filter { it.part == p && it.pin == 0 }.minOfOrNull { it.delay.toLong() }
-        val d = if (first == null) 0 else max(0L, r - first).toInt()
+        val r = max(shown - tail, 0L)
+        var first = Long.MAX_VALUE
+        var firstA = Long.MAX_VALUE
+        for (l in list) {
+            if (l.part != p || l.pin != 0) continue
+            first = min(first, l.delay.toLong())
+            if (l.prop == Prop.A) firstA = min(firstA, l.delay.toLong())
+        }
+        if (cut && firstA != Long.MAX_VALUE) first = firstA
+        val d = if (first == Long.MAX_VALUE) 0 else max(0L, r - first).toInt()
         for (l in list) {
             if (l.part != p) continue
             if (l.pin != 0) {
@@ -841,25 +1150,30 @@ class PageMove {
                 l.delay += d
             }
         }
-        if (p == Part.Content) {
+        if (p == Part.Content && !cut) {
             for (q in Prop.entries) {
                 val z = last(Part.Leave, q) ?: continue
-                if (z.end >= shown + TAIL) continue
-                if (z.dur <= 0) z.delay = (shown + TAIL).toInt() else z.dur = (shown + TAIL - z.delay).toInt()
+                if (z.end >= shown + tail) continue
+                if (z.dur <= 0) z.delay = (shown + tail).toInt() else z.dur = (shown + tail - z.delay).toInt()
             }
         }
         finish()
         return d
     }
 
+    fun release(group: Set<Part>, at: Long): Int {
+        var d = 0
+        for (p in Part.entries) if (p in group) d = max(d, release(p, at))
+        return d
+    }
+
     fun releaseWords(at: Long): Int {
-        val words = setOf(Part.Word, Part.LeaveWord)
-        if (held.none { it in words }) return 0
-        held.removeAll(words)
+        if (held.none { it in wordGroup }) return 0
+        held.removeAll(wordGroup)
         val r = max(at - t0, 0L)
-        val first = list.filter { it.part in words }.minOfOrNull { it.delay.toLong() }
+        val first = list.filter { it.part in wordGroup }.minOfOrNull { it.delay.toLong() }
         val d = if (first == null) 0 else max(0L, r - first).toInt()
-        for (l in list) if (l.part in words || l.part in tied) l.delay += d
+        for (l in list) if (l.part in wordGroup || l.part in tied) l.delay += d
         wordEnd += d
         finish()
         return d
@@ -881,5 +1195,9 @@ class PageMove {
         for (l in list) if (l.part == Part.NpIn || l.part == Part.NpPhoto) l.delay += by
         if (endAtMs > 0) endAtMs += by
         finish()
+    }
+
+    companion object {
+        fun popAnchor(k: MoveKind, top: Int, h: Int, stdPpu: Float): Int = if (k == MoveKind.T4) top else h - px(Tok.motion_t4hRowsYa, stdPpu)
     }
 }
