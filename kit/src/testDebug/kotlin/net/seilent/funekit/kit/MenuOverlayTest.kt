@@ -106,6 +106,40 @@ class MenuOverlayTest {
         assertEquals(0, under)
     }
 
+    private fun drag(vararg ys: Float) {
+        rule.onRoot().performTouchInput {
+            down(Offset(120f, ys.first()))
+            for (y in ys.drop(1)) moveTo(Offset(120f, y))
+            up()
+        }
+        rule.waitForIdle()
+    }
+
+    @Test
+    fun aSwipeDownThatFirstRosePastTheSlopDoesNotClose() {
+        show(MenuForm.Sheet, OverKind.Sheet)
+        drag(200f, 170f, 310f)
+        assertEquals(0, closes)
+        assertEquals(emptyList<Int>(), picks)
+        drag(200f, 190f, 310f)
+        assertEquals(1, closes)
+    }
+
+    @Test
+    fun aTapWhoseUpLandsOnTheNextItemPicksTheDownsItem() {
+        show(MenuForm.Sheet, OverKind.Sheet)
+        drag(266f, 248f)
+        assertEquals(listOf(2), picks)
+    }
+
+    @Test
+    fun aSwipeDownOnADialogCloses() {
+        show(MenuForm.Dlg, OverKind.Dlg)
+        drag(160f, 220f, 280f)
+        assertEquals(1, closes)
+        assertEquals(emptyList<Int>(), picks)
+    }
+
     @Test
     fun aDialogClosesOnATapOffItsItemsTitleAndLead() {
         show(MenuForm.Dlg, OverKind.Dlg, lead = 1)
