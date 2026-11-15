@@ -2,3 +2,4 @@ a105/t4-100 funeOS t4 leaves the artist page, which the kit has no page for, and
 a105/rowpress-0-btarc-held the Bluetooth headphones page: the search row and the device rows are text (reported), the press glow is excluded and the page has no ring, tile or divider, so no region is gated
 r1/rowpress-0-btarc-held the Bluetooth headphones page: the search row and the device rows are text (reported), the press glow is excluded and the page has no ring, tile or divider, so no region is gated
 v1/rowpress-0-btarc-held the Bluetooth headphones page: the search row and the device rows are text (reported), the press glow is excluded and the page has no ring, tile or divider, so no region is gated
+a105/t14x-120-songs at 120 ms of the close the grid is at alpha 0.016 and the songs page fades back from 0.16, so every grid region reads under two levels or sits over page ink, and the page regions under the grid are text (reported) or excluded by the overlap, so no region is gated

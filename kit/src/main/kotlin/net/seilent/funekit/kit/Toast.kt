@@ -23,7 +23,6 @@ import kotlinx.coroutines.delay
 import net.seilent.funekit.Role
 import net.seilent.funekit.Roles
 import net.seilent.funekit.Scale
-import net.seilent.funekit.gen.Old
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.motion.Curves
 import net.seilent.funekit.kit.motion.OverKind
@@ -34,6 +33,7 @@ import net.seilent.funekit.kit.touch.Tap
 import net.seilent.funekit.kit.touch.tapTarget
 import net.seilent.funekit.px
 import kotlin.math.ceil
+import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
@@ -74,6 +74,7 @@ class Toast {
     private var phase0 = Phase.Hidden
     private var inAt = 0L
     private var inFrom = 0f
+    private var fadeFrom = 0f
     private var holdAt = 0L
     private var swapAt: Long? = null
     var artist by mutableStateOf("")
@@ -90,6 +91,7 @@ class Toast {
     var place by mutableStateOf(ToastPlace.Top)
         private set
     private var drawnE = -1f
+    private var drawnF = -1f
     private var drawnTa = -1f
     var shows by mutableIntStateOf(0)
         private set
@@ -101,7 +103,9 @@ class Toast {
 
     val isTrack: Boolean get() = if (swapAt != null) nextTrack else track
 
-    private fun inMs(): Long = (if (place == ToastPlace.Bottom) Tok.motion_toastRise else Old.motion_toastIn).toLong()
+    private fun inMs(): Long = Tok.motion_toastRise.toLong()
+
+    private fun outMs(): Long = max(Tok.motion_toastOutAt + Tok.motion_toastOut, Tok.motion_toastOutMoveAt + Tok.motion_toastOutMove).toLong()
 
     private fun progress(e: Long, d: Long): Float = if (d <= 0) 1f else (e.toFloat() / d).coerceIn(0f, 1f)
 
@@ -120,7 +124,8 @@ class Toast {
             if (p == Phase.Hold) holdAt = now
             return
         }
-        inFrom = if (p == Phase.Out) expOut6Inverse(eased(now)) else 0f
+        fadeFrom = if (p == Phase.Out) fade(now) else 0f
+        inFrom = if (p == Phase.Out) pos(now) else 0f
         inAt = now
         placed = p == Phase.Out
         holdAt = now + (inMs() * (1 - inFrom)).toLong()
@@ -149,7 +154,8 @@ class Toast {
         }
         drawnTa = textAlpha(now)
         if (at != null && now >= at + SWAP_LEGS * d) swapAt = null
-        drawnE = eased(now)
+        drawnE = pos(now)
+        drawnF = fade(now)
     }
 
     fun opened(over: OverKind, nowPlaying: Boolean, now: Long, holdUp: Boolean = false) {
@@ -181,7 +187,7 @@ class Toast {
         val p = phase(now)
         val swap = swapAt?.let { now < it + SWAP_LEGS * Tok.motion_valueChange.toLong() } ?: false
         return p == Phase.In || p == Phase.Out || swap ||
-            (p != Phase.Hidden && (press.stale(now.toFloat()) || eased(now) != drawnE || textAlpha(now) != drawnTa))
+            (p != Phase.Hidden && (press.stale(now.toFloat()) || pos(now) != drawnE || fade(now) != drawnF || textAlpha(now) != drawnTa))
     }
 
     fun wakeAt(now: Long): Long? {
@@ -215,8 +221,8 @@ class Toast {
     private fun phase(now: Long): Phase {
         if (phase0 == Phase.Hidden) return Phase.Hidden
         val hold = Tok.motion_toastHold.toLong()
-        val out = Old.motion_toastOut.toLong()
-        if (!placed) return if (now < inAt + Old.motion_toastIn.toLong() + hold + out) Phase.In else Phase.Hidden
+        val out = outMs()
+        if (!placed) return if (now < inAt + inMs() + hold + out) Phase.In else Phase.Hidden
         val end = holdAt + hold
         return when {
             now < holdAt -> Phase.In
@@ -226,11 +232,19 @@ class Toast {
         }
     }
 
-    fun eased(now: Long): Float = when (phase(now)) {
-        Phase.In -> if (!placed) 0f else Curves.expOut6.at(min(1f, inFrom + progress(now - inAt, inMs())))
+    fun pos(now: Long): Float = when (phase(now)) {
+        Phase.In -> if (!placed) 0f else min(1f, inFrom + progress(now - inAt, inMs()))
         Phase.Hold -> 1f
-        Phase.Out -> 1 - Curves.expOut6.at(progress(now - holdAt - Tok.motion_toastHold.toLong(), Old.motion_toastOut.toLong()))
+        Phase.Out -> 1 - progress(now - holdAt - Tok.motion_toastHold.toLong() - Tok.motion_toastOutMoveAt.toLong(), Tok.motion_toastOutMove.toLong())
         Phase.Hidden -> 0f
+    }
+
+    fun fade(now: Long): Float {
+        val p = phase(now)
+        if (p == Phase.In) return if (inFrom >= 1f) 1f else fadeFrom + (1 - fadeFrom) * (pos(now) - inFrom) / (1 - inFrom)
+        if (p != Phase.Out) return pos(now)
+        val t = now - holdAt - Tok.motion_toastHold.toLong() - Tok.motion_toastOutAt.toLong()
+        return 1 - Curves.easeOut.at(progress(t, Tok.motion_toastOut.toLong()))
     }
 
     fun textAlpha(now: Long): Float {
@@ -242,29 +256,30 @@ class Toast {
     }
 
     fun stripY(s: Scale, e: Float): Int {
-        if (bottom) return bottomPx - px(Tok.toastHeight, s.ppu) + (Old.motion_toastTravel * (1 - e) * s.ppu).roundToInt()
-        return (-Old.motion_toastTravel * (1 - e) * s.ppu).roundToInt()
+        if (bottom) return bottomPx - px(Tok.toastHeight, s.ppu) + (Tok.motion_toastTravel * (1 - e) * s.ppu).roundToInt()
+        return (-Tok.motion_toastTravel * (1 - e) * s.ppu).roundToInt()
     }
 
     fun rect(s: Scale): Edges =
         if (bottom) Edges(0, bottomPx - px(Tok.toastHeight, s.ppu), s.widthPx, bottomPx) else Edges(0, 0, s.widthPx, px(Tok.toastHeight, s.ppu))
 
     fun hitRect(s: Scale, now: Long): Edges? {
-        val e = eased(now)
+        val e = pos(now)
         if (e <= 0f || !isTrack) return null
         val h = px(Tok.toastHeight, s.ppu)
-        val travel = (Old.motion_toastTravel * (1 - e) * s.ppu).roundToInt()
+        val travel = (Tok.motion_toastTravel * (1 - e) * s.ppu).roundToInt()
         return if (bottom) Edges(0, bottomPx - h + travel, s.widthPx, bottomPx) else Edges(0, -travel, s.widthPx, h - travel)
     }
 
     fun look(s: Scale, now: Long): ToastLook? {
-        val e = eased(now)
-        if (e <= 0f) return null
+        val e = pos(now)
+        val f = fade(now)
+        if (e <= 0f || f <= 0f) return null
         val y = stripY(s, e)
         val h = px(Tok.toastHeight, s.ppu)
         val bottomEdge = if (bottom) min(y + h, bottomPx) else y + h
         val clip = Edges(px(Tok.edge, s.ppu), y, px(s.w - Tok.edge, s.ppu), bottomEdge)
-        return ToastLook(y, h, bottomEdge, e * Tok.scrim_overlay_alpha, clip, e * textAlpha(now), press.look(now.toFloat()))
+        return ToastLook(y, h, bottomEdge, f * Tok.scrim_overlay_alpha, clip, f * textAlpha(now), press.look(now.toFloat()))
     }
 }
 

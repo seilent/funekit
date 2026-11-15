@@ -1,6 +1,5 @@
 package net.seilent.funekit
 
-import net.seilent.funekit.gen.Old
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.gen.TokBoard
 
@@ -69,7 +68,7 @@ object Roles {
     val dialogTitle = role(Tok.type_dialogTitle_size, Tok.type_dialogTitle_style, Tok.type_dialogTitle_case, Tok.type_dialogTitle_alpha)
     val dialogItem = role(Tok.type_dialogItem_size, Tok.type_dialogItem_style, Tok.type_dialogItem_case, Tok.type_dialogItem_alpha)
     val overlayLabel = role(Tok.type_overlayLabel_size, Tok.type_overlayLabel_style, Tok.type_overlayLabel_case, Tok.type_overlayLabel_alpha)
-    val jumpExit = role(Old.type_jumpExit_size, Tok.type_jumpExit_style, Tok.type_jumpExit_case, Tok.type_jumpExit_alpha)
+    val jumpExit = role(Tok.type_jumpExit_size, Tok.type_jumpExit_style, Tok.type_jumpExit_case, Tok.type_jumpExit_alpha)
     val jumpCell = role(Tok.type_jumpCell_size, Tok.type_jumpCell_style, Tok.type_jumpCell_case, Tok.type_jumpCell_alpha)
     val npArtist = role(Tok.type_npArtist_size, Tok.type_npArtist_style, Tok.type_npArtist_case, Tok.type_npArtist_alpha)
     val npAlbum = role(Tok.type_npAlbum_size, Tok.type_npAlbum_style, Tok.type_npAlbum_case, Tok.type_npAlbum_alpha)

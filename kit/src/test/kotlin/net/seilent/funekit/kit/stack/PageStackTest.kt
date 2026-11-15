@@ -525,7 +525,7 @@ class PageStackTest {
         assertFalse(s.hold(400, target = false, band = Gesture.Edge.Right))
     }
 
-    private val jumpIn = Old.motion_jumpIn.toLong()
+    private val jumpIn = Overlay(OverKind.Jump).dur().toLong()
 
     @Test
     fun jumpSettledIsSetOnTheFrameTheJumpGridLandsAndClearedWhenItsCloseStarts() {

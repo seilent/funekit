@@ -1,5 +1,6 @@
 package net.seilent.funekit.kit
 
+import net.seilent.funekit.kit.motion.Curves
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -81,5 +82,24 @@ class JumpTest {
         val off = 2 * 56.03f
         g.focusAfterScroll(off, 0)
         assertEquals(Jump.itemOf(8), g.focus)
+    }
+
+    @Test
+    fun aPickFarAwayCutsInToTheCutDistanceAndDeceleratesToItsRowLessTheRest() {
+        val j = jumpScroll(30, 40f, 0f, 5000f, 1000)
+        assertEquals(1200f - 22f, j.to, 0f)
+        assertEquals(1178f - 626f, j.from, 0f)
+        assertEquals(j.from, j.at(1000), 0f)
+        assertEquals(j.from + 626f * Curves.decel.at(0.5f), j.at(1300), 0.001f)
+        assertTrue(j.at(1300) < j.to)
+        assertEquals(j.to, j.at(1600), 0f)
+        assertTrue(j.done(1600))
+        val near = jumpScroll(3, 40f, 50f, 5000f, 0)
+        assertEquals(50f, near.from, 0f)
+        assertEquals(98f, near.to, 0f)
+        val up = jumpScroll(0, 40f, 2000f, 5000f, 0)
+        assertEquals(0f, up.to, 0f)
+        assertEquals(626f, up.from, 0f)
+        assertEquals(100f, jumpScroll(30, 40f, 0f, 100f, 0).to, 0f)
     }
 }

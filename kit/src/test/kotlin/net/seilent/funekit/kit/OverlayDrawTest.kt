@@ -116,8 +116,14 @@ class OverlayDrawTest {
             for (y in e.y0 until e.y1) for (x in 0 until 190) m = maxOf(m, red(px, x, y))
             return m
         }
+        fun plain(): Int {
+            val v = mutableListOf<Int>()
+            for (y in e.y0 until e.y1) for (x in 0 until 190) if (red(on, x, y) >= 0xFD) v.add(red(off, x, y))
+            assertTrue("no fully covered label px", v.isNotEmpty())
+            return v.sorted()[v.size / 2]
+        }
         near(0xFF, most(on))
-        near(Math.round(0x11 + (0xFF - 0x11) * 0.6f), most(off), 8)
+        near(Math.round(0x11 + (0xFF - 0x11) * 0.6f), plain())
         for (x in 0 until 190) assertTrue("white column at $x", (e.y0 until e.y1).any { red(on, x, it) < 0xF0 })
     }
 

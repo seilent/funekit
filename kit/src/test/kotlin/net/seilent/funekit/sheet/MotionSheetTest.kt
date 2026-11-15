@@ -9,6 +9,7 @@ import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.font.createFontFamilyResolver
 import androidx.compose.ui.unit.Density
@@ -92,6 +93,7 @@ import org.robolectric.annotation.GraphicsMode
 import java.io.File
 import java.util.IdentityHashMap
 import kotlin.math.max
+import kotlin.math.roundToInt
 import net.seilent.funekit.kit.Ink as KitInk
 
 @RunWith(RobolectricTestRunner::class)
@@ -385,7 +387,7 @@ class MotionSheetTest {
             (0 until Section.count).map { measurer.word(Section.letter(it), Roles.jumpCell, style(Roles.jumpCell), fonts, unitDensity, covers) },
         )
         val cells = JumpCells(s)
-        val o = Overlay(OverKind.Jump)
+        val o = Overlay(OverKind.Jump).also { it.lead = JUMP_LEAD }
         val acts = listOf(Act(0L) { st.open(o) }) + if (close) listOf(Act(CLOSE_AT) { st.close() }) else emptyList()
         val from = if (close) CLOSE_AT else 0L
         val below = px(s.board.page_contentTop, s.ppu) + base.rows.sumOf { Rows.pitch(s, it) }
@@ -394,16 +396,18 @@ class MotionSheetTest {
             if (open == null) {
                 world(st, t, rec)
             } else {
-                val v = open.jump(t)
+                val look = open.jumpLook(t)
+                val v = look.alpha
+                val dy = (look.dyU * s.stdPpu).roundToInt().toFloat()
                 if (rec != null && v >= 1f) {
                     rec.residual = true
                     rec.residualWhy = JUMP_LOUD
                 }
-                if (rec == null) world(st, t, null) else rec.fade(1 - v) { world(st, t, rec) }
+                if (rec == null) layer(null, look.page, layerPaint) { world(st, t, null) } else rec.fade(look.page * (1 - v)) { layer(null, look.page, layerPaint) { world(st, t, rec) } }
                 val pageRegions = rec?.count ?: 0
-                layer(null, v, layerPaint) { jumpGrid(g, ink, cells, s, g.offset, t) }
+                layer(null, v, layerPaint) { translate(0f, dy) { jumpGrid(g, ink, cells, s, g.offset, t) } }
                 if (rec != null) {
-                    rec.fade(v) { if (under != null && v < 1f) rec.skip(under) { rec.jump("jump", g, ink, cells, s, g.offset, t, h) } else rec.jump("jump", g, ink, cells, s, g.offset, t, h) }
+                    rec.fade(v) { rec.move(0f, dy) { if (under != null && v < 1f) rec.skip(under) { rec.jump("jump", g, ink, cells, s, g.offset, t, h) } else rec.jump("jump", g, ink, cells, s, g.offset, t, h) } }
                     if (v < 1f) {
                         rec.overlap(pageRegions)
                         rec.shade(Box(0f, below.toFloat(), w.toFloat(), h.toFloat()), PRESS_QUIET)
@@ -466,8 +470,9 @@ class MotionSheetTest {
     private fun toastCase(name: String, note: String, leave: Boolean): Case {
         val t = Toast().also { it.show(0L, "Coastline", "11 Ash", track = true) }
         val ink = ToastInk(measure(t.artist, Roles.toastArtist, s.ppu), measure(t.title, Roles.toastTitle, s.ppu))
-        val from = if (leave) (Old.motion_toastIn + Tok.motion_toastHold).toLong() else 0L
-        val end = if (leave) from + Old.motion_toastOut.toLong() else Old.motion_toastIn.toLong()
+        val out = maxOf(Tok.motion_toastOutAt + Tok.motion_toastOut, Tok.motion_toastOutMoveAt + Tok.motion_toastOutMove).toLong()
+        val from = if (leave) (Tok.motion_toastRise + Tok.motion_toastHold).toLong() else 0L
+        val end = if (leave) from + out else Tok.motion_toastRise.toLong()
         val st = stack(songsRest)
         return Case(name, note, st, listOf(Act(0L) { t.frame(ToastPlace.Top, h, 0L) }), from, { end }, emptyMap(), emptyList(), true, MOVE_QUIET) { now, rec ->
             t.frame(ToastPlace.Top, h, now)
@@ -577,6 +582,7 @@ class MotionSheetTest {
         private const val HOME_FOCUS = 0
         private const val KNOB_ROW = 1
         private const val CLOSE_AT = 600L
+        private const val JUMP_LEAD = 17L
         private const val T13X = 80L
         private const val T14X = 120L
         private const val TAP_UP = 50L

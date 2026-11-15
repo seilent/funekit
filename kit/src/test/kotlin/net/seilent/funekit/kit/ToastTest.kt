@@ -21,18 +21,24 @@ class ToastTest {
     private val p2160 = scale(Window(1080, 2160, 28, none, none, none, none, none, Dpi(403.411f, 403.411f, 440, 1080, 2160, 1, 1080, 2160)), Nav.None, Surface.Page, false)
 
     @Test
-    fun atTheTopItDropsFortyUnitsOver350HoldsThenLeavesOver250() {
+    fun atTheTopItDropsFortyThreeUnitsOver100HoldsThenLeavesOnTheOutLegs() {
         val t = Toast()
         t.show(0, "artist", "title")
-        assertEquals(0f, t.eased(0), 0f)
+        assertEquals(0f, t.pos(0), 0f)
         t.frame(ToastPlace.Top, 1280, 10)
-        assertEquals(Curves.expOut6.at(0.5f), t.eased(10 + 175), 0.001f)
-        assertEquals(1f, t.eased(10 + 350), 0f)
-        assertEquals(-120, t.stripY(a105, 0f))
+        assertEquals(0.5f, t.pos(10 + 50), 0.001f)
+        assertEquals(1f, t.pos(10 + 100), 0f)
+        assertEquals(-129, t.stripY(a105, 0f))
         assertEquals(0, t.stripY(a105, 1f))
-        assertTrue(t.visible(10 + 350 + 3500 - 1))
-        assertEquals(1 - Curves.expOut6.at(0.5f), t.eased(10 + 350 + 3500 + 125), 0.001f)
-        assertFalse(t.visible(10 + 350 + 3500 + 250))
+        val end = 10 + 100 + 3500L
+        assertTrue(t.visible(end - 1))
+        assertEquals(1f, t.pos(end + 8), 0f)
+        assertEquals(0.5f, t.pos(end + 8 + 68), 0.001f)
+        assertEquals(0f, t.pos(end + 8 + 136), 0f)
+        assertEquals(1f, t.fade(end + 2), 0f)
+        assertEquals(1 - Curves.easeOut.at(0.5f), t.fade(end + 2 + 90), 0.01f)
+        assertTrue(t.visible(end + 182))
+        assertFalse(t.visible(end + 183))
     }
 
     @Test
@@ -40,8 +46,8 @@ class ToastTest {
         val t = Toast()
         t.show(0, "artist", "title")
         t.frame(ToastPlace.Bottom, 1280 - 108, 0)
-        assertEquals(1f, t.eased(100), 0f)
-        assertEquals(1280 - 108 - 120 + 120, t.stripY(a105, 0f))
+        assertEquals(1f, t.pos(100), 0f)
+        assertEquals(1280 - 108 - 120 + 129, t.stripY(a105, 0f))
         assertEquals(1280 - 108 - 120, t.stripY(a105, 1f))
         assertEquals(listOf(0, 1280 - 108 - 120, 720, 1280 - 108), t.rect(a105).let { listOf(it.x0, it.y0, it.x1, it.y1) })
     }
@@ -66,10 +72,14 @@ class ToastTest {
         val t = Toast()
         t.show(0, "one", "first")
         t.frame(ToastPlace.Top, 1280, 0)
-        val at = 350 + 3500 + 125L
-        val e = t.eased(at)
+        val at = 100 + 3500 + 8 + 68L
+        val e = t.pos(at)
+        val f = t.fade(at)
+        assertEquals(0.5f, e, 0.001f)
         t.show(at, "two", "second")
-        assertEquals(e, t.eased(at), 0.002f)
+        assertEquals(e, t.pos(at), 0.002f)
+        assertEquals(f, t.fade(at), 0.002f)
+        assertEquals(1f, t.pos(at + 50), 0.002f)
         assertTrue(t.placed)
     }
 
@@ -94,8 +104,8 @@ class ToastTest {
         t.show(0, "one", "first", track = true)
         t.frame(ToastPlace.Top, 1280, 0)
         assertEquals(listOf(0, 0, 720, 120), t.hitRect(a105, 400)!!.let { listOf(it.x0, it.y0, it.x1, it.y1) })
-        val out = 350 + 3500 + 125L
-        val travel = Math.round(40 * 3 * (1 - t.eased(out)))
+        val out = 100 + 3500 + 8 + 68L
+        val travel = Math.round(43 * 3 * (1 - t.pos(out)))
         assertEquals(listOf(-travel, 120 - travel), t.hitRect(a105, out)!!.let { listOf(it.y0, it.y1) })
         val plain = Toast().also {
             it.show(0, "one", "first")
@@ -144,9 +154,9 @@ class ToastTest {
         t.opened(OverKind.Sheet, nowPlaying = false, now = 50)
         assertFalse(t.bottom)
         assertEquals(ToastPlace.Top, t.place)
-        assertEquals(Curves.expOut6.at(0.5f), t.eased(50), 0.001f)
-        assertEquals(Curves.expOut6.at(0.7f), t.eased(50 + 70), 0.001f)
-        assertEquals(1f, t.eased(50 + 175), 0f)
+        assertEquals(0.5f, t.pos(50), 0.001f)
+        assertEquals(0.7f, t.pos(50 + 20), 0.001f)
+        assertEquals(1f, t.pos(50 + 50), 0f)
     }
 
     @Test

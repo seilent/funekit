@@ -18,6 +18,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFontFamilyResolver
@@ -41,6 +42,7 @@ import net.seilent.funekit.kit.touch.Tap
 import net.seilent.funekit.kit.touch.rememberListTouch
 import net.seilent.funekit.kit.touch.tapTarget
 import net.seilent.funekit.px
+import kotlin.math.roundToInt
 import kotlin.math.max
 
 private const val LATIN = 27
@@ -379,14 +381,16 @@ fun JumpGridOverlay(
     Box(modifier.pxSize(s.widthPx, s.heightPx).then(drag)) {
         Canvas(Modifier.pxSize(s.widthPx, s.heightPx)) {
             val t = frameAt
-            val v = overlay.jump(now())
+            val look = overlay.jumpLook(now())
+            val v = look.alpha
+            val dy = (look.dyU * sp).roundToInt().toFloat()
             val off = offset()
             if (v >= 1f) {
-                jumpGrid(g, ink, cells, s, off, t)
+                translate(0f, dy) { jumpGrid(g, ink, cells, s, off, t) }
             } else {
                 paint.alpha = v
                 drawContext.canvas.saveLayer(Rect(0f, 0f, size.width, size.height), paint)
-                jumpGrid(g, ink, cells, s, off, t)
+                translate(0f, dy) { jumpGrid(g, ink, cells, s, off, t) }
                 drawContext.canvas.restore()
             }
             if (band != null) navBand(s, band)
@@ -432,4 +436,25 @@ fun JumpGridOverlay(
             item { Box(Modifier.pxSize(s.widthPx, max(0, end - tops[Jump.rows]))) }
         }
     }
+}
+
+class JumpScroll(val from: Float, val to: Float, val start: Long) {
+    fun at(now: Long): Float {
+        val d = Tok.motion_jumpScroll
+        val t = if (d <= 0f) 1f else ((now - start) / d).coerceIn(0f, 1f)
+        return from + (to - from) * Curves.decel.at(t)
+    }
+
+    fun done(now: Long): Boolean = now - start >= Tok.motion_jumpScroll
+}
+
+fun jumpScroll(row: Int, pitchU: Float, posU: Float, limitU: Float, now: Long): JumpScroll {
+    val to = (row * pitchU - Tok.motion_jumpScrollRest).coerceIn(0f, max(0f, limitU))
+    val cut = Tok.motion_jumpScrollCut
+    val from = when {
+        to - posU > cut -> to - cut
+        posU - to > cut -> to + cut
+        else -> posU
+    }
+    return JumpScroll(from, to, now)
 }

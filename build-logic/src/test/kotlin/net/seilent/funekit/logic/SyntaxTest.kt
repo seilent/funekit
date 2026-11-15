@@ -396,17 +396,17 @@ class SyntaxTest {
         assertEquals(
             mapOf(
                 ("c1.txt" to "new") to 20, ("c3.txt" to "new") to 8, ("c4.txt" to "new") to 2,
-                ("c5.txt" to "old") to 7, ("c6.txt" to "old") to 8, ("c7.txt" to "old") to 15, ("c8.txt" to "old") to 1,
+                ("c5.txt" to "new") to 6, ("c6.txt" to "old") to 8, ("c7.txt" to "old") to 15, ("c8.txt" to "old") to 1,
                 ("c9.txt" to "old") to 43,
             ),
             counts,
         )
-        assertEquals(74, bridge.old.size)
-        assertEquals(30, bridge.new.size)
+        assertEquals(67, bridge.old.size)
+        assertEquals(36, bridge.new.size)
         assertEquals(178, bridge.changed.size)
         assertTrue(bridge.changed.containsAll(bridge.new))
-        val back = syntax.scan("kit/src/main/kotlin/A.kt", "package a\nval a = Tok.motion_sheet\n", emptySet(), HashSet(), bridge)
-        assertEquals(listOf("Tok.motion_sheet is bridged: read Old.motion_sheet"), back.map { it.what })
+        val back = syntax.scan("kit/src/main/kotlin/A.kt", "package a\nval a = Tok.motion_npDark\n", emptySet(), HashSet(), bridge)
+        assertEquals(listOf("Tok.motion_npDark is bridged: read Old.motion_npDark"), back.map { it.what })
         val tests = listOf("kit/src").flatMap { src ->
             File(repo, src).listFiles().orEmpty().filter { it.isDirectory && it.name.startsWith("test") }
                 .flatMap { File(it, "kotlin").walkTopDown().filter { f -> f.isFile && f.name.endsWith(".kt") }.toList() }

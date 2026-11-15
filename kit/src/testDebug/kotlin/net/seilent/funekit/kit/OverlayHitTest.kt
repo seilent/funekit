@@ -202,7 +202,7 @@ class OverlayHitTest {
     @Test
     fun aTapUnderATopToastGoingOutReachesThePage() {
         toast(ToastPlace.Top)
-        rule.mainClock.advanceTimeBy(350 + 3500 + 200)
+        rule.mainClock.advanceTimeBy(100 + 3500 + 100)
         tapNow(120f, 30f)
         assertEquals(0, toastTaps)
         assertEquals(1, under)

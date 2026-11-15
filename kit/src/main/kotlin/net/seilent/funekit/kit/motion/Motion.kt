@@ -34,6 +34,50 @@ class Leg(
 
 class Sheet(val scrim: Float, val dy: Float, val alpha: Float)
 
+class SheetLook(val rise: Float, val alpha: Float, val scrim: Float)
+
+class JumpLook(val dyU: Float, val alpha: Float, val page: Float)
+
+private fun prog(e: Long, d: Float): Float = if (d <= 0f) 1f else (e.toFloat() / d).coerceIn(0f, 1f)
+
+fun sheetIn(e: Long): SheetLook = SheetLook(
+    Curves.easeOut.at(prog(e, Tok.motion_sheet)),
+    Curves.easeOut.at(prog(e, Tok.motion_sheetFade)),
+    Curves.easeOut.at(prog(e, Tok.motion_sheetScrimIn)),
+)
+
+private fun share(t: Float, by: Float): Float = (t * by).toInt().toFloat()
+
+fun sheetOut(e: Long, from: SheetLook): SheetLook = SheetLook(
+    from.rise * (1 - prog(e, share(Tok.motion_sheetClose, from.rise))),
+    from.alpha * (1 - Curves.smoothStep.at(prog(e, share(Tok.motion_sheetCloseFade, from.alpha)))),
+    from.scrim * (1 - Curves.easeOut.at(prog(e, share(Tok.motion_sheetScrimOut, from.scrim)))),
+)
+
+fun sheetInMs(): Int = maxOf(Tok.motion_sheet, Tok.motion_sheetFade, Tok.motion_sheetScrimIn).toInt()
+
+fun sheetOutMs(from: SheetLook): Int =
+    maxOf(share(Tok.motion_sheetClose, from.rise), share(Tok.motion_sheetCloseFade, from.alpha), share(Tok.motion_sheetScrimOut, from.scrim)).toInt()
+
+fun jumpInMs(): Int = max(Tok.motion_jumpPageOut, Tok.motion_jumpInDelay + max(Tok.motion_jumpRiseIn, Tok.motion_jumpIn)).toInt()
+
+fun jumpOutMs(): Int = maxOf(Tok.motion_jumpCloseIn, Tok.motion_jumpOut, Tok.motion_jumpPageInDelay + Tok.motion_jumpPageIn).toInt()
+
+fun jumpIn(e: Long): JumpLook {
+    val r = e - Tok.motion_jumpInDelay.toLong()
+    return JumpLook(
+        (1 - Curves.easeOut.at(prog(r, Tok.motion_jumpRiseIn))) * Tok.jumpPitch,
+        Curves.easeOut.at(prog(r, Tok.motion_jumpIn)),
+        1 - Curves.expOut6.at(prog(e, Tok.motion_jumpPageOut)),
+    )
+}
+
+fun jumpOut(e: Long, from: JumpLook): JumpLook = JumpLook(
+    lerp(from.dyU, -Tok.motion_jumpCloseRise, Curves.easeOut.at(prog(e, Tok.motion_jumpCloseIn))),
+    from.alpha * (1 - Curves.cubicOut.at(prog(e, Tok.motion_jumpOut))),
+    lerp(from.page, 1f, prog(e - Tok.motion_jumpPageInDelay.toLong(), Tok.motion_jumpPageIn)),
+)
+
 class Modal(val scrim: Float, val alpha: Float, val scale: Float)
 
 enum class OverKind { Sheet, Dlg, Jump }
@@ -48,6 +92,9 @@ class Overlay(val kind: OverKind) {
     private var backMs = -1
     private var backFrom = 1f
     private var backO = 1f
+    private var sheetFrom = SheetLook(1f, 1f, 1f)
+    private var jumpFrom = JumpLook(0f, 1f, 0f)
+    var lead = 0L
 
     fun open(now: Long) {
         start = now
@@ -61,12 +108,12 @@ class Overlay(val kind: OverKind) {
     }
 
     fun dur(): Int {
+        if (kind == OverKind.Sheet) return if (closing) sheetOutMs(sheetFrom) else sheetInMs()
         if (closing && backMs >= 0) return backMs
         return when (kind) {
-            OverKind.Sheet -> Old.motion_sheet
-            OverKind.Dlg -> if (closing) Tok.motion_dialogHide else Tok.motion_dialog
-            OverKind.Jump -> if (closing) Old.motion_jumpOut else Old.motion_jumpIn
-        }.toInt()
+            OverKind.Dlg -> (if (closing) Tok.motion_dialogHide else Tok.motion_dialog).toInt()
+            else -> lead.toInt() + if (closing) jumpOutMs() else jumpInMs()
+        }
     }
 
     private fun progress(e: Long, d: Int): Float = if (d <= 0) 1f else (e.toFloat() / d).coerceIn(0f, 1f)
@@ -76,6 +123,13 @@ class Overlay(val kind: OverKind) {
         backMs = -1
         val e = now - start
         val d = dur()
+        if (kind == OverKind.Sheet) sheetFrom = if (e <= 0) SheetLook(0f, 0f, 0f) else if (e < d) sheetIn(e) else SheetLook(1f, 1f, 1f)
+        if (kind == OverKind.Jump) jumpFrom = if (e < d) jumpIn(e - lead) else JumpLook(0f, 1f, 0f)
+        if (kind == OverKind.Jump && e > 0) {
+            closing = true
+            start = now
+            return
+        }
         if (e <= 0) {
             backMs = 0
             backFrom = 0f
@@ -83,10 +137,7 @@ class Overlay(val kind: OverKind) {
         } else if (e < d) {
             val t = progress(e, d)
             when (kind) {
-                OverKind.Sheet -> {
-                    backFrom = Curves.decel.at(t)
-                    backMs = (Old.motion_sheet * backFrom).toInt()
-                }
+                OverKind.Sheet -> {}
                 OverKind.Dlg -> {
                     val hide = Tok.motion_dialogHide.toInt()
                     backO = Curves.pop.at(t)
@@ -97,10 +148,7 @@ class Overlay(val kind: OverKind) {
                         else -> hide - min(hide, (-hide / LOG_STEPS * log2(backO)).roundToInt())
                     }
                 }
-                OverKind.Jump -> {
-                    backFrom = t
-                    backMs = min(e, d.toLong()).toInt()
-                }
+                OverKind.Jump -> {}
             }
         }
         closing = true
@@ -117,10 +165,11 @@ class Overlay(val kind: OverKind) {
 
     fun moving(now: Long): Boolean = now - start < dur()
 
+    fun sheetLook(now: Long): SheetLook = if (closing) sheetOut(now - start, sheetFrom) else sheetIn(now - start)
+
     fun sheet(now: Long): Sheet {
-        val t = Curves.decel.at(progress(now - start, dur()))
-        val p = if (!closing) t else if (backMs >= 0) backFrom * (1 - t) else 1 - t
-        return Sheet(p * Tok.motion_sheetScrim, 1 - p, p)
+        val l = sheetLook(now)
+        return Sheet(l.scrim * Tok.motion_sheetScrim, 1 - l.rise, l.alpha)
     }
 
     fun dialog(now: Long): Modal {
@@ -132,10 +181,13 @@ class Overlay(val kind: OverKind) {
         return Modal(Tok.motion_dialogScrim * o, o, s)
     }
 
-    fun jump(now: Long): Float {
-        val t = progress(now - start, dur())
-        return if (!closing) t else if (backMs >= 0) backFrom * (1 - t) else 1 - t
+    fun jumpLook(now: Long): JumpLook {
+        if (!closing) return jumpIn(now - start - lead)
+        if (backMs >= 0) return JumpLook(0f, 0f, 1f)
+        return jumpOut(now - start - lead, jumpFrom)
     }
+
+    fun jump(now: Long): Float = jumpLook(now).alpha
 }
 
 class Pivot(val stripDx: Float, val stripAlpha: Float, val rowsDx: Float, val rowsAlpha: Float, val rowsIn: Boolean)

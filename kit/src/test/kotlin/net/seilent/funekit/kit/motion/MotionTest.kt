@@ -20,13 +20,12 @@ class MotionTest {
     }
 
     @Test
-    fun t12At150IsDecelOver380ms() {
-        val p = bezier(0.1, 0.9, 0.2, 1.0, 150.0 / 380)
+    fun t12At150RunsTheRiseFadeAndScrimOnTheirOwnLegs() {
         val s = Overlay(OverKind.Sheet).also { it.open(0) }.sheet(150)
-        assertEquals(0.55 * p, s.scrim.toDouble(), 0.001)
-        assertEquals(1 - p, s.dy.toDouble(), 0.001)
-        assertEquals(p, s.alpha.toDouble(), 0.001)
-        assertEquals(0.5149, s.scrim.toDouble(), 0.001)
+        assertEquals(0.55f * Curves.easeOut.at(150f / 288), s.scrim, 0.0001f)
+        assertEquals(1 - Curves.easeOut.at(150f / 264), s.dy, 0.0001f)
+        assertEquals(Curves.easeOut.at(150f / 196), s.alpha, 0.0001f)
+        assertEquals(288, Overlay(OverKind.Sheet).dur())
     }
 
     @Test
@@ -42,12 +41,22 @@ class MotionTest {
     }
 
     @Test
-    fun t14At150IsHalfWayLinearOver300ms() {
-        assertEquals(0.5f, Overlay(OverKind.Jump).also { it.open(0) }.jump(150), 0.0001f)
+    fun t14RisesAPitchAndFadesInAfterItsDelayAndClosesUpward() {
+        val o = Overlay(OverKind.Jump).also { it.open(0) }
+        assertEquals(206, o.dur())
+        val l = o.jumpLook(150)
+        assertEquals(Curves.easeOut.at(144f / 200), l.alpha, 0.0001f)
+        assertEquals((1 - Curves.easeOut.at(144f / 166)) * Tok.jumpPitch, l.dyU, 0.0001f)
+        assertEquals(0f, l.page, 0.0001f)
+        assertEquals(0f, o.jumpLook(6).alpha, 0f)
         val out = Overlay(OverKind.Jump)
         out.open(0)
         out.close(300)
-        assertEquals(0.5f, out.jump(390), 0.0001f)
+        assertEquals(191, out.dur())
+        assertEquals(1 - Curves.cubicOut.at(0.5f), out.jump(300 + 69), 0.0001f)
+        assertEquals(-86f * Curves.easeOut.at(0.5f), out.jumpLook(300 + 84).dyU, 0.0001f)
+        assertEquals(0f, out.jumpLook(300 + 86).page, 0.0001f)
+        assertEquals(0.5f, out.jumpLook(300 + 86 + 52).page, 0.01f)
     }
 
     @Test
@@ -267,21 +276,22 @@ class MotionTest {
     }
 
     @Test
-    fun aSheetClosedWhileOpeningRunsBackFromItsValue() {
-        val p = bezier(0.1, 0.9, 0.2, 1.0, 150.0 / 380)
+    fun aSheetClosedWhileOpeningRunsEachLegBackOnItsShare() {
+        val from = sheetIn(150)
         val o = Overlay(OverKind.Sheet)
         o.open(0)
         o.close(150)
-        assertEquals((380 * p).toInt(), o.dur())
-        assertEquals(p, o.sheet(150).alpha.toDouble(), 0.001)
-        val half = bezier(0.1, 0.9, 0.2, 1.0, 100.0 / (380 * p).toInt())
-        assertEquals(p * (1 - half), o.sheet(250).alpha.toDouble(), 0.001)
-        assertEquals(0.0, o.sheet(150 + (380 * p).toLong()).alpha.toDouble(), 0.001)
+        val fade = (188 * from.alpha).toInt()
+        assertEquals(maxOf((176 * from.rise).toInt(), fade, (220 * from.scrim).toInt()), o.dur())
+        assertEquals(from.alpha, o.sheet(150).alpha, 0.0001f)
+        assertEquals(from.alpha * (1 - Curves.smoothStep.at(50f / fade)), o.sheet(200).alpha, 0.0001f)
+        assertEquals(0f, o.sheet(150 + o.dur().toLong()).alpha, 0.0001f)
         val full = Overlay(OverKind.Sheet)
         full.open(0)
         full.close(400)
-        assertEquals(380, full.dur())
-        assertEquals(1 - bezier(0.1, 0.9, 0.2, 1.0, 150.0 / 380), full.sheet(550).alpha.toDouble(), 0.001)
+        assertEquals(220, full.dur())
+        assertEquals(0.5f, full.sheet(400 + 94).alpha, 0.0001f)
+        assertEquals(94f / 176, full.sheet(400 + 94).dy, 0.0001f)
     }
 
     @Test
@@ -306,19 +316,16 @@ class MotionTest {
     }
 
     @Test
-    fun aJumpGridClosedWhileOpeningReversesOverTheTimeRun() {
+    fun aJumpGridClosedWhileOpeningClosesFromItsLook() {
+        val from = jumpIn(100)
         val j = Overlay(OverKind.Jump)
         j.open(0)
-        j.close(150)
-        assertEquals(150, j.dur())
-        assertEquals(0.5f, j.jump(150), 0.0001f)
-        assertEquals(0.25f, j.jump(225), 0.0001f)
-        assertEquals(true, j.done(300))
-        val out = Overlay(OverKind.Jump)
-        out.open(0)
-        out.close(300)
-        assertEquals(180, out.dur())
-        assertEquals(0.5f, out.jump(390), 0.0001f)
+        j.close(100)
+        assertEquals(191, j.dur())
+        assertEquals(from.alpha, j.jump(100), 0.0001f)
+        assertEquals(from.dyU, j.jumpLook(100).dyU, 0.0001f)
+        assertEquals(from.alpha * (1 - Curves.cubicOut.at(0.5f)), j.jump(100 + 69), 0.0001f)
+        assertTrue(j.done(100 + 191))
     }
 
     @Test
