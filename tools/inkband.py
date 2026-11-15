@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -250,13 +251,73 @@ def check(regions_path, ref_dir, bg, rows, noref, residuals, unpeaked):
 
 def allowlist(path):
     out = {}
+    opens = {}
     if path is None:
-        return out
+        return out, opens
     for line in Path(path).read_text().splitlines():
+        words = line.split()
+        if len(words) >= 2 and words[1] == "open":
+            opens.setdefault(words[0], []).append(open_line(words))
+            continue
         parts = line.split(maxsplit=1)
         if len(parts) == 2:
             out[parts[0]] = parts[1]
-    return out
+    return out, opens
+
+
+def open_line(words):
+    at = next((i for i in range(3, len(words)) if re.fullmatch(r"stack[0-9]+", words[i])), None)
+    if at is None or at + 2 >= len(words):
+        return {"part": " ".join(words[2:]), "stack": "-", "entries": [], "refused": "not <board>/<kind> open <part> stack<N> <regions> <reason>"}
+    entries = words[at + 1].split(",")
+    refused = "an empty region entry" if "" in entries else None
+    return {"part": " ".join(words[2:at]), "stack": words[at], "entries": entries, "refused": refused}
+
+
+def landed_stacks(path):
+    if path is None:
+        return set()
+    return {line.strip() for line in Path(path).read_text().splitlines() if line.strip()}
+
+
+def covers(entry, name):
+    return name.startswith(entry[:-1]) if entry.endswith("*") else name == entry
+
+
+def judge(opens, rows, landed, k3):
+    names = {}
+    for r in rows:
+        if r[3] == "MISS":
+            names.setdefault(r[0], []).append(r[1])
+    excused = []
+    stale = []
+    for pair, lines in opens.items():
+        for o in lines:
+            head = f"{pair} open {o['part']} {o['stack']}"
+            why = o["refused"]
+            if why is None and k3 is None:
+                why = "no open line is taken without --k3"
+            if why is None and any(covers(e, "(residual)") for e in o["entries"]):
+                why = "(residual) may not be listed"
+            if why is None and any(covers(e, "(tile)") for e in o["entries"]):
+                why = "(tile) may not be listed"
+            if why is None and o["stack"] in landed:
+                why = f"{o['stack']} is in k3.txt"
+            if why is not None:
+                stale.append(f"  {head}: {why}")
+                continue
+            for e in o["entries"]:
+                if not any(covers(e, n) for n in names.get(pair, [])):
+                    stale.append(f"  {head}: {e} matches no miss")
+            took = []
+            for r in rows:
+                if r[0] == pair and r[3] == "MISS" and any(covers(e, r[1]) for e in o["entries"]):
+                    r[3] = "open"
+                    r[7] = "; ".join(x for x in (f"open: {o['part']} {o['stack']}", r[7]) if x)
+                    took.append(r[1])
+            if took:
+                excused.append(f"  {pair} {o['part']} {o['stack']}: {', '.join(took)}")
+    return excused, stale
 
 
 def main():
@@ -264,11 +325,13 @@ def main():
     p.add_argument("--ref", required=True, help="funeOS shots, <ref>/<board>/<kind>.png")
     p.add_argument("--tokens", required=True, help="funeOS tokens.txt with color.bg")
     p.add_argument("--report", required=True, help="report file to write")
-    p.add_argument("--allow", help="lines of <board>/<kind> <reason> for pairs with no gated region and tiles with no reference")
+    p.add_argument("--allow", help="lines of <board>/<kind> <reason> for pairs with no gated region and tiles with no reference, and <board>/<kind> open <part> stack<N> <regions> <reason> for misses left open to a K3 stack")
+    p.add_argument("--k3", help="landed K3 stack ids, one per line; open lines are taken only with it")
     p.add_argument("sheets", nargs="+", help="directories searched for <tile>.regions.json")
     args = p.parse_args()
     bg = token_color(args.tokens, "color.bg")
-    allowed = allowlist(args.allow)
+    allowed, opens = allowlist(args.allow)
+    landed = landed_stacks(args.k3)
     rows = []
     noref = []
     pairs = []
@@ -279,11 +342,12 @@ def main():
             label = check(f, args.ref, bg, rows, noref, residuals, unpeaked)
             if label:
                 pairs.append(label)
+    excused, open_stale = judge(opens, rows, landed, args.k3)
     head = ["pair", "region", "kind", "result", "funeplayer x0,y0,x1,y1", "funeOS x0,y0,x1,y1", "d x0,y0,x1,y1", "note"]
     table = [head] + rows
     widths = [max(len(str(r[i])) for r in table) for i in range(len(head))]
     lines = ["  ".join(str(c).ljust(widths[i]) for i, c in enumerate(r)).rstrip() for r in table]
-    gated_pairs = {r[0] for r in rows if r[3] in ("ok", "MISS") and r[2] != "residual"}
+    gated_pairs = {r[0] for r in rows if r[3] in ("ok", "MISS", "open") and r[2] != "residual"}
     ungated = [x for x in pairs if x not in gated_pairs]
     listed = [f"residual pass per pair: {len(residuals)}"] + residuals
     listed += [f"gated on edges only, the peak off: {len(unpeaked)}"] + unpeaked
@@ -299,19 +363,25 @@ def main():
     if stale:
         listed.append(f"allowlist entries that match nothing: {len(stale)}")
         listed += [f"  {n}" for n in stale]
-    masked = sum(1 for r in rows if r[3] in ("ok", "MISS", "text") and "ground masks" in r[7])
+    opened = sum(1 for r in rows if r[3] == "open")
+    listed.append(f"open: {opened} regions in {len({r[0] for r in rows if r[3] == 'open'})} pairs")
+    listed += excused
+    if open_stale:
+        listed.append(f"stale open entries: {len(open_stale)}")
+        listed += open_stale
+    masked = sum(1 for r in rows if r[3] in ("ok", "MISS", "open", "text") and "ground masks" in r[7])
     misses = sum(1 for r in rows if r[3] == "MISS")
-    gated = sum(1 for r in rows if r[3] in ("ok", "MISS"))
+    gated = sum(1 for r in rows if r[3] in ("ok", "MISS", "open"))
     texts = sum(1 for r in rows if r[3] == "text")
     excluded = sum(1 for r in rows if r[3] == "excluded")
-    summary = f"inkband: {len(pairs)} pairs, {gated} gated regions, {misses} misses, {texts} text regions reported, {excluded} excluded, {masked} measured with ground masked rows, {len(unpeaked)} gated on edges only, {unlisted} unlisted, {len(stale)} stale allowlist entries"
+    summary = f"inkband: {len(pairs)} pairs, {gated} gated regions, {misses} misses, {opened} open, {texts} text regions reported, {excluded} excluded, {masked} measured with ground masked rows, {len(unpeaked)} gated on edges only, {unlisted} unlisted, {len(stale)} stale allowlist entries, {len(open_stale)} stale open entries"
     if not pairs:
         summary += f"; no tile has a reference under {args.ref}"
     out = "\n".join(lines + [""] + listed + ["", summary]) + "\n"
     Path(args.report).parent.mkdir(parents=True, exist_ok=True)
     Path(args.report).write_text(out)
     sys.stdout.write(out)
-    return 1 if misses or unlisted or stale or not pairs else 0
+    return 1 if misses or unlisted or stale or open_stale or not pairs else 0
 
 
 if __name__ == "__main__":

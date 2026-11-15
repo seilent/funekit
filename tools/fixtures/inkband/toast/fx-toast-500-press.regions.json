@@ -1,0 +1,86 @@
+{
+ "tile": "fx-toast-500-press.png",
+ "board": "fx",
+ "size": [
+  48,
+  16
+ ],
+ "tolerance": 1,
+ "margin": 2,
+ "bands": {
+  "status": [],
+  "nav": []
+ },
+ "residual": {
+  "on": false,
+  "why": "fixture"
+ },
+ "regions": [
+  {
+   "name": "toast.strip",
+   "kind": "tile",
+   "box": [
+    2,
+    6,
+    6,
+    10
+   ],
+   "window": [
+    0,
+    4,
+    8,
+    12
+   ],
+   "color": "#ffffff",
+   "alpha": 1.0,
+   "ref": null,
+   "exclude": null,
+   "hidden": false,
+   "band": null
+  },
+  {
+   "name": "toast.text",
+   "kind": "tile",
+   "box": [
+    10,
+    6,
+    14,
+    10
+   ],
+   "window": [
+    8,
+    4,
+    16,
+    12
+   ],
+   "color": "#ffffff",
+   "alpha": 1.0,
+   "ref": null,
+   "exclude": null,
+   "hidden": false,
+   "band": null
+  },
+  {
+   "name": "row2.tile",
+   "kind": "tile",
+   "box": [
+    18,
+    6,
+    22,
+    10
+   ],
+   "window": [
+    16,
+    4,
+    24,
+    12
+   ],
+   "color": "#ffffff",
+   "alpha": 1.0,
+   "ref": null,
+   "exclude": null,
+   "hidden": false,
+   "band": null
+  }
+ ]
+}

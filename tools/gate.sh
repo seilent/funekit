@@ -61,11 +61,13 @@ gradle_leg() {
 }
 
 shots_leg() {
-    local rc=0 ink=0
+    local unit=0 rc=0 ink=0
+    python3 tools/inkband_test.py || unit=$?
     gradlew "$root" :kit:testDebugUnitTest --tests '*Sheet*' --rerun || rc=$?
     python3 tools/inkband.py --ref "$FUNEOS_REF" --tokens tokens/funeos/player/ui/tokens.txt --allow tools/inkband-allow.txt \
-        --report kit/build/sheets/inkband.txt kit/build/sheets || ink=$?
-    return $((rc > ink ? rc : ink))
+        --k3 k3.txt --report kit/build/sheets/inkband.txt kit/build/sheets || ink=$?
+    rc=$((rc > ink ? rc : ink))
+    return $((rc > unit ? rc : unit))
 }
 
 probe_one() {

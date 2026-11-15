@@ -1,0 +1,42 @@
+{
+ "tile": "fx-resid.png",
+ "board": "fx",
+ "size": [
+  48,
+  16
+ ],
+ "tolerance": 1,
+ "margin": 2,
+ "bands": {
+  "status": [],
+  "nav": []
+ },
+ "residual": {
+  "on": true,
+  "why": "fixture"
+ },
+ "regions": [
+  {
+   "name": "row1.tile",
+   "kind": "tile",
+   "box": [
+    2,
+    6,
+    6,
+    10
+   ],
+   "window": [
+    0,
+    4,
+    8,
+    12
+   ],
+   "color": "#ffffff",
+   "alpha": 1.0,
+   "ref": null,
+   "exclude": null,
+   "hidden": false,
+   "band": null
+  }
+ ]
+}
