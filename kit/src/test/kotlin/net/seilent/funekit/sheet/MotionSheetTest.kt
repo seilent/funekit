@@ -123,6 +123,7 @@ class MotionSheetTest {
         val rules: List<Pair<String, String>>,
         val frames: Boolean,
         val quiet: String,
+        val kindRules: Map<String, List<Pair<String, String>>> = emptyMap(),
         val paint: DrawScope.(Long, Regions?) -> Unit,
     )
 
@@ -142,6 +143,7 @@ class MotionSheetTest {
         private val songsRest = KitPages.songs.at(-1, -1)
         private val songsEnter = KitPages.songs.at(0, -1)
         private val songsPress = KitPages.songs
+        private val songsSheet = KitPages.songs.at(SHEET_ROW, -1)
         private val np = Page("np", "now playing", "", emptyList(), -1, emptyList(), -1, -1)
 
         private fun style(r: Role, ppu: Float = s.stdPpu) = roleStyle(r, s, unitDensity, KitInk.white, ppu = ppu)
@@ -357,20 +359,25 @@ class MotionSheetTest {
             return Triple(m, ink, plan)
         }
 
-        private fun overlayCase(name: String, note: String, kind: OverKind, base: Page?, title: String, items: List<String>, close: Boolean, shots: Map<Long, String>, rules: List<Pair<String, String>>): Case {
+        private fun overlayCase(name: String, note: String, kind: OverKind, base: Page?, title: String, items: List<String>, close: Boolean, shots: Map<Long, String>, rules: List<Pair<String, String>>, kindRules: Map<String, List<Pair<String, String>>> = emptyMap()): Case {
             val st = if (base == null) stack() else stack(base)
             val (m, ink, plan) = menuOf(if (kind == OverKind.Sheet) MenuForm.Sheet else MenuForm.Dlg, title, items)
             val o = Overlay(kind)
             val acts = listOf(Act(0L) { st.open(o) }) + if (close) listOf(Act(CLOSE_AT) { st.close() }) else emptyList()
             val from = if (close) CLOSE_AT else 0L
             val label = if (kind == OverKind.Sheet) "sheet" else "dialog"
-            return Case(name, note, st, acts, from, { from + o.dur() }, shots, rules, true, OVERLAY_QUIET) { t, rec ->
+            return Case(name, note, st, acts, from, { from + o.dur() }, shots, rules, true, OVERLAY_QUIET, kindRules) { t, rec ->
                 val open = st.overlay
                 if (open == null) {
                     world(st, t, rec)
                 } else {
                     val scrim = if (open.kind == OverKind.Sheet) open.sheet(t).scrim else open.dialog(t).scrim
                     if (rec == null) world(st, t, null) else rec.fade(1 - scrim) { world(st, t, rec) }
+                    if (rec != null && open.kind == OverKind.Sheet) {
+                        val sh = open.sheet(t)
+                        val top = m.bottomPx - plan.panelH + (sh.dy * plan.panelH).roundToInt()
+                        if (sh.alpha > 0f && top < h) rec.shade(Box(0f, top.toFloat(), w.toFloat(), h.toFloat()), SHEET_PANEL)
+                    }
                     menuLayer(m, ink, plan, open, s, t, accent, false, Paint())
                     rec?.menuLayer(label, m, ink, plan, open, s, t, w, h, accent, false)
                 }
@@ -492,6 +499,9 @@ class MotionSheetTest {
                 t5Case("t5-off", "the same pivot switch under ACCENT OFF at the series times", artists, false, series("t5", T5_OFF)),
                 t5Case("t5-songs", "pivot switch from albums to songs with the # divider focused, as main.cpp t5:300:songs", songsEnter, false, mapOf(300L to "t5-300-songs")),
                 moveCase("t7", "the songs hub to now playing, page form", t7) { t7.push(np, MoveKind.T7) },
+                overlayCase("t12-open", "the song sheet of the third song row over the songs hub, as main.cpp t12 (three knob steps from the # divider, open_sheet 400 ms after the last), with funeOS v0.4.2's eight song verbs (app.cpp library_sheet)", OverKind.Sheet, songsSheet, songsSheet.rows[SHEET_ROW].primary, SONG_VERBS, false, mapOf(150L to "t12-150", 500L to "t12-500"), emptyList(), if (board == "a105") emptyMap() else mapOf("t12-150" to listOf("sheet.thumb" to THUMB_565))),
+                overlayCase("t12-open-off", "the same song sheet under ACCENT OFF at the series times", OverKind.Sheet, songsSheet, songsSheet.rows[SHEET_ROW].primary, SONG_VERBS, false, series("t12", T12_OFF), emptyList()),
+                overlayCase("t12-close", "the same sheet closing, as main.cpp t12 close (the close 1000 ms after the open, the shot times after the close)", OverKind.Sheet, songsSheet, songsSheet.rows[SHEET_ROW].primary, SONG_VERBS, true, series("t12", T12_CLOSE, "-close").mapKeys { CLOSE_AT + it.key }, emptyList()),
                 overlayCase("t13-open", "the power dialog over home, as main.cpp t13", OverKind.Dlg, null, POWER, POWER_ITEMS, false, mapOf(120L to "t13-120", 400L to "t13-400"), listOf("home.item" to HOME_TEXT, "home.watermark" to HOME_TEXT, "dialog.item" to POWER_TEXT)),
                 overlayCase("t13-close", "the power dialog closing 600 ms after the open, as main.cpp t13x", OverKind.Dlg, null, POWER, POWER_ITEMS, true, mapOf(CLOSE_AT + T13X to "t13x-80"), listOf("home.item" to HOME_TEXT, "home.watermark" to HOME_TEXT, "dialog.item" to POWER_TEXT)),
                 jumpCase("t14-songs", "the jump grid open over the songs hub, as main.cpp t14:500:songs", songsRest, false, false, mapOf(500L to "t14-500-songs"), emptyList(), KitPages.jumpAvail, null),
@@ -540,7 +550,7 @@ class MotionSheetTest {
             fun shoot(t: Long) {
                 val kind = shots[t]
                 if (kind == null && t !in frames) return
-                val rec = kind?.let { Regions(board, w, h, s, c.rules).also { it.residualWhy = c.quiet } }
+                val rec = kind?.let { Regions(board, w, h, s, c.rules + c.kindRules[kind].orEmpty()).also { it.residualWhy = c.quiet } }
                 val bmp = paint(c, t, rec)
                 if (t in frames) {
                     val f = "f%04d.png".format(names.size)
@@ -597,6 +607,14 @@ class MotionSheetTest {
         private const val SERIES = "rowpress-100-hubsongs-down-series-accentoff"
         private val T5_OFF = listOf(0L, 17L, 33L, 50L, 67L, 83L, 100L, 117L, 133L, 150L, 167L, 175L, 183L, 200L, 217L, 233L, 236L, 250L, 267L, 283L, 300L, 317L, 333L, 350L)
         private val T5_STATIC = listOf(175L, 236L)
+        private val T12_OFF = listOf(0L, 17L, 33L, 50L, 67L, 83L, 100L, 117L, 133L, 150L, 167L, 183L, 196L, 200L, 217L, 233L, 250L, 264L, 267L, 283L, 288L, 300L, 317L, 333L, 350L, 367L, 383L, 400L)
+        private val T12_STATIC = listOf(196L, 264L, 288L)
+        private val T12_CLOSE = listOf(0L, 176L, 183L, 188L, 217L, 220L, 450L)
+        private val T12_CLOSE_R1 = listOf(0L, 176L, 188L, 220L)
+        private const val SHEET_ROW = 3
+        private val SONG_VERBS = listOf("play", "play next", "add to now playing", "add to playlist", "pin to quickplay", "info", "go to album", "delete")
+        private const val THUMB_565 = "the R1 and V1 references are RGB565: under the panel 150 ms into its fade the ground beside the thumb reads (24, 20, 16), its blue cut from about 22 to 16, beside the thumb's (66, 65, 66), so funeOS's peak reads 50 where the 8 bit pixels give the kit's 44; at rest the panel reads (24, 24, 24) and the thumb gates in t12-196-accentoff"
+        private const val SHEET_PANEL = "under the sheet panel (color.bgElevated) where it is drawn, on both sides"
 
         private fun series(kind: String, times: List<Long>, tail: String = "") = times.associateWith { "$kind-$it$tail$ACCENT_OFF" }
 
@@ -606,9 +624,10 @@ class MotionSheetTest {
             "rowpress-0-hubsongs-down", "rowpress-0-hubsongs-tap", "rowpress-0-hubsongs-up", HELD, SERIES,
             "t5-100", "t5-250", "t5-450", "t5-700", "t5-1500", "t5-300-songs",
             "t13-120", "t13-400", "t13x-80", "t14-500-songs", "t14-150-songs", "t14x-120-songs",
-        ) + names(series("t5", T5_OFF))
-        private val R1_KINDS = setOf(HELD, SERIES) + names(series("t5", T5_STATIC))
-        private val V1_KINDS = setOf(HELD, SERIES) + names(series("t5", T5_STATIC))
+            "t12-150", "t12-500",
+        ) + names(series("t5", T5_OFF)) + names(series("t12", T12_OFF)) + names(series("t12", T12_CLOSE, "-close"))
+        private val R1_KINDS = setOf(HELD, SERIES, "t12-150", "t12-500") + names(series("t5", T5_STATIC)) + names(series("t12", T12_STATIC)) + names(series("t12", T12_CLOSE_R1, "-close"))
+        private val V1_KINDS = setOf(HELD, SERIES, "t12-150", "t12-500") + names(series("t5", T5_STATIC)) + names(series("t12", T12_STATIC)) + names(series("t12", T12_CLOSE, "-close"))
         private const val FOLDER = "motion"
         private const val FPS = 40
         private const val STEP = 1000L / FPS
