@@ -341,6 +341,23 @@ class QuickplayTest {
     }
 
     @Test
+    fun aKeyFocusDropChangesTheLookAndItsRevision() {
+        val l = QpLayout(v1, qpTiles(QpData(null, items(4), emptyList(), emptyList())), 3)
+        val st = QuickplayState()
+        st.keyMove(1, l)
+        val keyed = st.look(l, 0L)
+        assertTrue(keyed.key)
+        st.dropKeyFocus()
+        val dropped = st.look(l, 0L)
+        assertFalse(dropped.key)
+        assertTrue(dropped.revision > keyed.revision)
+        assertNotEquals(keyed, dropped)
+        assertEquals(keyed.focus, dropped.focus)
+        st.dropKeyFocus()
+        assertEquals(dropped, st.look(l, 0L))
+    }
+
+    @Test
     fun aHiddenFocusKeepsTheFocusIndexAndMarksTheLookHidden() {
         val l = QpLayout(v1, qpTiles(QpData(null, items(4), emptyList(), emptyList())), 3)
         val st = QuickplayState()
