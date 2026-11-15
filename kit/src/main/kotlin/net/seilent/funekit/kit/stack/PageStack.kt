@@ -29,7 +29,7 @@ enum class Phase { Rest, Exit, Enter }
 
 enum class PageKind { Grid, Hub, Plain }
 
-class Turn<P : Any>(val kind: MoveKind, val from: P?, val to: P?, val popping: Boolean, val retarget: Boolean = false, val at: Long = 0L, val row: Int = -1, val album: Long = -1L)
+class Turn<P : Any>(val kind: MoveKind, val from: P?, val to: P?, val popping: Boolean, val retarget: Boolean = false, val at: Long = 0L, val row: Int = -1, val album: Long = -1L, val morph: Boolean = true)
 
 class PageStack<P : Any>(
     var forms: MoveForms,
@@ -230,7 +230,7 @@ class PageStack<P : Any>(
         dropOverlay()
         if (phase != Phase.Rest) land(now)
         if (pages.isEmpty()) return@ask
-        start(Turn(kind, top, null, popping = true), now, retarget = false)
+        start(Turn(kind, top, null, popping = true, morph = false), now, retarget = false)
     }
 
     fun touch() {
@@ -283,7 +283,7 @@ class PageStack<P : Any>(
         if (!from.popping) from.to?.let(enter)
         seq++
         swapHeld = false
-        val t = Turn(from.kind, from.from, from.to, from.popping, retarget, now, from.row, from.album)
+        val t = Turn(from.kind, from.from, from.to, from.popping, retarget, now, from.row, from.album, from.morph)
         turn = t
         started(t)
         starting(t)
@@ -376,7 +376,7 @@ class PageStack<P : Any>(
         waiting = false
         move.reverse(now)
         turn?.to?.let { gone += it }
-        turn = turn?.let { Turn(it.kind, it.to, it.from, true, it.retarget, it.at) }
+        turn = turn?.let { Turn(it.kind, it.to, it.from, true, it.retarget, it.at, morph = it.morph) }
         phase = Phase.Enter
     }
 

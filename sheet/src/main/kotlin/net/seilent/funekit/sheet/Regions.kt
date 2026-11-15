@@ -377,25 +377,20 @@ class Regions(
         if (st.y1 > 0) {
             val focused = g.focus == Jump.SEARCH
             val ba = if (focused) Tok.alpha_full else Tok.alpha_low
-            zoom(g.press.draw(Jump.SEARCH, now), (st.x0 + st.x1) / 2f, (st.y0 + st.y1) / 2f) {
-                edges("$name.search", Kind.Tile, st, KitInk.white, ba)
-                val c = Offset(((st.x0 + st.x1) / 2).toFloat(), ((st.y0 + st.y1) / 2).toFloat())
-                glyphs("$name.search.glyph", listOf(Glyphs.searchRing, Glyphs.searchHandle), c, px(Tok.jumpSearchGlyph, sp).toFloat(), Roles.letterGlyph.alpha)
-            }
+            edges("$name.search", Kind.Tile, st, KitInk.white, ba)
+            val c = Offset(((st.x0 + st.x1) / 2).toFloat(), ((st.y0 + st.y1) / 2).toFloat())
+            glyphs("$name.search.glyph", listOf(Glyphs.searchRing, Glyphs.searchHandle), c, px(Tok.jumpSearchGlyph, sp).toFloat(), Roles.letterGlyph.alpha)
         }
         for (i in 0 until Section.count) {
             val t = cells.at(Jump.slotOf(i), off)
             if (t.y1 <= 0 || t.y0 >= h) continue
             val focused = g.focus == i
             val ba = if (focused) Tok.alpha_full else Tok.alpha_low
-            val z = g.press.draw(i, now)
-            zoom(z, (t.x0 + t.x1) / 2f, (t.y0 + t.y1) / 2f) {
-                if (z != 1f || g.avail[i]) edges("$name.letter$i", Kind.Tile, t, KitInk.white, ba)
-                clip(t.x0.toFloat(), t.y0.toFloat(), t.x1.toFloat(), t.y1.toFloat()) {
-                    val l = ink.letters[i]
-                    val x = (t.x1 - px(Tok.jumpLetterInsetX, sp)) - l.width
-                    word("$name.letter$i.text", l, x, (t.y1 - px(Tok.jumpLetterInsetBaseline, sp)).toFloat(), if (g.avail[i]) Roles.jumpCell.alpha else Tok.jump_emptyAlpha)
-                }
+            if (g.avail[i]) edges("$name.letter$i", Kind.Tile, t, KitInk.white, ba)
+            clip(t.x0.toFloat(), t.y0.toFloat(), t.x1.toFloat(), t.y1.toFloat()) {
+                val l = ink.letters[i]
+                val x = (t.x1 - px(Tok.jumpLetterInsetX, sp)) - l.width
+                word("$name.letter$i.text", l, x, (t.y1 - px(Tok.jumpLetterInsetBaseline, sp)).toFloat(), if (g.avail[i]) Roles.jumpCell.alpha else Tok.jump_emptyAlpha)
             }
         }
         jumpThumb(g, s, off)?.let {

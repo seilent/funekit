@@ -458,16 +458,6 @@ class Press {
         return litShown
     }
 
-    fun show(now: Float) {
-        draw(now)
-    }
-
-    fun factor(): Float = factorOf(shown)
-
-    fun factorAt(now: Float): Float = factorOf(step(now))
-
-    fun drawn(now: Float): Float = draw(now)
-
     fun rest(now: Float): Boolean = !moving(now) && scale(now) == 1f
 
     fun moving(now: Float): Boolean {

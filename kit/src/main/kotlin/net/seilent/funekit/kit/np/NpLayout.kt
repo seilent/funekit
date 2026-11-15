@@ -2,10 +2,14 @@ package net.seilent.funekit.kit.np
 
 import net.seilent.funekit.Roles
 import net.seilent.funekit.Scale
-import net.seilent.funekit.gen.Old
 import net.seilent.funekit.gen.Tok
+import net.seilent.funekit.keptText
+import net.seilent.funekit.kit.Metrics
+import net.seilent.funekit.kit.motion.Part
 import net.seilent.funekit.kit.pen64
+import net.seilent.funekit.kit.rolePx
 import net.seilent.funekit.px
+import net.seilent.funekit.textPx
 import kotlin.math.max
 import kotlin.math.min
 
@@ -15,6 +19,7 @@ const val NP_MARK = 4
 const val NP_PRESSES = 5
 const val NP_HEART = NP_RINGS - 1
 private const val HALF = 2f
+private const val THIRD = 3f
 
 enum class NpRingPlace { AboveBar, Units }
 
@@ -44,8 +49,6 @@ class NpLayout(val s: Scale, place: NpRingPlace = NpRingPlace.AboveBar) {
     val artSide: Int = px(b.npArt, p)
     val artX: Int = px(Tok.npArtX, p)
     val artY: Int = px(b.npArtTop, p)
-    val artOx: Int = (artSide * Old.motion_trackArtOriginX).toInt()
-    val artOy: Int = (artSide * Old.motion_trackArtOriginY).toInt()
     val btGlyph: Int = px(Tok.npBtGlyph, p)
 
     val bar: NpRect = run {
@@ -133,6 +136,68 @@ class NpLayout(val s: Scale, place: NpRingPlace = NpRingPlace.AboveBar) {
     fun seekAt(x: Float, durationMs: Long): Long {
         val c = x.coerceIn(Tok.npArtX, Tok.npArtX + b.npArt)
         return (durationMs * ((c - Tok.npArtX) / b.npArt)).toLong()
+    }
+
+    val ringRect: NpRect = run {
+        val d = px(Tok.npBackRing, p)
+        val r = px(Tok.npBackRing / HALF, p)
+        val side = d + r - d / HALF.toInt()
+        val x0 = px(Tok.npBackRingX + Tok.npBackRing / HALF, p) - r
+        val y0 = px(Tok.npBackRingY + Tok.npBackRing / HALF, p) - r
+        NpRect(x0, y0, x0 + side, y0 + side)
+    }
+
+    fun partRects(variant: Boolean, lyrics: Boolean): Map<Part, NpRect> {
+        val w = s.widthPx
+        val h = s.heightPx
+        val half = HALF.toInt()
+        val ap = rolePx(Roles.npViewArtist, s, p)
+        val lp = rolePx(Roles.npViewAlbum, s, p)
+        var top = artistY - Metrics.ascent(ap)
+        if (variant) top = min(top, fromY - Metrics.ascent(rolePx(keptText(Roles.sectionLabel, s), s, p)))
+        val mid = (artistY + Metrics.descent(ap) + albumY - Metrics.ascent(lp) + 1) / half
+        var last = 0
+        fun next(v: Int): Int {
+            last = min(max(v, last), h)
+            return last
+        }
+        val eTop = next(top)
+        val eMid = next(mid)
+        val eArt = next(artY)
+        val eBar0 = next(bar.y0)
+        val eBar1 = next(bar.y1)
+        val eTime = next(px((b.npProgressY + (if (s.large) Tok.npTimeBaselineLarge else Tok.npTimeBaseline) + titleTopU) / HALF, p))
+        val eTitle = next(px(b.npTitleY + Tok.npNextDrop / THIRD, p))
+        val eRing = next(px(ringYU - Tok.npRing / HALF - Tok.npRingStroke, p))
+        val eEnd = next(h)
+        fun row(y0: Int, y1: Int) = NpRect(0, y0, w, y1)
+        val tx = artX + artSide / half
+        val rx = px((Tok.npRingCx0 + Tok.npRingCx1) / HALF, p)
+        val st = px(Tok.npStatusTop, p)
+        val sh = px(Tok.npStatusHeight, p)
+        val tp = textPx(Tok.npStatusText, p, b.minTextPx)
+        val sb = st + (sh - Metrics.ascent(tp) - Metrics.descent(tp)) / half + Metrics.ascent(tp)
+        val none = NpRect(0, 0, 0, 0)
+        val out = mutableMapOf(
+            Part.NpStatus to NpRect(0, 0, w, min(max(st + sh, sb + Metrics.descent(tp)), eTop)),
+            Part.NpArtist to none, Part.NpAlbum to none, Part.NpIn to none, Part.NpBar to none, Part.NpTimeL to none,
+            Part.NpTimeR to none, Part.NpTitle to none, Part.NpNext to none,
+            Part.NpShuffle to NpRect(0, eRing, rx, eEnd),
+            Part.NpRings to NpRect(rx, eRing, w, eEnd),
+        )
+        if (lyrics) {
+            out[Part.NpTitle] = NpRect(0, eTop, w, eRing)
+            return out
+        }
+        out[Part.NpArtist] = row(eTop, eMid)
+        out[Part.NpAlbum] = row(eMid, eArt)
+        out[Part.NpIn] = row(eArt, eBar0)
+        out[Part.NpBar] = row(eBar0, eBar1)
+        out[Part.NpTimeL] = NpRect(0, eBar1, tx, eTime)
+        out[Part.NpTimeR] = NpRect(tx, eBar1, w, eTime)
+        out[Part.NpTitle] = row(eTime, eTitle)
+        out[Part.NpNext] = row(eTitle, eRing)
+        return out
     }
 
 }

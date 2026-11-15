@@ -62,16 +62,6 @@ class HomeInk(val s: Scale, val keys: List<HomeEntry>, val names: List<Word>, va
 
     fun rect(i: Int): Edges = rects[i]
 
-    fun npBands(off: Float): List<Edges> {
-        val sp = s.stdPpu
-        val r = px(Tok.homeRingSize, sp) / HALF + 1
-        val cy = px(Tok.homeRingY - off, sp)
-        return keys.indices.map { i ->
-            val e = itemRect(this, i, x64, px(homeBaseline(i) - off, sp), s)
-            if (keys[i].ring) Edges(0, minOf(e.y0, cy - r), s.widthPx, maxOf(e.y1, cy + r)) else Edges(0, e.y0, s.widthPx, e.y1)
-        }
-    }
-
     fun glowText(i: Int): List<GlowText> = glowNames[i]
 }
 

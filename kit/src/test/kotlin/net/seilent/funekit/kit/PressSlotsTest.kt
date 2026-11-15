@@ -11,14 +11,14 @@ class PressSlotsTest {
     fun aSecondPressLetsTheFirstReturnAndAThirdSnapsIt() {
         val p = PressSlots()
         p.down(1, 0)
-        assertEquals(0.96f, p.draw(1, 100), 0.001f)
+        assertEquals(0.96f, p.scale(1, 100), 0.001f)
         p.down(2, 100)
-        val back = p.draw(1, 150)
+        val back = p.scale(1, 150)
         assertTrue("returning $back", back > 0.96f && back < 1f)
-        assertEquals(0.98f, p.draw(2, 150), 0.0026f)
+        assertEquals(0.98f, p.scale(2, 150), 0.0026f)
         p.down(3, 150)
-        assertEquals(1f, p.draw(1, 150), 0f)
-        assertTrue(p.draw(2, 160) < 1f)
+        assertEquals(1f, p.scale(1, 150), 0f)
+        assertTrue(p.scale(2, 160) < 1f)
     }
 
     @Test
@@ -26,22 +26,22 @@ class PressSlotsTest {
         val p = PressSlots()
         p.keyDown(4, true, 0)
         p.focus(5, true, 50)
-        val back = p.draw(4, 100)
+        val back = p.scale(4, 100)
         assertTrue("returning $back", back > 0.96f && back < 1f)
-        assertEquals(1f, p.draw(7, 50), 0f)
-        assertTrue(p.draw(5, 150) < 1f)
+        assertEquals(1f, p.scale(7, 50), 0f)
+        assertTrue(p.scale(5, 150) < 1f)
         p.keyUp(150)
-        assertEquals(1f, p.draw(5, 400), 0f)
+        assertEquals(1f, p.scale(5, 400), 0f)
     }
 
     @Test
-    fun aSlotThatIsNeverDrawnAgainClearsStaleAfterOneShow() {
+    fun aSlotThatIsNeverDrawnAgainClearsStaleAfterOneLook() {
         val p = PressSlots()
         p.down(1, 0)
-        p.draw(1, 50)
+        p.look(1, 50)
         p.tap(60)
         assertTrue(p.stale(1000))
-        p.show(1000)
+        p.look(1, 1000)
         assertFalse(p.stale(1000))
     }
 
@@ -49,34 +49,15 @@ class PressSlotsTest {
     fun aShownSlotIsStaleOnlyWhileItsPressMoves() {
         val p = PressSlots()
         p.down(1, 0)
-        p.show(40)
+        p.look(1, 40)
         assertTrue(p.stale(40))
         p.tap(100)
-        p.show(500)
+        p.look(1, 500)
         assertFalse(p.stale(500))
     }
 
     @Test
-    fun factorAfterShowAndFactorAtEqualDrawOnBothSlots() {
-        val a = PressSlots()
-        val b = PressSlots()
-        val c = PressSlots()
-        for (s in listOf(a, b, c)) {
-            s.down(1, 0)
-            s.down(2, 50)
-        }
-        for (t in listOf(60L, 100L, 150L, 400L)) {
-            a.show(t)
-            for (i in -1..3) {
-                val d = c.draw(i, t)
-                assertEquals(d, a.factor(i), 0f)
-                assertEquals(d, b.factorAt(i, t), 0f)
-            }
-        }
-    }
-
-    @Test
-    fun everyMutatorAndSlotSwapButShowBumpsTheRevision() {
+    fun everyMutatorAndSlotSwapBumpsTheRevision() {
         val p = PressSlots()
         val mutators = listOf<(PressSlots) -> Unit>(
             { it.down(1, 0) },
@@ -100,10 +81,7 @@ class PressSlotsTest {
             assertTrue(p.revision > r)
         }
         val r = p.revision
-        p.show(80)
-        p.factor(1)
-        p.factorAt(1, 90)
-        p.draw(1, 100)
+        p.look(1, 100)
         p.stale(110)
         assertEquals(r, p.revision)
     }

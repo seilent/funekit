@@ -145,7 +145,6 @@ private fun DrawScope.drawStatus(
 }
 
 private const val SKIN = 9
-private const val THIRD = 3
 private const val LEVEL_X = 18
 private const val LEVEL_Y = 10
 private const val ROUND_X = 9
@@ -160,10 +159,11 @@ private fun DrawScope.outline(battery: Int, right: Int, top: Int, size: Int, box
     val bw = px(box.batteryW, s.ppu)
     val bh = px(box.batteryH, s.ppu)
     val sk = max(1, px(box.batteryH * HALF / SKIN, s.ppu))
-    val nub = max(1, px(box.batteryH / SKIN, s.ppu))
-    val nh = max(1, px(box.batteryH / THIRD, s.ppu))
-    val x0 = right - bw
-    val x1 = right - nub
+    val nub = max(1, px(box.batteryNub, s.ppu))
+    val nh = max(1, px(box.batteryNubH, s.ppu))
+    val n0 = right - bw
+    val x0 = n0 + nub
+    val x1 = right
     val y0 = top + size / HALF - bh / HALF
     val y1 = y0 + bh
     fun rect(l: Int, t: Int, r: Int, b: Int) = drawRect(color, Offset(l.toFloat(), t.toFloat()), Size((r - l).toFloat(), (b - t).toFloat()), a)
@@ -171,14 +171,19 @@ private fun DrawScope.outline(battery: Int, right: Int, top: Int, size: Int, box
     rect(x0, y1 - sk, x1, y1)
     rect(x0, y0 + sk, x0 + sk, y1 - sk)
     rect(x1 - sk, y0 + sk, x1, y1 - sk)
-    rect(x1, y0 + (bh - nh) / HALF, right, y0 + (bh - nh) / HALF + nh)
+    val ny = y0 + (bh - nh) / HALF
+    rect(n0, ny, x0, ny + nh)
+    for (k in 1..nub / HALF) {
+        rect(n0 + k, ny - k, x0, ny - k + 1)
+        rect(n0 + k, ny + nh + k - 1, x0, ny + nh + k)
+    }
     val iw = x1 - x0 - HALF * sk
     val ih = bh - HALF * sk
     val ix = max(1, (iw + ROUND_X) / LEVEL_X)
     val iy = max(1, (ih + ROUND_Y) / LEVEL_Y)
-    val lx = x0 + sk + ix
+    val rx = x1 - sk - ix
     val ly = y0 + sk + iy
     val fw = iw - HALF * ix
-    rect(lx, ly, lx + fw * min(battery, PERCENT) / PERCENT, y1 - sk - iy)
-    return x0
+    rect(rx - fw * min(battery, PERCENT) / PERCENT, ly, rx, y1 - sk - iy)
+    return n0
 }

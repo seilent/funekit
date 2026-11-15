@@ -149,6 +149,8 @@ class StatusBox(
     val batteryW: Float,
     val batteryH: Float,
     val text: Float,
+    val batteryNub: Float = 0f,
+    val batteryNubH: Float = 0f,
 )
 
 fun pageStatus(): StatusBox = StatusBox(
@@ -157,7 +159,7 @@ fun pageStatus(): StatusBox = StatusBox(
 
 fun npStatus(s: Scale): StatusBox = StatusBox(
     Tok.npStatusTop, Tok.npStatusHeight, Tok.npStatusRight, s.board.npStatusGap, Tok.npBackRingX + Tok.npBackRing,
-    Tok.npStatusBatteryW, Tok.npStatusBatteryH, Tok.npStatusText,
+    Tok.npStatusBatteryW, Tok.npStatusBatteryH, Tok.npStatusText, Tok.npStatusBatteryNub, s.board.npStatusBatteryNubH,
 )
 
 data class StatusLine(val top: Int, val size: Int, val gap: Int, val right: Int, val baseline: Int, val textPx: Int)

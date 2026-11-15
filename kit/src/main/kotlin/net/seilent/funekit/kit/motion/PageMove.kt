@@ -1,7 +1,6 @@
 package net.seilent.funekit.kit.motion
 
 import net.seilent.funekit.gen.Keys
-import net.seilent.funekit.gen.Old
 import net.seilent.funekit.gen.Moves
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.gen.TokBoard
@@ -17,7 +16,9 @@ enum class MoveKind { T2, T2n, T2w, T4h, T4n, T3, T4, T3m, T4m, T7, T8, T3c, T3a
 
 enum class Part {
     Leave, LeaveHeader, LeavePivots, LeaveGround, LeaveWord, Content, Header, Zoom, Pivots, Ground, Word, Look, Home,
-    Sub, Peek, Tile, NpIn, NpOut, NpLeave, NpEdge, NpPeek, NpMusic, NpUnder, NpPhoto, Face, HomeTurn,
+    Sub, Peek, Tile, NpIn, NpOut, NpLeave, NpEdge, NpPeek, NpUnder, NpPhoto, NpRing, NpArtist, NpAlbum, NpTitle, NpRings,
+    NpTimeR, NpTimeL, NpBar, NpShuffle, NpNext, NpStatus, NpUHeader, NpURow0, NpURow1, NpURow2, NpURow3, NpURows, NpUArtist,
+    Face, HomeTurn,
 }
 
 enum class Prop { A, S, X, Y, R, PX, PY }
@@ -33,6 +34,35 @@ enum class NpForm { Page, Front, Ring }
 val leaveGroup: Set<Part> = setOf(Part.Leave, Part.LeaveHeader, Part.LeavePivots, Part.LeaveGround, Part.LeaveWord)
 
 val arriveGroup: Set<Part> = setOf(Part.Content, Part.Header, Part.Pivots)
+
+val npInGroup: Set<Part> = setOf(
+    Part.NpIn, Part.NpRing, Part.NpArtist, Part.NpAlbum, Part.NpTitle, Part.NpRings, Part.NpTimeR, Part.NpTimeL, Part.NpBar,
+    Part.NpShuffle, Part.NpNext, Part.NpStatus, Part.NpPhoto,
+)
+
+val npUnderGroup: Set<Part> = setOf(
+    Part.NpUnder, Part.NpUHeader, Part.NpURow0, Part.NpURow1, Part.NpURow2, Part.NpURow3, Part.NpURows, Part.NpUArtist,
+)
+
+class NpPlane(
+    val angle: Float,
+    val angleHold: Float,
+    val angleLand: Float,
+    val slideX: Float,
+    val slideHold: Float,
+    val slideLand: Float,
+    val hingeFrom: Float,
+    val hingeHold: Float,
+    val hingeTo: Float,
+    val hingeLand: Float,
+) {
+    companion object {
+        fun of(b: TokBoard.Board) = NpPlane(
+            b.motion_t7PlaneAngle, b.motion_t7PlaneHold, b.motion_t7PlaneLand, b.motion_t7SlideX, b.motion_t7SlideHold,
+            b.motion_t7SlideLand, b.motion_t7HingeFrom, b.motion_t7HingeHold, b.motion_t7HingeTo, b.motion_t7HingeLand,
+        )
+    }
+}
 
 val wordGroup: Set<Part> = setOf(Part.Word, Part.LeaveWord)
 
@@ -76,6 +106,7 @@ data class MoveForms(
     val hubRows: ContentForm = ContentForm.Zoom,
     val pageRows: ContentForm = ContentForm.Zoom,
     val t2PivotY: Float = TokBoard.a105.motion_t2PivotY,
+    val plane: NpPlane = NpPlane.of(TokBoard.a105),
 ) {
     companion object {
         fun board(b: TokBoard.Board) = MoveForms(
@@ -88,6 +119,7 @@ data class MoveForms(
             hubRows = formOf(Tok.motion_contentHubRows),
             pageRows = formOf(Tok.motion_contentPageRows),
             t2PivotY = b.motion_t2PivotY,
+            plane = NpPlane.of(b),
         )
     }
 }
@@ -132,11 +164,8 @@ data class MoveEnds(
     val endAt: Int = 0,
     val npForm: NpForm = NpForm.Page,
     val npCut: Boolean = false,
-    val npX: Float = 0f,
-    val npY: Float = 0f,
-    val npLeft: Float = 0f,
-    val npRight: Float = 0f,
-    val npBack: Float = 0f,
+    val npHome: Boolean = false,
+    val turn: Boolean = false,
     val plug: Boolean = false,
     val npQueue: Boolean = false,
     val colHold: Boolean = false,
@@ -158,11 +187,7 @@ data class MoveEnds(
     val slideX: Float = 0f,
 )
 
-fun npInk(form: NpForm, f: MoveForms): Int = when (form) {
-    NpForm.Front -> ms(Tok.motion_t7PaneInk)
-    NpForm.Ring -> (if (f.leaveFade) ms(Old.motion_t7RingLeave) else 0) + ms(Old.motion_t7RingDark)
-    NpForm.Page -> ms(Old.motion_t7Leave) + ms(Old.motion_npDark)
-}
+fun npInk(): Int = ms(Tok.motion_t7PaneInk)
 
 class PageMove {
     private class Off(val p: Part, val q: Prop, val at: Int, val d: Float)
@@ -973,6 +998,10 @@ class PageMove {
     }
 
     private fun t4h(k: MoveKind, e: MoveEnds, f: MoveForms) {
+        if (k == MoveKind.T4n && e.turn) {
+            turnLegs(e)
+            return
+        }
         val word = k == MoveKind.T4h && e.word
         val pl = ms(Tok.motion_t4hPivot)
         val cl = ms(Tok.motion_t4hContent)
@@ -1004,65 +1033,117 @@ class PageMove {
         }
     }
 
+    private fun npGroup(ink: Int, e: MoveEnds, f: MoveForms) {
+        val fade = ms(Tok.motion_t7Fade)
+        val b = ink - ms(Tok.motion_t7PaneInk)
+        val pl = f.plane
+        fun hold(q: Prop, v: Float, from: Int, held: Float, end: Float, land: Float, c: Curve) {
+            add(MoveLeg(Part.NpIn, q, v, v, b + from, ms(held) - from))
+            append(MoveLeg(Part.NpIn, q, v, end, b + ms(held), ms(land) - ms(held), c))
+        }
+        hold(Prop.R, pl.angle, ms(Tok.motion_t7PaneInk), pl.angleHold, 0f, pl.angleLand, Curves.cubicOut)
+        hold(Prop.X, pl.slideX * e.pxU, 0, pl.slideHold, 0f, pl.slideLand, Curves.expOut6)
+        hold(Prop.PX, pl.hingeFrom * e.pxU, 0, pl.hingeHold, pl.hingeTo * e.pxU, pl.hingeLand, Curves.easeIn)
+        val lead = Curves.easeOut.at(Moves.kT7InkLead.toFloat() / fade)
+        fun first(p: Part) {
+            step(p, Prop.A, 0f, lead, ink)
+            append(MoveLeg(p, Prop.A, lead, 1f, ink, fade - Moves.kT7InkLead, Curves.easeOut))
+        }
+        first(Part.NpIn)
+        val ramps = listOf(
+            Triple(Part.NpArtist, Tok.motion_t7PartArtist, Tok.motion_t7LandArtist),
+            Triple(Part.NpAlbum, Tok.motion_t7PartAlbum, Tok.motion_t7LandAlbum),
+            Triple(Part.NpTitle, Tok.motion_t7PartTitle, Tok.motion_t7LandTitle),
+            Triple(Part.NpRings, Tok.motion_t7PartRings, Tok.motion_t7LandRings),
+            Triple(Part.NpTimeR, Tok.motion_t7PartTimeR, Tok.motion_t7LandTimeR),
+            Triple(Part.NpBar, Tok.motion_t7PartTimeR, Tok.motion_t7LandTimeR),
+            Triple(Part.NpTimeL, Tok.motion_t7PartTimeL, Tok.motion_t7LandTimeL),
+            Triple(Part.NpShuffle, Tok.motion_t7PartShuffle, Tok.motion_t7LandShuffle),
+            Triple(Part.NpNext, Tok.motion_t7PartNext, Tok.motion_t7LandNext),
+        )
+        for ((p, start, land) in ramps) ramp(p, Prop.A, 0f, 1f, ink + ms(start), ms(land) - ms(start), Curves.easeOut)
+        step(Part.NpStatus, Prop.A, 0f, 1f, ink + ms(Tok.motion_t7Status))
+        keys(Part.NpRing, Prop.X, Moves.kT7RingX.scaled(e.pxU), Curves.linear, ink)
+        keys(Part.NpRing, Prop.Y, Moves.kT7RingY.scaled(e.pxU), Curves.linear, ink)
+        keys(Part.NpRing, Prop.S, Moves.kT7RingS, Curves.linear, ink)
+        keys(Part.NpRing, Prop.R, Moves.kT7RingR, Curves.linear, ink)
+        first(Part.NpRing)
+        step(Part.NpPhoto, Prop.A, 0f, 1f, ink + ms(Tok.motion_t7Rest))
+    }
+
+    private fun t8Legs(e: MoveEnds) {
+        val out = ms(Tok.motion_t8OutEnd)
+        val inAt = out + ms(Tok.motion_npDark)
+        ramp(Part.NpOut, Prop.R, 0f, Tok.motion_t8OutAngle, ms(Tok.motion_t8OutDelay), ms(Tok.motion_t8Out), Curves.powIn15)
+        ramp(Part.NpOut, Prop.A, 1f, Moves.kT8OutFaintA, Moves.kT8OutFaint, Moves.kT8OutFaintEnd - Moves.kT8OutFaint, Curves.linear)
+        append(MoveLeg(Part.NpOut, Prop.A, Moves.kT8OutFaintA, 0f, out, 0))
+        if (e.npCut) {
+            for (p in npUnderGroup) step(p, Prop.A, 0f, 1f, inAt)
+            return
+        }
+        if (e.npForm == NpForm.Front) {
+            keys(Part.NpUnder, Prop.X, Moves.kT8PaneLeft.scaled(e.pxU), Curves.linear, inAt)
+            keys(Part.NpEdge, Prop.X, Moves.kT8PaneRight.scaled(e.pxU), Curves.linear, inAt)
+            ramp(Part.NpUnder, Prop.A, 0f, 1f, inAt, ms(Tok.motion_t8InFade), Curves.linear)
+            keys(Part.NpPeek, Prop.X, Moves.kT8PeekX.scaled(e.pxU), Curves.linear, inAt)
+            keys(Part.NpPeek, Prop.Y, Moves.kT8PeekY.scaled(e.pxU), Curves.linear, inAt)
+            keys(Part.NpPeek, Prop.R, Moves.kT8PeekR, Curves.linear, inAt)
+            keys(Part.NpPeek, Prop.A, Moves.kT8PeekA, Curves.linear, inAt)
+            return
+        }
+        if (e.npHome) {
+            ramp(Part.NpUnder, Prop.R, Moves.kT8HomeR, 0f, inAt, Moves.kT8HomeTurn, Curves.easeOut)
+            ramp(Part.NpUnder, Prop.X, Moves.kT8HomeX * e.pxU, 0f, inAt, Moves.kT8HomeSlide, Curves.linear)
+            set(Part.NpUnder, Prop.PX, Moves.kT8HomeHinge * e.pxU)
+            ramp(Part.NpUnder, Prop.A, 0f, 1f, inAt, Moves.kT8HomeFade, Curves.linear)
+            return
+        }
+        keys(Part.NpUnder, Prop.R, Moves.kT8Turn, Curves.linear, inAt)
+        val rows = listOf(
+            Part.NpUnder to Moves.kT8Head, Part.NpUHeader to Moves.kT8Header, Part.NpURow0 to Moves.kT8Row0,
+            Part.NpURow1 to Moves.kT8Row1, Part.NpURow2 to Moves.kT8Row2, Part.NpURow3 to Moves.kT8Row3,
+            Part.NpURows to Moves.kT8Rows, Part.NpUArtist to Moves.kT8Artist,
+        )
+        for ((p, k) in rows) stepKeys(p, Prop.A, k, inAt)
+    }
+
+    private fun turnLegs(e: MoveEnds) {
+        val inAt = Moves.kT4nOut + ms(Tok.motion_npDark)
+        swap = Moves.kT4nOut
+        ramp(Part.Leave, Prop.R, 0f, Tok.motion_t8OutAngle, ms(Tok.motion_t8OutDelay), ms(Tok.motion_t8Out), Curves.powIn15)
+        step(Part.Leave, Prop.A, 1f, 0f, Moves.kT4nOut)
+        step(Part.LeaveGround, Prop.A, 1f, 0f, 0)
+        ramp(Part.HomeTurn, Prop.R, Moves.kT4nInR, 0f, inAt, Moves.kT4nIn, Curves.cubicOut)
+        ramp(Part.HomeTurn, Prop.X, Moves.kT4nInX * e.homeU, 0f, inAt, Moves.kT4nInSlide, Curves.linear)
+        set(Part.HomeTurn, Prop.PX, Moves.kT4nInHinge * e.homeU)
+        step(Part.HomeTurn, Prop.A, 0f, 1f, inAt)
+        ramp(Part.Sub, Prop.A, 0f, 1f, inAt + Moves.kT4nSubDelay, Moves.kT4nSub, Curves.linear)
+        step(Part.Peek, Prop.A, 0f, e.peek1, inAt)
+        ramp(Part.Peek, Prop.X, Moves.kT4nPeekX * e.homeU, 0f, inAt, Moves.kT4nPeek, Curves.easeOut)
+    }
+
     private fun npLegs(k: MoveKind, e: MoveEnds, f: MoveForms) {
         if (k == MoveKind.T8) {
-            val out = ms(Old.motion_t8OutEnd)
-            val inAt = out + ms(Old.motion_npDark)
-            ramp(Part.NpOut, Prop.R, 0f, Tok.motion_t8OutAngle, ms(Tok.motion_t8OutDelay), ms(Tok.motion_t8Out), Curves.powIn15)
-            step(Part.NpOut, Prop.A, 1f, 0f, out)
-            when {
-                e.npCut -> step(Part.NpUnder, Prop.A, 0f, 1f, inAt)
-                e.npForm == NpForm.Front -> {
-                    ramp(Part.NpUnder, Prop.A, 0f, 1f, inAt, ms(Tok.motion_t8InFade), Curves.linear)
-                    ramp(Part.NpUnder, Prop.R, Old.motion_t8InAngle, 0f, inAt + ms(Old.motion_t8InDelay), ms(Old.motion_t8In), Curves.cubicOut)
-                    val sd = inAt + ms(Old.motion_t8SlideDelay)
-                    val sl = ms(Old.motion_t8Slide)
-                    ramp(Part.NpUnder, Prop.X, e.npX, 0f, sd, sl, Curves.cubicOut)
-                    ramp(Part.NpUnder, Prop.Y, e.npY, 0f, sd, sl, Curves.cubicOut)
-                }
-                else -> {
-                    ramp(Part.NpUnder, Prop.A, 0f, 1f, inAt + ms(Old.motion_t8PageFadeDelay), ms(Old.motion_t8PageFade), Curves.linear)
-                    ramp(Part.NpUnder, Prop.X, e.npX, 0f, inAt, ms(Old.motion_t8Page), Curves.cubicOut)
-                }
-            }
+            t8Legs(e)
             return
         }
-        when (e.npForm) {
-            NpForm.Page -> fadeOrStep(Part.NpLeave, ms(Old.motion_t7Leave), f.leaveFade)
-            NpForm.Front -> {
-                val sh = ms(Old.motion_t7PaneShift)
-                val st = ms(Old.motion_t7PaneStep)
-                ramp(Part.NpLeave, Prop.X, 0f, e.npLeft, 0, sh, Curves.linear)
-                ramp(Part.NpEdge, Prop.X, 0f, e.npRight, 0, st, Curves.linear)
-                ramp(Part.NpEdge, Prop.Y, 0f, e.npBack - e.npRight, st, st, Curves.linear)
-                ramp(Part.NpPeek, Prop.A, 1f, 0f, 0, sh, Curves.linear)
-                ramp(Part.NpLeave, Prop.R, 0f, Old.motion_t7PaneAngle, ms(Old.motion_t7PaneDelay), ms(Old.motion_t7PaneTurn), Curves.powIn15)
-                step(Part.NpLeave, Prop.A, 1f, 0f, ms(Tok.motion_t7PaneEnd))
-            }
-            NpForm.Ring -> if (f.leaveFade) {
-                val rl = ms(Old.motion_t7RingLeave)
-                val md = ms(Old.motion_t7RingMusicDelay)
-                val ml = ms(Old.motion_t7RingMusic)
-                ramp(Part.NpLeave, Prop.X, 0f, e.npX, 0, rl, Curves.linear)
-                ramp(Part.NpLeave, Prop.A, 1f, 0f, 0, rl, Curves.linear)
-                ramp(Part.NpPeek, Prop.A, 1f, 0f, 0, rl, Curves.linear)
-                ramp(Part.NpMusic, Prop.X, 0f, e.npX, md, ml, Curves.linear)
-                ramp(Part.NpMusic, Prop.A, 1f, 0f, md, ml, Curves.linear)
-            } else {
-                step(Part.NpLeave, Prop.A, 1f, 0f, 0)
-                step(Part.NpPeek, Prop.A, 1f, 0f, 0)
-                step(Part.NpMusic, Prop.A, 1f, 0f, 0)
-            }
+        keys(Part.NpLeave, Prop.R, Moves.kT7PaneR)
+        keys(Part.NpLeave, Prop.X, Moves.kT7PaneX.scaled(e.pxU))
+        keys(Part.NpLeave, Prop.PX, Moves.kT7PanePX.scaled(e.pxU))
+        ramp(Part.NpLeave, Prop.A, 1f, 0f, Moves.kT7PaneFade, Moves.kT7PaneGone - Moves.kT7PaneFade, Curves.easeIn)
+        append(MoveLeg(Part.NpLeave, Prop.A, 0f, 0f, ms(Tok.motion_t7PaneEnd), 0))
+        if (e.npForm == NpForm.Front) {
+            keys(Part.NpPeek, Prop.X, Moves.kT7PeekX.scaled(e.pxU))
+            keys(Part.NpPeek, Prop.Y, Moves.kT7PeekY.scaled(e.pxU))
+            keys(Part.NpPeek, Prop.R, Moves.kT7PeekR)
+            keys(Part.NpPeek, Prop.A, Moves.kT7PeekA)
         }
-        val ink = npInk(e.npForm, f)
+        val ink = npInk()
         if (e.npCut) {
-            step(Part.NpIn, Prop.A, 0f, 1f, ink)
-            step(Part.NpPhoto, Prop.A, 0f, 1f, ink)
+            for (p in npInGroup) step(p, Prop.A, 0f, 1f, ink)
             return
         }
-        ramp(Part.NpIn, Prop.A, 0f, 1f, ink, ms(Tok.motion_t7Fade), Curves.easeOut)
-        ramp(Part.NpIn, Prop.R, Old.motion_t7Angle, 0f, ink + ms(Old.motion_t7TurnDelay), ms(Old.motion_t7Turn), Curves.quartOut)
-        step(Part.NpPhoto, Prop.A, 0f, 1f, ink + ms(Tok.motion_t7Rest))
+        npGroup(ink, e, f)
     }
 
     fun start(k: MoveKind, t0: Long, e: MoveEnds, f: MoveForms) {
@@ -1191,7 +1272,7 @@ class PageMove {
 
     fun npPop(delay: Int) {
         for (l in list) {
-            if (l.part == Part.Content && l.delay < delay) {
+            if (l.part in arriveGroup && l.delay < delay) {
                 val e = l.end
                 l.delay = delay
                 l.dur = max(0, e - delay)
@@ -1202,7 +1283,7 @@ class PageMove {
 
     fun npShift(by: Int) {
         if (by <= 0) return
-        for (l in list) if (l.part == Part.NpIn || l.part == Part.NpPhoto) l.delay += by
+        for (l in list) if (l.part in npInGroup) l.delay += by
         if (endAtMs > 0) endAtMs += by
         finish()
     }

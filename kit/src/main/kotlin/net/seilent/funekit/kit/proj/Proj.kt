@@ -8,12 +8,18 @@ import androidx.compose.ui.graphics.drawscope.withTransform
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.px
 import kotlin.math.PI
+import kotlin.math.abs
+import kotlin.math.acos
+import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.floor
-import kotlin.math.roundToInt
+import kotlin.math.sign
 import kotlin.math.sin
+import kotlin.math.sqrt
 
 private const val HALF_TURN = 180f
+private const val HALF_PX = 0.5
+private const val EPS = 1e-30f
 
 class M3(
     val a: Float, val b: Float, val c: Float,
@@ -65,15 +71,43 @@ fun turn(deg: Float, hinge: Float, eye: Float, d: Float): M3 {
     )
 }
 
-class Eye(val d: Float, val hinge: Float, val eye: Float)
+fun M3.inverse(): M3 {
+    val ca = e * i - f * h
+    val cb = c * h - b * i
+    val cc = b * f - c * e
+    val cd = f * g - d * i
+    val ce = a * i - c * g
+    val cf = c * d - a * f
+    val cg = d * h - e * g
+    val ch = b * g - a * h
+    val ci = a * e - b * d
+    val det = a * ca + b * cd + c * cg
+    if (abs(det) < EPS) return M3(0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f)
+    return M3(ca / det, cb / det, cc / det, cd / det, ce / det, cf / det, cg / det, ch / det, ci / det)
+}
 
-fun t7Eye(stdPpu: Float, heightPx: Int): Eye = Eye(
-    d = px(Tok.motion_perspective, stdPpu).toFloat(),
-    hinge = px(Tok.motion_t7Hinge, stdPpu).toFloat(),
-    eye = (Tok.motion_t7Eye * heightPx).roundToInt().toFloat(),
-)
+fun camTurn(deg: Float, hinge: Float, eye: Float, d: Float, cx: Float): M3 {
+    val c = cos(rad(deg))
+    val s = sin(rad(deg))
+    val es = eye * s / d
+    return M3(
+        1 - hinge * s / d, 0f, hinge * c - hinge + hinge * cx * s / d,
+        -es, c + (cx - hinge) * s / d, es * hinge,
+        -s / d, 0f, c + cx * s / d,
+    ).inverse()
+}
 
-fun t7(deg: Float, eye: Eye): M3 = turn(deg, eye.hinge, eye.eye, eye.d)
+fun facing(deg: Float, hinge: Float, d: Float, cx: Float): Boolean = cos(rad(deg)) + (cx - hinge) * sin(rad(deg)) / d > 0f
+
+fun edgeAngle(x: Float, to: Float, hinge: Float, d: Float): Float {
+    val xx = (x - hinge).toDouble()
+    val t = (to - hinge).toDouble()
+    if (abs(xx) < HALF_PX || d <= 0f) return 0f
+    val phi = atan2(-t / d, 1.0)
+    val r = sqrt(1 + t * t / (d.toDouble() * d))
+    val edge = Tok.motion_npEdgeOn.toDouble()
+    return ((phi + sign(xx) * acos((t / xx / r).coerceIn(-1.0, 1.0))) * HALF_TURN / PI).coerceIn(-edge, edge).toFloat()
+}
 
 fun Modifier.project(m: () -> M3): Modifier {
     val matrix = Matrix()

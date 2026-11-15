@@ -409,33 +409,105 @@ class PageMoveTest {
     }
 
     @Test
-    fun t7LegsPerForm() {
-        assertEquals(100, npInk(NpForm.Page, forms))
-        assertEquals(300, npInk(NpForm.Front, forms))
-        assertEquals(350, npInk(NpForm.Ring, forms))
-        assertEquals(50, npInk(NpForm.Ring, MoveForms(leaveFade = false)))
-        val page = PageMove().also { it.start(MoveKind.T7, 0, MoveEnds(), forms) }
-        near(easeOut(150.0 / 333), page.at(Part.NpIn, Prop.A, 250), "np in A")
-        near(39.4, page.at(Part.NpIn, Prop.R, 150), "np in R")
-        near(39.4 * (1 - quartOut(50.0 / 400)), page.at(Part.NpIn, Prop.R, 200), "np in R at 200")
-        near(0.0, page.at(Part.NpPhoto, Prop.A, 449), "photo before")
-        near(1.0, page.at(Part.NpPhoto, Prop.A, 450), "photo at rest")
-        near(1 - 20.0 / 33, page.at(Part.NpLeave, Prop.A, 20), "np leave A")
-        val front = PageMove().also { it.start(MoveKind.T7, 0, MoveEnds(npForm = NpForm.Front), forms) }
-        near(39.4 * (1 - quartOut(50.0 / 400)), front.at(Part.NpIn, Prop.R, 400), "front R")
-        val cut = PageMove().also { it.start(MoveKind.T7, 0, MoveEnds(npCut = true), forms) }
-        near(0.0, cut.at(Part.NpIn, Prop.A, 99), "cut before")
-        near(1.0, cut.at(Part.NpIn, Prop.A, 100), "cut at ink")
+    fun t7TurnsThePaneOutOnItsKeysForEveryForm() {
+        assertEquals(300, npInk())
+        for (form in NpForm.entries) {
+            val m = started(MoveKind.T7, MoveEnds(npForm = form))
+            near(-2.96 + 0.5 * (-68.29 + 2.96), m.at(Part.NpLeave, Prop.R, 125), "$form leave R")
+            near(0.5 * 68.51, m.at(Part.NpLeave, Prop.X, 125), "$form leave X")
+            near(-1.61 + 0.5 * (-25.21 + 1.61), m.at(Part.NpLeave, Prop.PX, 125), "$form leave PX")
+            near(1.0, m.at(Part.NpLeave, Prop.A, 245), "$form leave A at its fade")
+            near(1 - (88.0 / 91) * (88.0 / 91), m.at(Part.NpLeave, Prop.A, 333), "$form leave A")
+            near(0.0, m.at(Part.NpLeave, Prop.A, 334), "$form leave gone at the pane end")
+        }
+        val px = PageMove().also { it.start(MoveKind.T7, 0, MoveEnds(pxU = 3f), forms) }
+        near(3 * 68.51, px.at(Part.NpLeave, Prop.X, 250), "leave X in px")
     }
 
     @Test
-    fun t8TurnsTheLeavingPageOut() {
-        val m = PageMove()
-        m.start(MoveKind.T8, 0, MoveEnds(npX = -26.5f), forms)
-        near(40 * (112.0 / 162).pow(1.5), m.at(Part.NpOut, Prop.R, 100), "np out R")
-        near(1.0, m.at(Part.NpOut, Prop.A, 166), "np out A before")
-        near(0.0, m.at(Part.NpOut, Prop.A, 167), "np out A off")
-        near(-26.5 * (1 - cubicOut(66.0 / 300)), m.at(Part.NpUnder, Prop.X, 300), "np under X")
+    fun t7BringsNowPlayingInOnThePlaneAndEachPartOnItsOwnRamp() {
+        val m = started(MoveKind.T7, MoveEnds())
+        val b = TokBoard.a105
+        near(0.0, m.at(Part.NpIn, Prop.A, 299), "in A before the ink")
+        val lead = easeOut(17.0 / 333)
+        near(lead, m.at(Part.NpIn, Prop.A, 300), "in A at the ink")
+        near(lead + (1 - lead) * easeOut(100.0 / 316), m.at(Part.NpIn, Prop.A, 400), "in A")
+        near(b.motion_t7PlaneAngle.toDouble(), m.at(Part.NpIn, Prop.R, 320), "plane held")
+        near(b.motion_t7PlaneAngle * 0.125, m.at(Part.NpIn, Prop.R, 572), "plane landing")
+        near(0.0, m.at(Part.NpIn, Prop.R, 758), "plane landed")
+        near(b.motion_t7SlideX.toDouble(), m.at(Part.NpIn, Prop.X, 100), "slide held")
+        near(0.0, m.at(Part.NpIn, Prop.X, 578), "slide landed")
+        near(b.motion_t7HingeFrom.toDouble(), m.at(Part.NpIn, Prop.PX, 452), "hinge held")
+        near(b.motion_t7HingeTo.toDouble(), m.at(Part.NpIn, Prop.PX, 655), "hinge landed")
+        near(0.0, m.at(Part.NpArtist, Prop.A, 317), "artist from its part time")
+        near(easeOut(158.0 / 317), m.at(Part.NpArtist, Prop.A, 317 + 158), "artist A")
+        near(1.0, m.at(Part.NpArtist, Prop.A, 634), "artist at its land")
+        near(1.0, m.at(Part.NpNext, Prop.A, 617), "next at its land")
+        near(0.0, m.at(Part.NpBar, Prop.A, 367), "bar on the right time")
+        near(1.0, m.at(Part.NpBar, Prop.A, 617), "bar landed")
+        near(0.0, m.at(Part.NpStatus, Prop.A, 616), "status before")
+        near(1.0, m.at(Part.NpStatus, Prop.A, 617), "status")
+        near(-15.0, m.at(Part.NpRing, Prop.X, 300), "ring X")
+        near(0.93, m.at(Part.NpRing, Prop.S, 450), "ring S")
+        near(0.0, m.at(Part.NpPhoto, Prop.A, 649), "photo before")
+        near(1.0, m.at(Part.NpPhoto, Prop.A, 650), "photo at rest")
+        assertFalse(m.has(Part.NpPeek, Prop.A))
+        val front = started(MoveKind.T7, MoveEnds(npForm = NpForm.Front))
+        near(0.5, front.at(Part.NpPeek, Prop.A, 17), "peek A")
+        near(0.0, front.at(Part.NpPeek, Prop.A, 317), "peek gone")
+        val cut = started(MoveKind.T7, MoveEnds(npCut = true))
+        for (p in npInGroup) {
+            near(0.0, cut.at(p, Prop.A, 299), "$p cut before")
+            near(1.0, cut.at(p, Prop.A, 300), "$p cut at the ink")
+        }
+    }
+
+    @Test
+    fun t8TurnsTheLeavingPageOutAndBringsThePageInRowByRow() {
+        val m = started(MoveKind.T8, MoveEnds())
+        near(40 * (112.0 / 162).pow(1.5), m.at(Part.NpOut, Prop.R, 100), "out R")
+        near(1.0, m.at(Part.NpOut, Prop.A, 183), "out A before its faint")
+        near(1 - 0.7 * 8 / 17, m.at(Part.NpOut, Prop.A, 191), "out A fainting")
+        near(0.3, m.at(Part.NpOut, Prop.A, 216), "out A faint")
+        near(0.0, m.at(Part.NpOut, Prop.A, 217), "out A gone at the out end")
+        near(-78.46, m.at(Part.NpUnder, Prop.R, 267), "under R")
+        near(-57.32, m.at(Part.NpUnder, Prop.R, 334), "under R keyed")
+        near(0.0, m.at(Part.NpUnder, Prop.A, 266), "under A before")
+        near(0.13, m.at(Part.NpUnder, Prop.A, 267), "under A")
+        near(0.18, m.at(Part.NpUnder, Prop.A, 284), "under A keyed")
+        near(0.0, m.at(Part.NpURow1, Prop.A, 283), "row 1 before its first key")
+        near(0.12, m.at(Part.NpURow1, Prop.A, 284), "row 1")
+        near(1.0, m.at(Part.NpUHeader, Prop.A, 517), "header landed")
+        val front = started(MoveKind.T8, MoveEnds(npForm = NpForm.Front))
+        near(26.9, front.at(Part.NpUnder, Prop.X, 267), "front left")
+        near(-82.5, front.at(Part.NpEdge, Prop.X, 267), "front right")
+        near(16.0 / 33, front.at(Part.NpUnder, Prop.A, 283), "front A")
+        near(0.26, front.at(Part.NpPeek, Prop.A, 267), "front peek")
+        val home = started(MoveKind.T8, MoveEnds(npHome = true, pxU = 2f))
+        near(-65.6, home.at(Part.NpUnder, Prop.R, 267), "home R")
+        near(-3.46, home.at(Part.NpUnder, Prop.X, 336), "home X")
+        near(11.8, home.at(Part.NpUnder, Prop.PX, 300), "home hinge")
+        near(0.5, home.at(Part.NpUnder, Prop.A, 292), "home A")
+        val cut = started(MoveKind.T8, MoveEnds(npCut = true))
+        for (p in npUnderGroup) {
+            near(0.0, cut.at(p, Prop.A, 266), "$p cut before")
+            near(1.0, cut.at(p, Prop.A, 267), "$p cut")
+        }
+    }
+
+    @Test
+    fun aT4nTurnTurnsThePageOutAndHomeIn() {
+        val m = started(MoveKind.T4n, MoveEnds(turn = true, homeU = 2f, peek1 = 0.6f))
+        assertEquals(Moves.kT4nOut, m.swapAt.toInt())
+        val inAt = Moves.kT4nOut + 50
+        near(1.0, m.at(Part.Leave, Prop.A, (Moves.kT4nOut - 1).toLong()), "leave before")
+        near(0.0, m.at(Part.Leave, Prop.A, Moves.kT4nOut.toLong()), "leave gone")
+        near(-67.2, m.at(Part.HomeTurn, Prop.R, inAt.toLong()), "home R")
+        near(-8.6, m.at(Part.HomeTurn, Prop.X, inAt.toLong()), "home X")
+        near(15.8, m.at(Part.HomeTurn, Prop.PX, 0), "home hinge")
+        near(1.0, m.at(Part.HomeTurn, Prop.A, inAt.toLong()), "home A")
+        near(0.6, m.at(Part.Peek, Prop.A, inAt.toLong()), "peek")
+        near(0.0, m.at(Part.Sub, Prop.A, (inAt + 60).toLong()), "sub before")
     }
 
     @Test
@@ -783,10 +855,23 @@ class PageMoveTest {
         t4.npPop(200)
         near(0.0, t4.at(Part.Content, Prop.A, 200), "content from the pop delay")
         near(119.0 / 123, t4.at(Part.Content, Prop.A, 319), "content A")
+        for (p in arriveGroup) for (l in listOf(Prop.A, Prop.S, Prop.X, Prop.Y)) {
+            val leg = t4.leg(p, l) ?: continue
+            assertTrue("$p $l from the pop delay", leg.delay >= 200)
+        }
+        val late = started(MoveKind.T4, MoveEnds())
+        late.release(Part.Content, 0)
+        for (p in arriveGroup) assertTrue("$p has an A leg", late.leg(p, Prop.A) != null)
+        late.npPop(1000)
+        for (p in arriveGroup) for (l in listOf(Prop.A, Prop.S, Prop.X, Prop.Y)) {
+            val leg = late.leg(p, l) ?: continue
+            assertTrue("$p $l from the late pop", leg.delay >= 1000)
+        }
         val t7 = started(MoveKind.T7, MoveEnds())
         t7.npShift(50)
-        near(0.0, t7.at(Part.NpPhoto, Prop.A, 499), "photo before")
-        near(1.0, t7.at(Part.NpPhoto, Prop.A, 500), "photo shifted")
-        near(easeOut(100.0 / 333), t7.at(Part.NpIn, Prop.A, 250), "np in shifted")
+        near(0.0, t7.at(Part.NpPhoto, Prop.A, 699), "photo before")
+        near(1.0, t7.at(Part.NpPhoto, Prop.A, 700), "photo shifted")
+        near(0.0, t7.at(Part.NpIn, Prop.A, 349), "np in shifted")
+        near(0.0, t7.at(Part.NpArtist, Prop.A, 367), "artist shifted")
     }
 }

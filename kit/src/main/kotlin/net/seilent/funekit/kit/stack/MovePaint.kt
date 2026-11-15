@@ -10,7 +10,7 @@ import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.drawscope.withTransform
 import net.seilent.funekit.Roles
 import net.seilent.funekit.Scale
-import net.seilent.funekit.gen.Old
+import net.seilent.funekit.gen.Moves
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.Chrome
 import net.seilent.funekit.kit.ChromePart
@@ -27,13 +27,16 @@ import net.seilent.funekit.kit.motion.MoveKind
 import net.seilent.funekit.kit.motion.NpForm
 import net.seilent.funekit.kit.motion.lerp
 import net.seilent.funekit.kit.motion.PageMove
-import net.seilent.funekit.kit.motion.npInk
 import net.seilent.funekit.kit.motion.Part
 import net.seilent.funekit.kit.motion.Prop
 import net.seilent.funekit.kit.pen64
 import net.seilent.funekit.kit.penPx
 import net.seilent.funekit.kit.proj.M3
+import net.seilent.funekit.kit.proj.camTurn
+import net.seilent.funekit.kit.proj.edgeAngle
+import net.seilent.funekit.kit.proj.facing
 import net.seilent.funekit.kit.proj.turn
+import net.seilent.funekit.kit.quickplay.menuPeek
 import net.seilent.funekit.kit.rolePx
 import net.seilent.funekit.kit.sprite
 import net.seilent.funekit.kit.statusRow
@@ -44,8 +47,7 @@ import kotlin.math.max
 import kotlin.math.min
 
 private const val HALF = 2f
-private const val NP_HALF = 2f
-private const val NP_FX = 65536f
+private const val MID = 2
 private const val SLIDE_X = 200f
 private const val SLIDE_W = 480f
 private const val TAIL_STEP = 4L
@@ -70,7 +72,7 @@ class WordSide(val text: String, val s: Float, val look: Float, val x: Float, va
 
 class TileHide(val album: Long, val ring: Boolean)
 
-class HomeMove(val items: Float, val sel: Int, val selAlpha: Float, val sub: Float, val off: Float)
+class HomeMove(val items: Float, val sel: Int, val selAlpha: Float, val sub: Float, val off: Float, val watermark: Boolean = true)
 
 interface HomePaint {
     val quickplay: Boolean
@@ -83,15 +85,11 @@ interface HomePaint {
 
     fun DrawScope.home(look: HomeMove, now: Long, rec: DrawRecord?)
 
-    fun npBands(off: Float): List<Edges> = emptyList()
-
-    val npMusic: Int get() = -1
-
     fun frontPane(): Edges? = null
 
     fun DrawScope.front(now: Long) {}
 
-    fun DrawScope.frontPeek(alpha: Float, dx: Float, now: Long) {}
+    fun DrawScope.frontPeek(alpha: Float, now: Long) {}
 
     fun itemWord(item: Int): Word? = null
 }
@@ -140,6 +138,12 @@ interface PagePaint {
     fun DrawScope.content(c: Content, now: Long, rec: DrawRecord?, name: String, fade: Float = 0f) = contentRows(this@PagePaint, c, now, rec, name, fade)
 
     fun DrawScope.bands(b: Bands, now: Long, rec: DrawRecord?, name: String) = bandRows(this@PagePaint, b, now, rec, name)
+
+    fun DrawScope.npPart(part: Part, now: Long, rec: DrawRecord?) {
+        if (part == Part.NpIn) content(Content.Rest, now, rec, "arrive")
+    }
+
+    fun npRing(): Edges? = null
 }
 
 fun PagePaint.rowTop(i: Int): Int = rowY(i) - scroll
@@ -321,6 +325,7 @@ class MoveCtx(
     val leaveBarX: Float = Float.MAX_VALUE,
     val pivotRow: Edges? = null,
     val hides: List<PageSide> = emptyList(),
+    val turnEye: TurnEye? = null,
 ) {
     val scale: Scale? get() = (to ?: from)?.scale ?: home?.scale
 
@@ -386,32 +391,65 @@ private fun stdPx(u: Float, s: Scale): Float = if (s.large) Math.round(u * s.std
 
 private fun whole(u: Float, ppu: Float): Float = px(u, ppu).toFloat()
 
-fun npEnds(k: MoveKind, np: PageSide?, home: HomeSide?, form: NpForm, forms: MoveForms): MoveEnds {
+fun npEnds(k: MoveKind, np: PageSide?, home: HomeSide?, form: NpForm, toHome: Boolean = false): MoveEnds {
     val p = (np?.scale ?: home?.scale)?.stdPpu ?: return MoveEnds(npForm = form)
-    val cut = Tok.motion_npIn != NP_TURN
-    if (k == MoveKind.T8) {
-        val page = form != NpForm.Front
-        return MoveEnds(
-            npForm = form,
-            npCut = cut,
-            npX = whole(if (page) Old.motion_t8PageX else Old.motion_t8SlideX, p),
-            npY = if (page) 0f else whole(Old.motion_t8SlideY, p),
-        )
-    }
-    return MoveEnds(
-        npForm = form,
-        npCut = cut,
-        npLeft = whole(Old.motion_t7PaneLeft, p),
-        npRight = whole(Old.motion_t7PaneRight, p),
-        npBack = whole(Old.motion_t7PaneBack, p),
-        npX = whole(Old.motion_t7RingX, p),
-        endAt = npInk(form, forms) + if (cut) 0 else Tok.motion_t7Rest.toInt(),
-    )
+    return MoveEnds(npForm = form, npCut = Tok.motion_npIn != NP_TURN, npHome = k == MoveKind.T8 && toHome, pxU = p)
 }
 
 private const val NP_TURN = "turn"
 
+private val NP_PARTS = listOf(
+    Part.NpStatus, Part.NpArtist, Part.NpAlbum, Part.NpIn, Part.NpBar, Part.NpTimeL, Part.NpTimeR, Part.NpTitle, Part.NpNext,
+    Part.NpShuffle, Part.NpRings,
+)
+
+private fun underBands(to: PageSide, p: Float): List<Pair<Edges, Part>> {
+    val s = to.scale
+    val h = s.heightPx
+    val hy = min(px(s.board.pivotTop, p), h)
+    val pp = to.paint
+    val y = if (pp.kind == PageKind.Grid) null else pp.bandTops() ?: intArrayOf(pp.top, max(pp.bottom, pp.top + 1))
+    val n = (y?.size ?: 1) - 1
+    val top = if (n > 0) y!![0].coerceIn(hy, h) else h
+    val out = ArrayList<Pair<Edges, Part>>()
+    fun band(y0: Int, y1: Int, part: Part) {
+        if (y1 > y0) out += Edges(0, y0, s.widthPx, y1) to part
+    }
+    band(0, hy, Part.NpUHeader)
+    band(hy, top, Part.NpUnder)
+    val rows = listOf(Part.NpURow0, Part.NpURow1, Part.NpURow2, Part.NpURow3, Part.NpURows)
+    for (i in 0 until n) {
+        val y0 = max(y!![i], top)
+        val y1 = if (i + 1 == n) h else max(y[i + 1], y0)
+        band(y0, y1, rows[min(i, rows.size - 1)])
+    }
+    return out
+}
+
 class NpEye(val d: Float, val hinge: Float, val eye: Float)
+
+class TurnEye(val out: NpEye, val inD: Float, val inEye: Float, val cx: Float)
+
+internal const val NP_OUT = "np.out"
+internal const val NP_PEEK = "np.peek"
+internal const val NP_PANE = "np.pane"
+internal const val NP_HOME = "np.home"
+internal const val NP_UNDER = "np.under."
+internal const val NP_LEAVE = "np.leave"
+internal const val NP_PART = "np.part."
+internal const val NP_RING = "np.ring"
+internal const val TURN_LEAVE = "turn.leave"
+internal const val TURN_HOME = "turn.home"
+
+internal fun npCam(r: Float, slide: Float, hinge: Float, d: Float, eye: Float, cx: Float): M3? {
+    if (!facing(r, hinge, d, cx - slide)) return null
+    return M3.translate(slide, 0f) * camTurn(r, hinge, eye, d, cx - slide)
+}
+
+internal fun npFrontUnder(l: Float, r: Float, hinge: Float, edge: Float, eye: Float, d: Float): M3 =
+    M3.translate(Math.round(l).toFloat(), 0f) * turn(edgeAngle(edge, edge + (r - l), hinge, d), hinge, eye, d)
+
+internal fun npPeekRect(menu: Edges, pane: Edges, src: Edges): Edges = Edges(max(max(menu.x0, pane.x1), src.x1), menu.y0, menu.x1, menu.y1)
 
 fun npEye(stdPpu: Float, heightPx: Int, hinge: Float, eye: Float): NpEye =
     NpEye(max(1f, whole(Tok.motion_perspective, stdPpu)), whole(hinge, stdPpu), Math.round(eye * heightPx).toFloat())
@@ -456,7 +494,7 @@ private fun tileEnds(e: MoveEnds, a: Edges, b: Edges): MoveEnds = e.copy(
 
 fun moveCtx(t: Turn<*>, home: HomeSide?, from: PageSide?, to: PageSide?, forms: MoveForms, npForm: NpForm = NpForm.Page): MoveCtx {
     val k = t.kind
-    if (k == MoveKind.T7 || k == MoveKind.T8) return MoveCtx(npEnds(k, if (k == MoveKind.T7) to else from, home, npForm, forms), k, home, from, to, false, 0f, null, 0f, -1, null, 0f, 0f, 0f, null, 0f)
+    if (k == MoveKind.T7 || k == MoveKind.T8) return MoveCtx(npEnds(k, if (k == MoveKind.T7) to else from, home, npForm, k == MoveKind.T8 && to == null), k, home, from, to, false, 0f, null, 0f, -1, null, 0f, 0f, 0f, null, 0f)
     val side = to ?: from ?: return MoveCtx.None
     val s = side.scale
     val leaveG = from?.paint?.grounded == true
@@ -515,6 +553,18 @@ fun moveCtx(t: Turn<*>, home: HomeSide?, from: PageSide?, to: PageSide?, forms: 
     if (home != null && (k == MoveKind.T2 || k == MoveKind.T2n || k == MoveKind.T2w)) e = e.copy(peek0 = home.paint.peekAlpha(t.at))
     if (k == MoveKind.T2w) e = e.copy(zoom = false, slideX = SLIDE_X / SLIDE_W * s.widthPx)
     if (home != null && (k == MoveKind.T4h || k == MoveKind.T4n)) e = e.copy(peek1 = if (home.paint.quickplay) Tok.qpPeekAlpha else 0f)
+    var turnEye: TurnEye? = null
+    if (k == MoveKind.T4n && t.morph && !t.retarget && to == null && from != null && from.paint.item < 0 && home != null) {
+        val hs = home.scale
+        val hp = hs.stdPpu
+        e = e.copy(turn = true, homeU = hp)
+        turnEye = TurnEye(
+            npEye(hp, hs.heightPx, Tok.motion_t8OutHinge, Tok.motion_t8OutEye),
+            max(1f, whole(Tok.motion_t7Persp, hp)),
+            Math.round(Moves.kT4nInEye * hs.heightPx).toFloat(),
+            Math.round(Tok.motion_t7EyeX * hs.widthPx).toFloat(),
+        )
+    }
     var album = t.album
     var tileSide: PageSide? = null
     var colHold = false
@@ -615,7 +665,7 @@ fun moveCtx(t: Turn<*>, home: HomeSide?, from: PageSide?, to: PageSide?, forms: 
         morph, morphLook, leaveBands = leaveBands, leaveWord = leaveWord, xa = xa, cut = cut, leaveAt = leaveAt, leaveCut = leaveCut, leaveAnchor = anchor,
         thumbAt = t.at, leaveThumb = from?.paint?.thumbFade(t.at) ?: 0f, arriveThumb = to?.paint?.thumbFade(t.at) ?: 0f,
         face = face, album = album, tileSide = tileSide, barX = ts?.let { barOf(it) } ?: Float.MAX_VALUE,
-        leaveBarX = leaving?.let { barOf(it.scale) } ?: Float.MAX_VALUE, pivotRow = to?.paint?.pivotRow(), hides = hides,
+        leaveBarX = leaving?.let { barOf(it.scale) } ?: Float.MAX_VALUE, pivotRow = to?.paint?.pivotRow(), hides = hides, turnEye = turnEye,
     )
 }
 
@@ -736,110 +786,127 @@ class MovePaint(private val move: PageMove) {
         c.clearParts()
     }
 
-    private fun DrawScope.homeAt(h: HomeSide, now: Long) {
-        with(h.paint) { home(HomeMove(1f, -1, 0f, Roles.homeSubtitle.alpha, h.off), now, null) }
-    }
-
-    private fun DrawScope.paneAt(h: HomeSide, p: Edges, at: Long) {
-        val v = move
-        val w = max(1, p.w)
-        val l = p.x0 + v.at(Part.NpLeave, Prop.X, at)
-        val r = p.x1 + v.at(Part.NpEdge, Prop.X, at) + v.at(Part.NpEdge, Prop.Y, at)
-        val sc = max((r - l) / w, 1f / NP_FX)
-        val cy = (p.y0 + p.y1) / NP_HALF
-        val x0 = l
-        val y0 = cy - (cy - p.y0) * sc
-        clipRect(x0, y0, x0 + p.w * sc, y0 + p.h * sc) {
-            withTransform({
-                translate(l - p.x0 * sc, cy - cy * sc)
-                scale(sc, sc, Offset.Zero)
-            }) { with(h.paint) { front(at) } }
+    private fun DrawScope.npHomeAt(h: HomeSide, at: Long, now: Long) {
+        with(h.paint) {
+            if (quickplay) peek(peekAlpha(at), now, null)
+            home(HomeMove(1f, -1, 0f, Roles.homeSubtitle.alpha, h.off, watermark = false), now, null)
         }
     }
 
-    private fun DrawScope.npMove(m: MoveCtx, now: Long) {
+    private fun cam(p: Part, d: Float, eye: Float, cx: Float, at: Long): M3? {
+        val v = move
+        return npCam(v.at(p, Prop.R, at), Math.round(v.at(p, Prop.X, at)).toFloat(), Math.round(v.at(p, Prop.PX, at)).toFloat(), d, eye, cx)
+    }
+
+    private fun DrawScope.quadAt(rec: DrawRecord?, name: String, a: Float, t: M3?, src: Edges? = null, block: DrawScope.() -> Unit) {
+        if (a <= 0f || t == null) return
+        val draw = {
+            layer(null, a, layerPaint) {
+                withTransform({ transform(t.compose()) }) {
+                    if (src == null) block() else clipRect(src.x0.toFloat(), src.y0.toFloat(), src.x1.toFloat(), src.y1.toFloat()) { block() }
+                }
+            }
+        }
+        if (rec == null) draw() else rec.quad(name, a, t, src, draw)
+    }
+
+    private fun DrawScope.npMove(m: MoveCtx, now: Long, rec: DrawRecord?) {
         val v = move
         val e = m.ends
         val np = (if (v.kind == MoveKind.T8) m.from else m.to) ?: return
         val s = np.scale
+        val p = s.stdPpu
         val h = m.home
-        val t0 = v.t0
+        val w = s.widthPx.toFloat()
+        val d = max(1f, whole(Tok.motion_perspective, p))
+        val peye = Math.round(s.board.motion_t7EyeY * s.heightPx).toFloat()
+        val cx = Math.round(Tok.motion_t7EyeX * w).toFloat()
+        val x1 = px(Tok.qpEdge, p)
+        val x2 = px(Tok.qpEdge + Tok.qpTile + Tok.qpGutter, p)
+        val side = px(Tok.qpTile, p)
+        val src = Edges(max(0, x1), 0, min(s.widthPx, x2 + side), s.heightPx)
+        val pane = h?.paint?.frontPane()
+        val front = e.npForm == NpForm.Front && h != null && pane != null
+        val peekR = if (front && h != null && pane != null) npPeekRect(menuPeek(h.scale, pane.x1), pane, src) else null
+        fun DrawScope.peek() {
+            if (h == null || peekR == null) return
+            val r = v.at(Part.NpPeek, Prop.R, now)
+            val sh = M3.translate(Math.round(v.at(Part.NpPeek, Prop.X, now)).toFloat(), Math.round(v.at(Part.NpPeek, Prop.Y, now)).toFloat())
+            val t = if (r != 0f) sh * turn(r, peekR.x0.toFloat(), ((peekR.y0 + peekR.y1) / MID).toFloat(), d) else sh
+            quadAt(rec, NP_PEEK, v.at(Part.NpPeek, Prop.A, now), t, peekR) { with(h.paint) { frontPeek(Tok.motion_quickplayAlpha, now) } }
+        }
         if (v.kind == MoveKind.T8) {
-            val out = npEye(s.stdPpu, s.heightPx, Tok.motion_t8OutHinge, Tok.motion_t8OutEye)
-            val oa = v.at(Part.NpOut, Prop.A, now)
-            if (oa > 0f) {
-                val t = quad(v.at(Part.NpOut, Prop.R, now), out, 0f, 0f).compose()
-                layer(null, oa, layerPaint) { withTransform({ transform(t) }) { with(np.paint) { content(Content.Rest, now, null, "leave") } } }
-            }
+            val out = npEye(p, s.heightPx, Tok.motion_t8OutHinge, Tok.motion_t8OutEye)
+            quadAt(rec, NP_OUT, v.at(Part.NpOut, Prop.A, now), quad(v.at(Part.NpOut, Prop.R, now), out, 0f, 0f)) { with(np.paint) { content(Content.Rest, now, null, "leave") } }
+            val ineye = Math.round(Tok.motion_t8InEye * s.heightPx).toFloat()
+            val to = m.to
             val ua = v.at(Part.NpUnder, Prop.A, now)
-            if (ua > 0f) {
-                val inn = npEye(s.stdPpu, s.heightPx, Old.motion_t8InHinge, Tok.motion_t8InEye)
-                val t = quad(v.at(Part.NpUnder, Prop.R, now), inn, v.at(Part.NpUnder, Prop.X, now), v.at(Part.NpUnder, Prop.Y, now)).compose()
-                val to = m.to
-                layer(null, ua, layerPaint) {
-                    withTransform({ transform(t) }) {
-                        when {
-                            to != null -> restOf(to, now, null, "arrive")
-                            h != null && e.npForm == NpForm.Front && h.paint.frontPane() != null -> with(h.paint) { front(now) }
-                            h != null -> homeAt(h, now)
-                            else -> Unit
-                        }
-                    }
+            when {
+                front && h != null -> {
+                    peek()
+                    val hinge = x1.toFloat()
+                    val t = npFrontUnder(v.at(Part.NpUnder, Prop.X, now), v.at(Part.NpEdge, Prop.X, now), hinge, (x2 + side).toFloat(), ineye, d)
+                    quadAt(rec, NP_PANE, ua, t, src) { with(h.paint) { front(now) } }
                 }
+                to != null -> {
+                    val t = turn(v.at(Part.NpUnder, Prop.R, now), 0f, ineye, max(1f, whole(Tok.motion_t8InD, p)))
+                    for ((b, part) in underBands(to, p)) quadAt(rec, NP_UNDER + part.name, v.at(part, Prop.A, now), t, b) { restOf(to, now, null, "arrive") }
+                }
+                else -> quadAt(rec, NP_HOME, ua, cam(Part.NpUnder, max(1f, whole(Tok.motion_t7Persp, p)), peye, cx, now)) { if (h != null) npHomeAt(h, now, now) }
             }
             return
         }
-        var pane = false
-        when (e.npForm) {
-            NpForm.Page -> {
-                val la = v.at(Part.NpLeave, Prop.A, now)
-                val from = m.from
-                if (la > 0f) layer(null, la, layerPaint) { if (from != null) restOf(from, now, null, "leave") else if (h != null) homeAt(h, now) }
+        val leave: DrawScope.() -> Unit = {
+            val la = v.at(Part.NpLeave, Prop.A, now)
+            val t = cam(Part.NpLeave, max(1f, whole(Tok.motion_t7PaneD, p)), peye, cx, now)
+            val from = m.from
+            when {
+                front && h != null -> quadAt(rec, NP_LEAVE, la, t, src) { with(h.paint) { front(now) } }
+                from != null -> quadAt(rec, NP_LEAVE, la, t) { restOf(from, now, null, "leave") }
+                h != null -> quadAt(rec, NP_LEAVE, la, t) { npHomeAt(h, v.t0, now) }
+                else -> Unit
             }
-            NpForm.Front -> {
-                val p = h?.paint?.frontPane()
-                if (h != null && p != null) {
-                    if (now - t0 < Old.motion_t7PaneDraw.toLong()) {
-                        paneAt(h, p, now)
-                        val pa = Tok.motion_quickplayAlpha * v.at(Part.NpPeek, Prop.A, now)
-                        if (pa > 0f) with(h.paint) { frontPeek(pa, Math.round(v.at(Part.NpEdge, Prop.X, now) + v.at(Part.NpEdge, Prop.Y, now)).toFloat(), now) }
-                        pane = true
-                    } else {
-                        val la = v.at(Part.NpLeave, Prop.A, now)
-                        if (la > 0f) {
-                            val ey = npEye(s.stdPpu, s.heightPx, Old.motion_t7PaneHinge, Tok.motion_t7Eye)
-                            val t = quad(v.at(Part.NpLeave, Prop.R, now), ey, 0f, 0f).compose()
-                            val copy = t0 + Old.motion_t7PaneShift.toLong()
-                            layer(null, la, layerPaint) { withTransform({ transform(t) }) { paneAt(h, p, copy) } }
-                            pane = true
-                        }
-                    }
+            peek()
+        }
+        val opaque = e.npForm == NpForm.Page
+        if (opaque) leave()
+        val camIn = cam(Part.NpIn, max(1f, whole(Tok.motion_t7Persp, p)), peye, cx, now)
+        for (part in NP_PARTS) quadAt(rec, NP_PART + part.name, v.at(part, Prop.A, now), camIn) { with(np.paint) { npPart(part, now, null) } }
+        val ring = np.paint.npRing()
+        if (ring != null) {
+            val rs = v.at(Part.NpRing, Prop.S, now).let { if (it > 0f) it else 1f }
+            val rcx = ((ring.x0 + ring.x1) / MID).toFloat()
+            val rcy = ((ring.y0 + ring.y1) / MID).toFloat()
+            val t = M3.translate((1 - rs) * rcx + v.at(Part.NpRing, Prop.X, now), (1 - rs) * rcy + v.at(Part.NpRing, Prop.Y, now)) *
+                M3.scale(rs) * turn(v.at(Part.NpRing, Prop.R, now), rcx, rcy, d)
+            quadAt(rec, NP_RING, v.at(Part.NpRing, Prop.A, now), t) { with(np.paint) { npPart(Part.NpRing, now, null) } }
+        }
+        if (!opaque) leave()
+    }
+
+    private fun DrawScope.turnOf(m: MoveCtx, now: Long, rec: DrawRecord?) {
+        val v = move
+        val te = m.turnEye ?: return
+        val from = m.from
+        val h = m.home
+        if (from != null) {
+            val fp = from.paint
+            if (fp.grounded) with(fp) { ground(v.at(Part.LeaveGround, Prop.A, now), 0f) }
+            quadAt(rec, TURN_LEAVE, v.at(Part.Leave, Prop.A, now), quad(v.at(Part.Leave, Prop.R, now), te.out, 0f, 0f)) {
+                with(fp) { content(Content.Rest, now, null, "leave", m.leaveThumb) }
+                val c = fp.chrome
+                if (c != null) {
+                    chrome(c, now)
+                    c.clearParts()
                 }
-            }
-            NpForm.Ring -> if (h != null) {
-                val x = Math.round(v.at(Part.NpLeave, Prop.X, now)).toFloat()
-                val mx = Math.round(v.at(Part.NpMusic, Prop.X, now)).toFloat()
-                val a = v.at(Part.NpLeave, Prop.A, now)
-                val ma = v.at(Part.NpMusic, Prop.A, now)
-                val bands = h.paint.npBands(h.off)
-                if (bands.isEmpty()) {
-                    if (a > 0f) layer(null, a, layerPaint) { translate(x, 0f) { homeAt(h, now) } }
-                } else {
-                    bands.forEachIndexed { i, b ->
-                        val music = i == h.paint.npMusic
-                        val ba = if (music) ma else a
-                        if (ba > 0f) layer(null, ba, layerPaint) { clipRect(b.x0.toFloat(), b.y0.toFloat(), b.x1.toFloat(), b.y1.toFloat()) { translate(if (music) mx else x, 0f) { homeAt(h, now) } } }
-                    }
-                }
-                val pk = (if (h.paint.quickplay) h.paint.peekAlpha(t0) else 0f) * v.at(Part.NpPeek, Prop.A, now)
-                if (pk > 0f) with(h.paint) { peek(pk, now, null) }
             }
         }
-        val ia = v.at(Part.NpIn, Prop.A, now)
-        if (!pane && ia > 0f) {
-            val ey = npEye(s.stdPpu, s.heightPx, Tok.motion_t7Hinge, Tok.motion_t7Eye)
-            val t = quad(v.at(Part.NpIn, Prop.R, now), ey, 0f, 0f).compose()
-            layer(null, ia, layerPaint) { withTransform({ transform(t) }) { with(np.paint) { content(Content.Rest, now, null, "arrive") } } }
+        if (h == null) return
+        val pa = v.at(Part.Peek, Prop.A, now)
+        if (pa > 0f) shifted(rec, Math.round(v.at(Part.Peek, Prop.X, now)).toFloat(), 0f) { with(h.paint) { peek(pa, now, rec) } }
+        val sub = v.at(Part.Sub, Prop.A, now) * Roles.homeSubtitle.alpha
+        quadAt(rec, TURN_HOME, v.at(Part.HomeTurn, Prop.A, now), cam(Part.HomeTurn, te.inD, te.inEye, te.cx, now)) {
+            with(h.paint) { home(HomeMove(1f, -1, 0f, sub, h.off), now, null) }
         }
     }
 
@@ -893,7 +960,12 @@ class MovePaint(private val move: PageMove) {
         val v = move
         val k = v.kind
         if (k == MoveKind.T7 || k == MoveKind.T8) {
-            npMove(m, now)
+            npMove(m, now, rec)
+            if (status != null) statusOf(status, m, now)
+            return
+        }
+        if (k == MoveKind.T4n && m.ends.turn) {
+            turnOf(m, now, rec)
             if (status != null) statusOf(status, m, now)
             return
         }

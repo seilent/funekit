@@ -214,7 +214,7 @@ class MotionSheetTest {
 
         override fun DrawScope.peek(alpha: Float, now: Long, rec: DrawRecord?) = Unit
 
-        override fun DrawScope.home(look: HomeMove, now: Long, rec: DrawRecord?) = homeAt(look.items, look.sel, look.selAlpha, rec)
+        override fun DrawScope.home(look: HomeMove, now: Long, rec: DrawRecord?) = homeAt(look.items, look.sel, look.selAlpha, rec, look.watermark)
     }
 
     private val homeSide = HomeSide(s, stubHome, 0f)
@@ -243,12 +243,12 @@ class MotionSheetTest {
         c.clearParts()
     }
 
-    private fun DrawScope.homeAt(ha: Float, sel: Int, selAlpha: Float, rec: DrawRecord?) {
+    private fun DrawScope.homeAt(ha: Float, sel: Int, selAlpha: Float, rec: DrawRecord?, mark: Boolean = true) {
         val sp = s.stdPpu
         val x = penPx(pen64(Tok.homeTextX, sp))
         val last = Stubs.homeItems.lastIndex
         val wb = px(max(s.board.homeWatermarkBaseline, Tok.homeFirstBaseline + last * Tok.homePitch + Tok.homeWatermarkGap), sp).toFloat()
-        val wa = Roles.watermark.alpha * ha
+        val wa = if (mark) Roles.watermark.alpha * ha else 0f
         word(watermark, x, wb, KitInk.white, wa)
         rec?.word("home.watermark", watermark, x, wb, wa)
         val c = Offset(px(Tok.homeRingX, sp).toFloat(), px(Tok.homeRingY, sp).toFloat())
@@ -457,7 +457,7 @@ class MotionSheetTest {
         return Case(name, note, stack(songsPress), acts, 0L, { end }, shots, emptyList(), frames, PRESS_QUIET) { t, rec ->
             val now = t.toFloat()
             ground()
-            val scale = p.drawn(now)
+            val scale = p.draw(now)
             with(kit(if (t > up) songsPlaying else songsPress)) { whole(rec, "page", scale, if (p.scale(now) < 1f) RowGlow(glow, glow.level(t)) else null, focus, t) }
             chromeAt(inkOf(songsPress).chrome, t, rec, "page.chrome")
             strip.frame(ToastPlace.Bottom, h, t)

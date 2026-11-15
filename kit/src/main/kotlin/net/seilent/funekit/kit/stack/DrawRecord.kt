@@ -12,6 +12,7 @@ import net.seilent.funekit.Scale
 import net.seilent.funekit.gen.Glyph
 import net.seilent.funekit.kit.Band
 import net.seilent.funekit.kit.Chrome
+import net.seilent.funekit.kit.Edges
 import net.seilent.funekit.kit.Ink
 import net.seilent.funekit.kit.JumpCells
 import net.seilent.funekit.kit.JumpGrid
@@ -22,6 +23,7 @@ import net.seilent.funekit.kit.MenuPlan
 import net.seilent.funekit.kit.RowInk
 import net.seilent.funekit.kit.ThumbRect
 import net.seilent.funekit.kit.Word
+import net.seilent.funekit.kit.proj.M3
 
 interface DrawRecord {
     fun move(dx: Float, dy: Float, block: () -> Unit)
@@ -53,6 +55,8 @@ interface DrawRecord {
     fun jump(name: String, g: JumpGrid, ink: JumpInk, cells: JumpCells, s: Scale, off: Float, now: Long, h: Int)
 
     fun menuRegions(name: String, menu: Menu, ink: MenuInk, plan: MenuPlan, s: Scale, now: Long, w: Int, h: Int, accent: Color, accentOff: Boolean)
+
+    fun quad(name: String, a: Float, t: M3, src: Edges?, block: () -> Unit) = block()
 }
 
 fun DrawScope.shifted(rec: DrawRecord?, dx: Float, dy: Float, block: DrawScope.() -> Unit) = translate(dx, dy) {

@@ -23,11 +23,12 @@ import net.seilent.funekit.Scale
 import net.seilent.funekit.Surface
 import net.seilent.funekit.Window
 import net.seilent.funekit.gen.Glyph
-import net.seilent.funekit.gen.Old
+import net.seilent.funekit.kit.motion.Curves
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.gen.TokBoard
 import net.seilent.funekit.kit.Band
 import net.seilent.funekit.kit.Chrome
+import net.seilent.funekit.kit.Edges
 import net.seilent.funekit.kit.JumpCells
 import net.seilent.funekit.kit.JumpGrid
 import net.seilent.funekit.kit.JumpInk
@@ -43,9 +44,11 @@ import net.seilent.funekit.kit.chrome
 import net.seilent.funekit.kit.chromeOf
 import net.seilent.funekit.kit.motion.MoveForms
 import net.seilent.funekit.kit.motion.MoveKind
+import net.seilent.funekit.kit.motion.NpForm
 import net.seilent.funekit.kit.motion.PageMove
 import net.seilent.funekit.kit.motion.Part
 import net.seilent.funekit.kit.motion.Prop
+import net.seilent.funekit.kit.proj.M3
 import net.seilent.funekit.kit.rolePx
 import net.seilent.funekit.kit.wordBottom
 import net.seilent.funekit.px
@@ -63,6 +66,8 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import kotlin.math.cos
+import kotlin.math.sin
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -116,6 +121,8 @@ class MovePaintTest {
         val wordAt = mutableMapOf<String, List<Float>>()
         val wordFade = mutableMapOf<String, Float>()
         val chromes = mutableMapOf<String, List<Float>>()
+        val quads = mutableListOf<Quad>()
+        var inQuad: String? = null
 
         private fun keep(block: () -> Unit) {
             val was = listOf(k, tx, ty, a)
@@ -180,6 +187,22 @@ class MovePaintTest {
         override fun jump(name: String, g: JumpGrid, ink: JumpInk, cells: JumpCells, s: Scale, off: Float, now: Long, h: Int) = Unit
 
         override fun menuRegions(name: String, menu: Menu, ink: MenuInk, plan: MenuPlan, s: Scale, now: Long, w: Int, h: Int, accent: Color, accentOff: Boolean) = Unit
+
+        override fun quad(name: String, a: Float, t: M3, src: Edges?, block: () -> Unit) {
+            quads += Quad(name, a, t, src)
+            val was = inQuad
+            inQuad = name
+            block()
+            inQuad = was
+        }
+
+        fun quad(name: String): Quad = quads.single { it.name == name }
+    }
+
+    private class Quad(val name: String, val a: Float, val t: M3, val src: Edges?)
+
+    private class NoItem(d: PagePaint) : PagePaint by d {
+        override val item = -1
     }
 
     private inner class ListPage(
@@ -243,7 +266,22 @@ class MovePaintTest {
 
     private inner class Home(val drawn: MutableList<String>, val g: Geo) : HomePaint {
         var look: HomeMove? = null
+        var track: Track? = null
+        var pane: Edges? = null
+        var peekA = -1f
+        var peekX = 0f
+        val where = mutableListOf<Pair<String, String?>>()
         override val quickplay = true
+
+        override fun frontPane(): Edges? = pane
+
+        override fun DrawScope.front(now: Long) {
+            where += "front" to track?.inQuad
+        }
+
+        override fun DrawScope.frontPeek(alpha: Float, now: Long) {
+            where += "frontPeek" to track?.inQuad
+        }
 
         override fun peekAlpha(at: Long) = Tok.qpPeekAlpha
 
@@ -251,12 +289,16 @@ class MovePaintTest {
 
         override fun DrawScope.peek(alpha: Float, now: Long, rec: DrawRecord?) {
             drawn += "peek"
+            peekA = alpha
+            peekX = track?.tx ?: 0f
+            where += "peek" to track?.inQuad
             rec?.word("peek.word", g.chrome.header, 0f, 0f, alpha)
         }
 
         override fun DrawScope.home(look: HomeMove, now: Long, rec: DrawRecord?) {
             drawn += "home"
             this@Home.look = look
+            where += "home" to track?.inQuad
             drawRect(HOME_INK, alpha = look.items)
             rec?.word("home.word", g.chrome.header, 0f, 0f, look.items)
         }
@@ -318,6 +360,8 @@ class MovePaintTest {
             val rec = Track()
             drawn.clear()
             homeDrawn.clear()
+            homePaint.where.clear()
+            homePaint.track = rec
             val w = g.s.widthPx
             val h = g.s.heightPx
             CanvasDrawScope().draw(unit, LayoutDirection.Ltr, Canvas(ImageBitmap(w, h)), Size(w.toFloat(), h.toFloat())) {
@@ -938,16 +982,291 @@ class MovePaintTest {
         r.stack.pages.add("a")
         r.stack.push("np", MoveKind.T7)
         r.stack.frame(0L)
-        val ink = Old.motion_t7Leave + Old.motion_npDark
-        val at = (ink + Old.motion_t7TurnDelay + Old.motion_t7Turn / 2).toLong()
-        val p = 0.5f
-        assertEquals(Old.motion_t7Angle * (1 - p) * (1 - p) * (1 - p) * (1 - p), r.move.at(Part.NpIn, Prop.R, at), 1e-3f)
-        val f = (at - ink) / Tok.motion_t7Fade
-        assertEquals(f * (2 - f), r.move.at(Part.NpIn, Prop.A, at), 1e-3f)
+        val ink = Tok.motion_t7PaneInk
+        val at = (ink + 100).toLong()
+        val pl = TokBoard.a105
+        val x = (at - pl.motion_t7PlaneHold) / (pl.motion_t7PlaneLand - pl.motion_t7PlaneHold)
+        assertEquals(pl.motion_t7PlaneAngle * (1 - x) * (1 - x) * (1 - x), r.move.at(Part.NpIn, Prop.R, at), 0.05f)
+        val lead = Curves.easeOut.at(17f / Tok.motion_t7Fade)
+        val a = lead + (1 - lead) * Curves.easeOut.at(100f / (Tok.motion_t7Fade - 17))
+        assertEquals(a, r.move.at(Part.NpIn, Prop.A, at), 1e-3f)
         assertEquals(0f, r.move.at(Part.NpLeave, Prop.A, at), 0f)
         r.draw(at)
         assertTrue(r.drawn.any { it.name == "arrive" })
         assertTrue(r.drawn.none { it.name == "leave" })
+    }
+
+    @Test
+    fun aT8TurnsNowPlayingOutThenBringsThePageUnderInBandByBand() {
+        val r = Run()
+        r.stack.pages.add("a")
+        r.stack.pages.add("np")
+        r.stack.back { MoveKind.T8 }
+        r.stack.frame(0L)
+        assertFalse(r.paint.ctx.ends.npHome)
+        r.draw(100L)
+        assertTrue(r.drawn.any { it.name == "leave" })
+        assertTrue(r.drawn.none { it.name == "arrive" })
+        r.draw(300L)
+        assertTrue(r.drawn.none { it.name == "leave" })
+        assertTrue(r.drawn.any { it.name == "arrive" })
+    }
+
+    @Test
+    fun aT8ToHomeTurnsHomeInOnItsOwnCamera() {
+        val r = Run()
+        r.stack.pages.add("np")
+        r.stack.back { MoveKind.T8 }
+        r.stack.frame(0L)
+        assertTrue(r.paint.ctx.ends.npHome)
+        assertEquals(0.66f, r.move.at(Part.NpUnder, Prop.A, 300L), 1e-3f)
+        r.draw(100L)
+        assertTrue("home" !in r.homeDrawn)
+        val rec = r.draw(300L)
+        assertTrue("home" in r.homeDrawn)
+        assertEquals(listOf("peek" to NP_HOME, "home" to NP_HOME), r.homePaint.where)
+        assertEquals(0.66f, rec.quad(NP_HOME).a, 1e-3f)
+        assertFalse(requireNotNull(r.homePaint.look).watermark)
+        assertEquals(Tok.qpPeekAlpha, r.homePaint.peekA, 0f)
+    }
+
+    @Test
+    fun aT7FromTheHomeRingTurnsHomeOutWithItsPeekAndNoWatermark() {
+        for (form in listOf(NpForm.Ring, NpForm.Page)) {
+            val r = Run()
+            r.paint.npForm = form
+            r.stack.push("np", MoveKind.T7)
+            r.stack.frame(0L)
+            assertEquals(1f, r.move.at(Part.NpLeave, Prop.A, 100L), 0f)
+            val rec = r.draw(100L)
+            assertEquals(1f, rec.quad(NP_LEAVE).a, 0f)
+            assertEquals("$form", listOf("peek" to NP_LEAVE, "home" to NP_LEAVE), r.homePaint.where)
+            assertFalse(requireNotNull(r.homePaint.look).watermark)
+            assertEquals(Tok.qpPeekAlpha, r.homePaint.peekA, 0f)
+        }
+    }
+
+    @Test
+    fun aT8BringsThePageUnderInBandByBandEachOnItsOwnPart() {
+        assertEquals(360, top)
+        assertEquals(165, pitch)
+        assertEquals(1280, bottom)
+        assertEquals(63f, s.board.pivotTop, 0f)
+        val r = Run()
+        r.stack.pages.add("a")
+        r.stack.pages.add("np")
+        r.stack.back { MoveKind.T8 }
+        r.stack.frame(0L)
+        val at = 342L
+        val rec = r.draw(at)
+        val want = listOf(
+            Triple(Part.NpUHeader, Edges(0, 0, 720, 189), 0.48f),
+            Triple(Part.NpUnder, Edges(0, 189, 720, 360), 0.855f),
+            Triple(Part.NpURow0, Edges(0, 360, 720, 525), 0.79f),
+            Triple(Part.NpURow1, Edges(0, 525, 720, 690), 0.835f),
+            Triple(Part.NpURow2, Edges(0, 690, 720, 855), 0.645f),
+            Triple(Part.NpURow3, Edges(0, 855, 720, 1020), 0.51f),
+            Triple(Part.NpURows, Edges(0, 1020, 720, 1185), 0.475f),
+            Triple(Part.NpURows, Edges(0, 1185, 720, 1280), 0.475f),
+        )
+        assertEquals(want.map { NP_UNDER + it.first.name }, rec.quads.map { it.name })
+        val deg = r.move.at(Part.NpUnder, Prop.R, at).toDouble()
+        assertEquals(0.4642f, Tok.motion_t8InEye, 0f)
+        assertEquals(1155f, Tok.motion_t8InD, 0f)
+        val (wx, wy) = turnAt(720.0, 640.0, deg, 0.0, 594.0, 3465.0)
+        for ((i, q) in rec.quads.withIndex()) {
+            val (_, b, a) = want[i]
+            assertEquals("band $i", listOf(b.x0, b.y0, b.x1, b.y1), requireNotNull(q.src).let { listOf(it.x0, it.y0, it.x1, it.y1) })
+            assertEquals("band $i alpha", a, q.a, 1e-3f)
+            val o = q.t.map(720f, 640f)
+            assertEquals("band $i x", wx, o.x.toDouble(), 0.05)
+            assertEquals("band $i y", wy, o.y.toDouble(), 0.05)
+        }
+    }
+
+    @Test
+    fun aT8OntoAnEmptyListBringsItsContentInOnTheFirstRowPart() {
+        val r = Run(rows = mapOf("e" to 0))
+        r.stack.pages.add("e")
+        r.stack.pages.add("np")
+        r.stack.back { MoveKind.T8 }
+        r.stack.frame(0L)
+        val rec = r.draw(342L)
+        assertEquals(listOf(Part.NpUHeader, Part.NpUnder, Part.NpURow0).map { NP_UNDER + it.name }, rec.quads.map { it.name })
+        assertEquals(listOf(0, 360, 720, 1280), requireNotNull(rec.quads[2].src).let { listOf(it.x0, it.y0, it.x1, it.y1) })
+        assertEquals(0.79f, rec.quads[2].a, 1e-3f)
+    }
+
+    @Test
+    fun aT8ToTheQuickplayFrontTurnsTheThirdColumnEdgeOntoItsRightKey() {
+        val r = Run()
+        r.homePaint.pane = Edges(0, 0, 400, 1280)
+        r.paint.npForm = NpForm.Front
+        r.stack.pages.add("np")
+        r.stack.back { MoveKind.T8 }
+        r.stack.frame(0L)
+        val at = 284L
+        val rec = r.draw(at)
+        assertEquals(listOf(NP_PEEK, NP_PANE), rec.quads.map { it.name })
+        val q = rec.quad(NP_PANE)
+        assertEquals(17f / 33f, q.a, 1e-3f)
+        assertEquals(listOf(101, 0, 551, 1280), requireNotNull(q.src).let { listOf(it.x0, it.y0, it.x1, it.y1) })
+        val l = 27.8 * 3
+        val rk = -65.7 * 3
+        assertEquals(l, r.move.at(Part.NpUnder, Prop.X, at).toDouble(), 1e-3)
+        assertEquals(rk, r.move.at(Part.NpEdge, Prop.X, at).toDouble(), 1e-3)
+        val o = q.t.map(551f, 594f)
+        assertEquals(Math.round(l) + 551 + (rk - l), o.x.toDouble(), 0.5)
+        assertEquals(594.0, o.y.toDouble(), 0.05)
+        assertEquals(listOf("frontPeek" to NP_PEEK, "front" to NP_PANE), r.homePaint.where)
+    }
+
+    @Test
+    fun aT7FromTheQuickplayFrontTurnsItsPeekAboutThePeekRect() {
+        val r = Run()
+        val pane = Edges(0, 0, 400, 1280)
+        r.homePaint.pane = pane
+        r.paint.npForm = NpForm.Front
+        r.stack.push("np", MoveKind.T7)
+        r.stack.frame(0L)
+        val at = 190L
+        val rec = r.draw(at)
+        val deg = r.move.at(Part.NpPeek, Prop.R, at).toDouble()
+        assertEquals(25.84, deg, 1e-3)
+        val pr = Edges(551, 398, 720, 986)
+        val q = rec.quad(NP_PEEK)
+        assertEquals(listOf(pr.x0, pr.y0, pr.x1, pr.y1), requireNotNull(q.src).let { listOf(it.x0, it.y0, it.x1, it.y1) })
+        val dx = Math.round(r.move.at(Part.NpPeek, Prop.X, at)).toDouble()
+        val dy = Math.round(r.move.at(Part.NpPeek, Prop.Y, at)).toDouble()
+        val (wx, wy) = turnAt(640.0, 300.0, deg, 551.0, 692.0, 1656.0)
+        val o = q.t.map(640f, 300f)
+        assertEquals(dx + wx, o.x.toDouble(), 0.05)
+        assertEquals(dy + wy, o.y.toDouble(), 0.05)
+        assertEquals(listOf(101, 0, 551, 1280), requireNotNull(rec.quad(NP_LEAVE).src).let { listOf(it.x0, it.y0, it.x1, it.y1) })
+        assertEquals(listOf("front" to NP_LEAVE, "frontPeek" to NP_PEEK), r.homePaint.where)
+    }
+
+    @Test
+    fun aT7FromAPageDrawsItsLeaveFirstOnTheLeaveCameraAndFromHomeLast() {
+        val at = 300L
+        val r = Run()
+        r.stack.pages.add("a")
+        r.stack.push("np", MoveKind.T7)
+        r.stack.frame(0L)
+        val rec = r.draw(at)
+        val names = rec.quads.map { it.name }
+        assertEquals(NP_LEAVE, names.first())
+        assertTrue(names.contains(NP_PART + Part.NpIn.name))
+        val deg = -68.29 + (-85.93 + 68.29) * 50 / 85
+        val slide = Math.round(205.53 + (254.1 - 205.53) * 50 / 76).toDouble()
+        val hinge = Math.round(-27.66 * 3).toDouble()
+        assertEquals(237.0, slide, 0.0)
+        assertEquals(deg, r.move.at(Part.NpLeave, Prop.R, at).toDouble(), 1e-3)
+        assertEquals(slide, Math.round(r.move.at(Part.NpLeave, Prop.X, at)).toDouble(), 0.0)
+        assertEquals(hinge, Math.round(r.move.at(Part.NpLeave, Prop.PX, at)).toDouble(), 0.0)
+        assertEquals(0.5086f, s.board.motion_t7EyeY, 0f)
+        assertEquals(950f, Tok.motion_t7PaneD, 0f)
+        val m = rec.quad(NP_LEAVE).t
+        for ((x, y) in listOf(0.0 to 0.0, 720.0 to 0.0, 360.0 to 640.0, 720.0 to 1280.0)) {
+            val o = m.map(x.toFloat(), y.toFloat())
+            val (bx, by) = ay(o.x - slide, o.y.toDouble(), deg, hinge, 651.0, 2850.0, 360.0 - slide)
+            assertEquals("leave x ($x, $y)", x, bx, 0.05)
+            assertEquals("leave y ($x, $y)", y, by, 0.05)
+        }
+        val h = Run()
+        h.paint.npForm = NpForm.Ring
+        h.stack.push("np", MoveKind.T7)
+        h.stack.frame(0L)
+        assertEquals(NP_LEAVE, h.draw(at).quads.last().name)
+    }
+
+    @Test
+    fun aT4nFromAPageWithNoHomeItemTurnsThePageOutAndHomeIn() {
+        val r = Run(wraps = mapOf("t" to { p: PagePaint -> NoItem(p) }))
+        r.stack.pages.add("t")
+        r.stack.back { MoveKind.T4n }
+        r.stack.frame(0L)
+        val e = r.paint.ctx.ends
+        assertTrue(e.turn)
+        assertEquals(3f, e.homeU, 0f)
+        val out = r.draw(100L)
+        assertEquals(listOf(TURN_LEAVE), out.quads.map { it.name })
+        assertEquals(1f, out.quad(TURN_LEAVE).a, 0f)
+        assertEquals(-151.6f, Tok.motion_t8OutHinge, 0f)
+        assertEquals(0.5029f, Tok.motion_t8OutEye, 0f)
+        val ld = r.move.at(Part.Leave, Prop.R, 100L).toDouble()
+        assertTrue(ld > 0.0)
+        val (lx, ly) = turnAt(720.0, 640.0, ld, -455.0, 644.0, 1656.0)
+        val lo = out.quad(TURN_LEAVE).t.map(720f, 640f)
+        assertEquals(lx, lo.x.toDouble(), 0.05)
+        assertEquals(ly, lo.y.toDouble(), 0.05)
+        val at = 320L
+        val rec = r.draw(at)
+        assertEquals(listOf(TURN_HOME), rec.quads.map { it.name })
+        assertEquals(1f, rec.quad(TURN_HOME).a, 0f)
+        val x = 103.0 / 418
+        val deg = -67.2 * (1 - x) * (1 - x) * (1 - x)
+        val slide = Math.round(-4.3 * 3 * (1 - 103.0 / 203)).toDouble()
+        val hinge = Math.round(7.9 * 3).toDouble()
+        assertEquals(-6.0, slide, 0.0)
+        assertEquals(deg, r.move.at(Part.HomeTurn, Prop.R, at).toDouble(), 0.05)
+        val m = rec.quad(TURN_HOME).t
+        for ((px, py) in listOf(0.0 to 0.0, 720.0 to 0.0, 360.0 to 640.0, 720.0 to 1280.0)) {
+            val o = m.map(px.toFloat(), py.toFloat())
+            val (bx, by) = ay(o.x - slide, o.y.toDouble(), deg, hinge, 637.0, 2304.0, 360.0 - slide)
+            assertEquals("home x ($px, $py)", px, bx, 0.05)
+            assertEquals("home y ($px, $py)", py, by, 0.05)
+        }
+        assertEquals(listOf("peek" to null, "home" to TURN_HOME), r.homePaint.where)
+        assertEquals(Tok.qpPeekAlpha, r.homePaint.peekA, 0f)
+        assertEquals(Math.round(r.move.at(Part.Peek, Prop.X, at)).toFloat(), r.homePaint.peekX, 0f)
+        val look = requireNotNull(r.homePaint.look)
+        assertTrue(look.watermark)
+        assertEquals((320f - 277f) / 75f * Roles.homeSubtitle.alpha, look.sub, 1e-3f)
+    }
+
+    @Test
+    fun aT4nTurnsOnlyForAMorphPopOfAPageWithNoHomeItem() {
+        val item = Run()
+        item.stack.pages.add("a")
+        item.stack.back { MoveKind.T4n }
+        item.stack.frame(0L)
+        assertFalse(item.paint.ctx.ends.turn)
+        val home = Run(wraps = mapOf("t" to { p: PagePaint -> NoItem(p) }))
+        home.stack.pages.add("t")
+        home.stack.home(MoveKind.T4n)
+        home.stack.frame(0L)
+        assertFalse(home.paint.ctx.ends.turn)
+        val t4h = Run(wraps = mapOf("t" to { p: PagePaint -> NoItem(p) }))
+        t4h.stack.pages.add("t")
+        t4h.stack.back { MoveKind.T4h }
+        t4h.stack.frame(0L)
+        assertFalse(t4h.paint.ctx.ends.turn)
+        val under = Run(wraps = mapOf("t" to { p: PagePaint -> NoItem(p) }))
+        under.stack.pages.add("a")
+        under.stack.pages.add("t")
+        under.stack.back { MoveKind.T4n }
+        under.stack.frame(0L)
+        assertFalse(under.paint.ctx.ends.turn)
+    }
+
+    private fun turnAt(x: Double, y: Double, deg: Double, hinge: Double, eye: Double, d: Double): Pair<Double, Double> {
+        val th = Math.toRadians(deg)
+        val sn = sin(th) / d
+        val k = hinge * sn + cos(th)
+        val w = sn * x + 1 - hinge * sn
+        return Pair((k * x + hinge * (1 - k)) / w, (eye * sn * x + y - eye * hinge * sn) / w)
+    }
+
+    private fun ay(x: Double, y: Double, deg: Double, h: Double, eye: Double, d: Double, cx: Double): Pair<Double, Double> {
+        val th = Math.toRadians(deg)
+        val c = cos(th)
+        val sn = sin(th)
+        val es = eye * sn / d
+        val u = (1 - h * sn / d) * x + (h * c - h + h * cx * sn / d)
+        val v = -es * x + (c + (cx - h) * sn / d) * y + es * h
+        val w = -sn / d * x + c + cx * sn / d
+        return Pair(u / w, v / w)
     }
 
     @Test

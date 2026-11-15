@@ -137,32 +137,6 @@ class PressSlots {
         key = false
     }
 
-    fun show(now: Long) {
-        on.p.show(now.toFloat())
-        back.p.show(now.toFloat())
-    }
-
-    fun factor(item: Int): Float = when {
-        item < 0 -> 1f
-        item == on.item -> on.p.factor()
-        item == back.item -> back.p.factor()
-        else -> 1f
-    }
-
-    fun factorAt(item: Int, now: Long): Float = when {
-        item < 0 -> 1f
-        item == on.item -> on.p.factorAt(now.toFloat())
-        item == back.item -> back.p.factorAt(now.toFloat())
-        else -> 1f
-    }
-
-    fun draw(item: Int, now: Long): Float = when {
-        item < 0 -> 1f
-        item == on.item -> on.p.drawn(now.toFloat())
-        item == back.item -> back.p.drawn(now.toFloat())
-        else -> 1f
-    }
-
     private fun of(item: Int): Press? = when {
         item < 0 -> null
         item == on.item -> on.p

@@ -147,52 +147,24 @@ class MotionTest {
         assertEquals(0.98f, p.scale(350f), 0.0001f)
         assertEquals(1f, p.scale(400f), 0.0001f)
         p.down(500f)
-        assertEquals(1 - 0.04f * 2 / 16, p.drawn(515f), 0.0001f)
+        assertEquals(1 - 0.04f * 2 / 16, p.draw(515f), 0.0001f)
     }
 
     @Test
     fun aShownPressIsStaleWhileItMovesAndNotOnceItsLegEnded() {
         val p = Press().also { it.scaled = true }
         p.down(0f)
-        p.show(50f)
+        p.draw(50f)
         assertTrue(p.stale(50f))
         p.tap(100f)
-        p.show(350f)
+        p.draw(350f)
         assertTrue(p.stale(350f))
-        p.show(500f)
+        p.draw(500f)
         assertFalse(p.stale(500f))
     }
 
     @Test
-    fun factorAfterShowAndFactorAtEqualDrawnForEveryStep() {
-        val seen = HashSet<Float>()
-        for (k in 0..16) {
-            val t = k * Tok.motion_press / 16
-            val a = Press().also { it.down(0f) }
-            val b = Press().also { it.down(0f) }
-            val c = Press().also { it.down(0f) }
-            a.show(t)
-            val d = c.drawn(t)
-            assertEquals(d, a.factor(), 0f)
-            assertEquals(d, b.factorAt(t), 0f)
-            seen += d
-        }
-        assertEquals(17, seen.size)
-    }
-
-    @Test
-    fun factorAtLeavesTheShownStepAlone() {
-        val p = Press().also { it.scaled = true }
-        p.down(0f)
-        p.show(50f)
-        val shown = p.factor()
-        assertTrue(p.factorAt(100f) < shown)
-        assertEquals(shown, p.factor(), 0f)
-        assertTrue(p.stale(100f))
-    }
-
-    @Test
-    fun everyPressMutatorButShowBumpsTheRevision() {
+    fun everyPressMutatorBumpsTheRevision() {
         val p = Press()
         val mutators = listOf<(Press) -> Unit>(
             { it.down(0f) }, { it.tap(10f) }, { it.cancel(20f) }, { it.drop() }, { it.reset() },
@@ -204,10 +176,6 @@ class MotionTest {
             assertTrue(p.revision > r)
         }
         val r = p.revision
-        p.show(30f)
-        p.factor()
-        p.factorAt(40f)
-        p.drawn(50f)
         p.stale(60f)
         p.look(70f)
         p.lit(80f)
@@ -277,17 +245,6 @@ class MotionTest {
         p.scaled = true
         assertTrue(p.moving(60f))
         assertFalse(p.moving(100f))
-    }
-
-    @Test
-    fun theBridgeFactorKeepsThePressScaleStepsAndLookReturnsTheLit() {
-        val p = Press()
-        p.down(0f)
-        p.show(50f)
-        assertEquals(1 - (1 - Tok.motion_pressScale) * 8 / 16, p.factor(), 0.0001f)
-        assertEquals(p.factorAt(50f), p.factor(), 0f)
-        assertEquals(1f, p.look(50f), 0f)
-        assertEquals(1 - (1 - Tok.motion_pressScale) * 8 / 16, p.factor(), 0.0001f)
     }
 
     @Test

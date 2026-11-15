@@ -99,11 +99,11 @@ class OverlayHitTest {
         rule.mainClock.autoAdvance = false
         rule.onRoot().performTouchInput { down(Offset(92f, 45f)) }
         rule.mainClock.advanceTimeBy(50, ignoreFrameDuration = true)
-        val held = g.press.draw(0, now())
+        val held = g.press.scale(0, now())
         assertTrue("held $held", held > 0.96f && held < 1f)
         rule.onRoot().performTouchInput { up() }
         rule.mainClock.advanceTimeBy(400)
-        assertEquals(1f, g.press.draw(0, now()), 0f)
+        assertEquals(1f, g.press.scale(0, now()), 0f)
         assertFalse(g.press.stale(now()))
         rule.mainClock.autoAdvance = true
         rule.waitForIdle()
