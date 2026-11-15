@@ -1,11 +1,18 @@
 package net.seilent.funekit.kit.touch
 
+import net.seilent.funekit.fx
+import net.seilent.funekit.fxInt
+import net.seilent.funekit.gen.Tok
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RowTrackTest {
+    private companion object {
+        const val SONGS = 1291
+    }
+
     private fun a105(q: Int = 0): RowTrack = RowTrack(165, 920).also {
         it.count(30, 0)
         if (q > 0) assertEquals(q.toFloat(), it.by(q.toFloat()), 0f)
@@ -193,5 +200,78 @@ class RowTrackTest {
         val flat = RowTrack(106, 523, 200).also { it.count(30, 0) }
         assertEquals(flat.first, flat.drawFirst)
         assertEquals(flat.sub, flat.drawSub)
+    }
+
+    private fun song(ppu: Float, view: Int): RowTrack = RowTrack(0, view, pitch64 = fx(Tok.rowSong), ppu64 = fx(ppu)).also { it.count(SONGS, 0) }
+
+    @Test
+    fun songRowTopsRoundOncePerRowFromTheSixteenSixteenPitch() {
+        assertEquals(53.2f, Tok.rowSong, 0f)
+        val a105 = song(3f, 920)
+        assertEquals(listOf(360, 520, 679, 839, 998, 1158), (0..5).map { 360 + a105.topOf(it) })
+        val r1 = song(2f, 560)
+        assertEquals(listOf(240, 346, 453, 559, 666, 772), (0..5).map { 240 + r1.topOf(it) })
+    }
+
+    @Test
+    fun anR1TapTakesTheRowOfItsSixteenSixteenOffset() {
+        val r1 = song(2f, 560)
+        assertEquals(1, r1.tapRow(452f - 240f))
+        assertEquals(2, r1.tapRow(453f - 240f))
+        assertEquals(1, r1.tapRow(452.7f - 240f))
+        assertEquals(2, r1.tapRow(452.9f - 240f))
+    }
+
+    @Test
+    fun anR1SongTrackMovesByRowTopsAndKeepsItsPlaceThroughTheSaver() {
+        val r1 = song(2f, 560)
+        r1.toRow(5)
+        assertEquals(532, r1.q)
+        assertEquals(5, r1.first)
+        assertEquals(0, r1.sub)
+        r1.at(500)
+        assertEquals(4, r1.first)
+        assertEquals(74, r1.sub)
+        assertEquals(137362, r1.topOf(SONGS))
+        assertEquals(137362 - 560, r1.max)
+        r1.at(1000)
+        val back = RowTrack.restore(r1.save(2f), RowSpec(r1.pitch, 560, pitch64 = r1.pitch64, ppu64 = r1.ppu64), 2f).also { it.count(SONGS, it.first) }
+        assertEquals(1000, back.q)
+    }
+
+    @Test
+    fun aSixteenSixteenTrackKeepsItsPitchThroughTheIntegerResizeAndRescale() {
+        val r1 = song(2f, 560)
+        assertFalse(r1.whole)
+        r1.resize(107, 560)
+        assertEquals(213, r1.topOf(2))
+        r1.at(1000)
+        assertEquals(9, r1.first)
+        assertEquals(42, r1.sub)
+        r1.rescale(2f, 3f, 161)
+        assertEquals(fx(3f), r1.ppu64)
+        assertEquals(319, r1.topOf(2))
+        assertEquals(1499, r1.q)
+        val flat = RowTrack(106, 560).also { it.count(30, 0) }
+        assertTrue(flat.whole)
+        flat.resize(110, 560)
+        assertEquals(220, flat.topOf(2))
+        flat.rescale(1f, 1f, 120)
+        assertEquals(240, flat.topOf(2))
+        assertTrue(flat.whole)
+    }
+
+    @Test
+    fun aSixteenSixteenTrackAtAWholeUnitPitchStaysSixteenSixteenThroughAnIntegerResizeAndAFractionalRescale() {
+        val t = RowTrack(56, 320, pitch64 = fx(55f), ppu64 = fxInt(1)).also { it.count(30, 0) }
+        assertFalse(t.whole)
+        t.resize(55, 320)
+        assertEquals(fxInt(55), t.pitch64)
+        assertFalse(t.whole)
+        t.rescale(1f, 2.5f, 138)
+        assertEquals(fx(2.5f), t.ppu64)
+        assertEquals(fx(55f), t.pitch64)
+        assertEquals(275, t.topOf(2))
+        assertFalse(t.whole)
     }
 }

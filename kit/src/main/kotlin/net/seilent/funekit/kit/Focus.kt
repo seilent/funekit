@@ -3,9 +3,11 @@ package net.seilent.funekit.kit
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
+import net.seilent.funekit.fxOfPx
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.motion.Leg
 import net.seilent.funekit.kit.motion.lerp
+import net.seilent.funekit.kit.touch.RowTrack
 import kotlin.math.max
 
 fun focusAfterScroll(row: Int, count: Int, off: Long, view: Long, pitch: Long, collapse: Long = 0L): Int {
@@ -17,6 +19,9 @@ fun focusAfterScroll(row: Int, count: Int, off: Long, view: Long, pitch: Long, c
     val last = max(first, ((off + view) / pitch).toInt() - 1)
     return (if (top < band) first else last).coerceIn(0, count - 1)
 }
+
+fun focusAfterScroll(row: Int, t: RowTrack, collapse: Long = 0L): Int =
+    focusAfterScroll(row, t.count, fxOfPx(t.q.toFloat(), t.ppu64), fxOfPx(t.view.toFloat(), t.ppu64), t.pitch64, collapse)
 
 class FocusTrack {
     var revision by mutableIntStateOf(0)

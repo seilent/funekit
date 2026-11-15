@@ -32,7 +32,6 @@ import kotlinx.coroutines.launch
 import net.seilent.funekit.Scale
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.px
-import kotlin.math.floor
 
 class Tap(
     val onPress: () -> Unit,
@@ -100,6 +99,10 @@ class ListTouch(
     val above: Int get() = rows?.above ?: 0
     val drawSub: Int get() = checkNotNull(rows).drawSub
 
+    fun topOf(r: Int): Int = checkNotNull(rows).topOf(r)
+
+    fun rowHeight(i: Int): Int = topOf(i + 1) - topOf(i)
+
     fun toRow(i: Int) {
         val r = checkNotNull(rows)
         r.toRow(i)
@@ -119,7 +122,7 @@ class ListTouch(
     }
 
     private fun cross(r: RowTrack) {
-        val d = (r.drawFirst * r.pitch - (state.firstVisibleItemIndex * r.pitch + state.firstVisibleItemScrollOffset)).toFloat()
+        val d = (r.topOf(r.drawFirst) - (r.topOf(state.firstVisibleItemIndex) + state.firstVisibleItemScrollOffset)).toFloat()
         if (state.dispatchRawDelta(d) != d) state.requestScrollToItem(r.drawFirst)
     }
 
@@ -224,17 +227,17 @@ private fun rememberRowTouch(kind: Kind, scale: Scale, onRescale: () -> Unit, ro
     val track = rememberSaveable(saver = listSaver(
         save = { it.save(ppu) },
         restore = { RowTrack.restore(it, spec, ppu) },
-    )) { RowTrack(rows.pitch, rows.view, above = rows.above) }
+    )) { RowTrack(rows.pitch, rows.view, 0, rows.above, rows.pitch64, rows.ppu64, rows.whole) }
     val state = remember(track) { LazyListState(track.drawFirst, 0) }
     val last = remember { floatArrayOf(scale.ppu) }
     SideEffect {
         val f = track.drawFirst
         if (last[0] != scale.ppu) {
-            track.rescale(last[0], scale.ppu, rows.pitch)
+            track.rescale(last[0], scale.ppu, rows)
             last[0] = scale.ppu
             onRescale()
         }
-        track.resize(rows.pitch, rows.view, rows.above)
+        track.resize(rows)
         if (track.drawFirst != f) state.requestScrollToItem(track.drawFirst)
     }
     val scope = rememberCoroutineScope()
@@ -310,7 +313,7 @@ class Arbiter(val scale: Scale) {
         val r = t.rows ?: return null
         val y = o.y - (root ?: return null).localPositionOf(spot.c, Offset.Zero).y + t.over
         if (y < 0f || y >= r.view) return null
-        val i = floor((y + r.q) / r.pitch).toInt()
+        val i = r.tapRow(y)
         return if (i in 0 until r.count) t.rowTap(i) else null
     }
 

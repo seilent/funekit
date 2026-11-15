@@ -13,6 +13,7 @@ import net.seilent.funekit.Scale
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.motion.Curves
 import net.seilent.funekit.kit.motion.lerp
+import net.seilent.funekit.kit.touch.RowTrack
 import net.seilent.funekit.px
 
 private const val HALF = 2
@@ -32,6 +33,9 @@ fun thumbOf(s: Scale, top: Int, bottom: Int, view: Long, content: Long, scrolled
 
 fun listThumbOf(s: Scale, top: Int, bottom: Int, count: Int, pitch: Int, scrolled: Long): ThumbRect? =
     thumbOf(s, top, bottom, (bottom - top).toLong(), count.toLong() * pitch, scrolled)
+
+fun listThumbOf(s: Scale, top: Int, bottom: Int, t: RowTrack): ThumbRect? =
+    thumbOf(s, top, bottom, (bottom - top).toLong(), t.topOf(t.count).toLong(), t.q.toLong())
 
 class ThumbFade {
     private val hold = Tok.scrollbar_hold.toLong()
