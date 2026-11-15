@@ -11,6 +11,7 @@ import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.font.createFontFamilyResolver
 import androidx.compose.ui.unit.Density
@@ -23,7 +24,9 @@ import net.seilent.funekit.Surface
 import net.seilent.funekit.fx
 import net.seilent.funekit.fxDiv
 import net.seilent.funekit.fxInt
+import net.seilent.funekit.Nav
 import net.seilent.funekit.gen.Tok
+import net.seilent.funekit.gen.TokBoard
 import net.seilent.funekit.kept
 import net.seilent.funekit.kit.Accent
 import net.seilent.funekit.kit.JumpCells
@@ -174,6 +177,86 @@ class PhoneScaleSheetTest {
 
     private fun line(case: String, look: String) = "- ${Render.BASE}/$F `$F/$case.png`: $look."
 
+    private val cover = Dev("948x1048", "Galaxy Z Flip7 cover", 948, 1048, listOf(Nav.None))
+    private val widget = Dev("720x748", "cover sheet window", 720, 748, listOf(Nav.None))
+    private val tall = Dev("1080x1600", "1080 x 1600 window", 1080, 1600, listOf(Nav.None))
+
+    private fun genClass(h: Float): Float {
+        val low = h < TokBoard.r1.canvasH
+        val lo = if (low) TokBoard.v1 else TokBoard.r1
+        val hi = if (low) TokBoard.r1 else TokBoard.a105
+        return lo.minTextPx + (hi.minTextPx - lo.minTextPx) * (h - lo.canvasH) / (hi.canvasH - lo.canvasH)
+    }
+
+    private fun floored(s: Scale, floor: Float): Scale {
+        s.board.javaClass.getDeclaredField("minTextPx").apply { isAccessible = true }.setFloat(s.board, floor)
+        return s
+    }
+
+    private fun floorPair(id: String, what: String, dev: Dev, surface: Surface, block: DrawScope.(Scale) -> Unit): List<Tile> {
+        val rule = shot(dev, surface, block = block)
+        val gen = genClass(rule.s.fit?.h ?: rule.s.stdH)
+        val old = shot(dev, surface, base = { floored(it, gen) }, block = block)
+        return listOf(
+            tile("$id-rule", "$what, the rule: text never under ${"%.1f".format(rule.s.board.minTextPx)} px", dev, rule),
+            tile("$id-gen", "$what, Gen's class: text never under ${"%.1f".format(gen)} px", dev, old, listOf(GEN_NOTE)),
+        )
+    }
+
+    @Test
+    fun textFloor() {
+        val tiles = floorPair("p2160-songs", "Mi MIX 2S songs hub, page base", p2160, Surface.Page) { hub(it, songs) } +
+            floorPair("p2160-sheet", "Mi MIX 2S sheet over the songs hub, page base", p2160, Surface.Page) { hub(it, songs); menu(it, OverKind.Sheet) } +
+            floorPair("p2160-home-songs", "Mi MIX 2S songs hub on the fit base, as home's size", p2160, Surface.Home) { hub(it, songs) } +
+            floorPair("cover-songs", "Galaxy Z Flip7 cover songs hub, fit by height", cover, Surface.Page) { hub(it, songs) } +
+            floorPair("cover-sheet", "Galaxy Z Flip7 cover sheet over the songs hub", cover, Surface.Page) { hub(it, songs); menu(it, OverKind.Sheet) }
+        render.write(Sheet(FLOOR, "textfloor", listOf(FLOOR_FORM, Phones.SAME_SIZE), tiles))
+        render.index(FLOOR, listOf(
+            "# Text floor (FB-textfloor)",
+            "",
+            FLOOR_FORM,
+            "",
+            "- ${Render.BASE}/$FLOOR `$FLOOR/textfloor.png`: each pair the rule (left) against Gen's class (right): the Mi MIX 2S page base 23.7 px against 40 px, its fit base 36 px against 40 px, the Galaxy Z Flip7 cover 26.2 px against 10 px.",
+            "- clean tiles at device px: ${Render.BASE}/$FLOOR/tiles",
+        ))
+    }
+
+    private fun DrawScope.fitRuler(s: Scale, b: TokBoard.Board) {
+        val ink = Ink(drawContext.canvas.nativeCanvas, s.ppu, s.left, s.board, s.h, s.w)
+        val top = s.board.page_contentTop
+        for (k in 0 until Tok.gridCols.toInt()) {
+            val x = Tok.gridX + k * (Tok.gridTile + Tok.gridGap)
+            ink.box(x, top, Tok.gridTile, Tok.gridTile)
+            ink.text(Roles.gridCaption, "album $k", x, top + Tok.gridTile + Tok.tileCaptionDrop)
+            ink.text(Roles.gridCaption, "artist $k", x, top + Tok.gridTile + Tok.tileCaptionDrop + b.tileCaptionPitch)
+            ink.box(x, top + Tok.gridTile + b.tileCaptionBand, Tok.gridTile, 1f / s.ppu, Tok.accent_h120)
+        }
+        val next = Roles.npViewNext(b)
+        val y = top + Tok.gridTile + b.tileCaptionBand + Tok.npNextDrop
+        for (i in 0 until 3) ink.text(next, "coming up line ${i + 1}", Tok.npNextIndent, y + i * Tok.npNextLinePitch)
+    }
+
+    @Test
+    fun fitByHeight() {
+        val tiles = listOf(cover, widget, tall).flatMap { dev ->
+            val after = shot(dev) { fitRuler(it, it.board) }
+            val before = shot(dev) { fitRuler(it, TokBoard.r1) }
+            listOf(
+                tile("${dev.id}-today", "${dev.label}: today, the R1 and A105 values", dev, before),
+                tile("${dev.id}-v042", "${dev.label}: the rule at funeOS v0.4.2", dev, after, listOf(FIT_NOTE)),
+            )
+        }
+        render.write(Sheet(FIT, "fitbyheight", listOf(FIT_FORM, Phones.SAME_SIZE), tiles))
+        render.index(FIT, listOf(
+            "# Fit by height windows (FB-fitbyheight)",
+            "",
+            FIT_FORM,
+            "",
+            "- ${Render.BASE}/$FIT `$FIT/fitbyheight.png`: each pair today (left) against the rule (right): the album caption pitch, the caption band (the green line, which on a 320 u canvas runs past the hit cell, as funeOS draws it) and the coming up lines, on the Galaxy Z Flip7 cover, the 720 x 748 cover sheet window and a 1080 x 1600 window.",
+            "- clean tiles at device px: ${Render.BASE}/$FIT/tiles",
+        ))
+    }
+
     @Test
     fun phoneScale() {
         val pages = listOf(
@@ -234,6 +317,12 @@ class PhoneScaleSheetTest {
     companion object {
         const val F = "phonescale-signoff"
         const val LAUNCHER = "phonescale-signoff/launcher"
+        const val FLOOR = "fb-textfloor"
+        const val FIT = "fb-fitbyheight"
+        private const val GEN_NOTE = "Gen's class: the floor follows the line between the R1 and A105 floors, so it grows on tall windows and drops to V1's 10 px on a 320 u canvas"
+        private const val FLOOR_FORM = "The smallest text px on each window. The rule: 8 px per u times the window's px per u (the R1 and A105 floor), V1's own 10 px only on the V1 board at its own ppu."
+        private const val FIT_NOTE = "a 320 u canvas takes V1's values; a canvas between 320 and 400 u takes the line between V1 and R1; the caption band runs past the hit cell on those windows"
+        private const val FIT_FORM = "Windows whose height limits them (the cover display, the cover sheet, a 1080 x 1600 window) take V1's values for the tokens V1 alone changed at funeOS v0.4.2."
         private const val TOAST_AT = 2000L
         private const val PAGES_FORM = "Pages on the page base: the rows, the pivots and the header word at the A105's size, the extra width and height used."
         private const val JUMP_NOTE = "4.5 px/u over a drawer at 2.96669 px/u: the grid draws 1.52 times larger than the page under it"
