@@ -1,4 +1,0 @@
-new motion.npDark
-new motion.t8OutEnd
-new motion.npSlideLand
-new motion.npSlideTextDelay

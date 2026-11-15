@@ -1,6 +1,0 @@
-new motion.t3mFadeDelay
-new motion.t3mFade
-new motion.contentHubRows
-new motion.contentPageRows
-new motion.tileBack
-new motion.t3cFade

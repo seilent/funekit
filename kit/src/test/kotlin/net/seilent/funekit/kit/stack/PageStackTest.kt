@@ -1,6 +1,5 @@
 package net.seilent.funekit.kit.stack
 
-import net.seilent.funekit.gen.Old
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.motion.ContentForm
 import net.seilent.funekit.kit.motion.MoveEnds

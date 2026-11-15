@@ -1,7 +1,6 @@
 package net.seilent.funekit.sheet
 
 import net.seilent.funekit.Roles
-import net.seilent.funekit.gen.Old
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.gen.TokBoard
 import kotlin.math.min

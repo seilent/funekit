@@ -89,13 +89,6 @@ object Gen {
         if (got != s.set) throw GenException("$task: the vendored set hashes to $got, SOURCE pins ${s.set}")
     }
 
-    fun checkPin(root: File, pin: File, task: String = "checkTokPin") {
-        if (!pin.isFile) throw GenException("$task: ${pin.name} is missing")
-        val want = pin.readText().trim()
-        val got = sha256(setList(root, task).toByteArray())
-        if (got != want) throw GenException("$task: the vendored set hashes to $got, ${pin.name} pins $want\n${setList(root, task)}")
-    }
-
     class Row(val name: String, val value: String, val unit: String)
 
     class Tokens(val names: List<String>, val each: List<List<Row>>, val board: Set<String>) {
@@ -261,11 +254,6 @@ object Gen {
     fun tokBoardKt(root: File, fit: File): String {
         val t = tokens(root)
         return boardKt("TokBoard", t, keptRows(t, fitFor(t, fit)))
-    }
-
-    fun oldBoardKt(root: File): String {
-        val t = tokens(root)
-        return boardKt("OldBoard", t, t.names.indices.filter { t.names[it] in t.board && !renderer(t.names[it]) })
     }
 
     private fun boardKt(name: String, t: Tokens, kept: List<Int>): String {

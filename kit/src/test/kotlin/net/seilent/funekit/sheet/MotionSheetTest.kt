@@ -20,7 +20,6 @@ import net.seilent.funekit.Role
 import net.seilent.funekit.Roles
 import net.seilent.funekit.Surface
 import net.seilent.funekit.gen.Glyphs
-import net.seilent.funekit.gen.Old
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.gen.TokBoard
 import net.seilent.funekit.kit.Accent

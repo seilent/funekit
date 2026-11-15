@@ -15,7 +15,6 @@ class GenTokensTest {
     val tmp = TemporaryFolder()
 
     private val vendored = File("../tokens/funeos").canonicalFile
-    private val old = File("../tokens/funeos-old").canonicalFile
 
     private val rows = listOf(
         listOf("u", "1.0", "2.0", "3.0", "px_per_u"),
@@ -42,13 +41,6 @@ class GenTokensTest {
     }
 
     private fun fitFile(root: File) = File(root, "fit.txt").also { it.writeText(Gen.fitText(root)) }
-
-    private fun bridged(now: List<List<String>>, lines: Map<String, String>): BridgeRule {
-        val was = dir()
-        val b = File(was, "bridge").also { it.mkdirs() }
-        for ((f, text) in lines) File(b, f).writeText(text)
-        return Bridge.rule(dir(now), was)
-    }
 
     @Test
     fun eachClassIsAssignedFromThePrintedValues() {
@@ -121,72 +113,6 @@ class GenTokensTest {
     }
 
     @Test
-    fun oldIsTheTokFormUnderItsOwnName() {
-        val d = dir()
-        val kt = Gen.tokKt(d, "Old")
-        assertTrue(kt.startsWith("package ${Gen.pkg}\n\nobject Old {\n"))
-        assertTrue(kt.contains("    const val same = 16f\n"))
-        assertTrue(kt.contains("    const val color_bg = 0xFF111111L\n"))
-        assertFalse(kt.contains("const val prop"))
-        assertEquals(Gen.tokKt(d).replace("object Tok {", "object Old {"), kt)
-    }
-
-    @Test
-    fun oldBoardHoldsEveryBoardTokenButTheRendererOnesAndReadsNoFitFile() {
-        val d = dir()
-        val kt = Gen.oldBoardKt(d)
-        assertFalse(File(d, "fit.txt").exists())
-        assertTrue(kt.contains("object OldBoard {\n    abstract class Board {\n"))
-        assertTrue(kt.contains("    object r1 : Board() {\n"))
-        assertTrue(kt.contains("        override val motion_npPace: Float = 2f\n"))
-        assertTrue(kt.contains("        override val art: Float = 149.4f\n"))
-        assertFalse(kt.contains("saver_aheadMs"))
-        assertFalse(kt.contains("val same"))
-        assertEquals(Gen.tokBoardKt(d, fitFile(d)).replace("object TokBoard {", "object OldBoard {"), kt)
-    }
-
-    @Test
-    fun theBridgeReadsItsLinesAndNamesTheChangedTokens() {
-        val equal = bridged(rows, mapOf("c2.txt" to "old same\n", "c3.txt" to "new art\nold color.bg\n"))
-        assertEquals(setOf("same", "color_bg"), equal.old)
-        assertEquals(setOf("art"), equal.new)
-        assertEquals(emptySet<String>(), equal.changed)
-        val moved = bridged(rows.map { if (it[0] == "art") listOf("art", "91.5", "149.4", "160", "u") else it }, mapOf("c3.txt" to "new art\n"))
-        assertEquals(setOf("art"), moved.changed)
-        assertFalse(moved.unlisted("art"))
-        val removed = bridged(rows.filter { it[0] != "same" }, mapOf("c2.txt" to "old same\n"))
-        assertEquals(setOf("same"), removed.old)
-    }
-
-    @Test
-    fun aBridgeLineInTwoFilesInNeitherSetOrNotChangedFailsGen() {
-        fun fails(now: List<List<String>>, lines: Map<String, String>, what: String) {
-            val e = assertThrows(GenException::class.java) { bridged(now, lines) }
-            assertTrue(e.message!!, e.message!!.contains(what))
-        }
-        val removed = rows.filter { it[0] != "same" }
-        fails(rows, mapOf("c2.txt" to "old same\n", "c3.txt" to "old same\n"), "same is in c2.txt:1 and c3.txt:1")
-        fails(rows, mapOf("c2.txt" to "old gone\n"), "names gone, which neither vendored set has")
-        fails(removed, mapOf("c2.txt" to "new same\n"), "marks the removed token same new")
-        fails(removed, mapOf("c2.txt" to "old art\n"), "lists art, which is not changed")
-        val valued = rows.map { if (it[0] == "art") listOf("art", "91.5", "149.4", "160", "u") else it }
-        fails(valued, mapOf("c2.txt" to "old same\n"), "lists same, which is not changed")
-        fails(rows, mapOf("notes.txt" to "old same\n"), "is not a c<n>.txt file")
-        fails(rows, mapOf("c2.txt" to "keep same\n"), "needs old or new and a token name")
-    }
-
-    @Test
-    fun theOldSetKeepsItsOwnPinApartFromTheVendoredSet() {
-        Gen.checkPin(old, File(old, "SET.sha256"), "checkOldPin")
-        Gen.checkSource(vendored)
-        assertNotEquals(Gen.setHash(vendored), Gen.setHash(old))
-        assertEquals(Gen.source(vendored).set, Gen.setHash(vendored))
-        assertNotEquals(Gen.source(vendored).set, File(old, "SET.sha256").readText().trim())
-        val e = assertThrows(GenException::class.java) { Gen.checkPin(dir(), File(old, "SET.sha256"), "checkOldPin") }
-        assertTrue(e.message!!.startsWith("checkOldPin: "))
-    }
-
-    @Test
     fun aFitFileThatDiffersFromTheValuesFails() {
         val d = dir()
         val f = fitFile(d)
@@ -217,8 +143,6 @@ class GenTokensTest {
         val f = File(d, "player/ui/tokens-r1.txt")
         f.writeText(f.readText().replace("art 149.4", "art 149.5"))
         assertNotEquals(a, Gen.setHash(d))
-        val pin = File(d, "SET.sha256").also { it.writeText("$a\n") }
-        assertThrows(GenException::class.java) { Gen.checkPin(d, pin) }
     }
 
     @Test

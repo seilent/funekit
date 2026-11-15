@@ -36,15 +36,6 @@ class SyntaxTest {
 
     private fun clean(body: String, imports: String = "") = assertEquals("$imports $body", emptyList<String>(), found(body, imports))
 
-    private val rule = BridgeRule(
-        setOf("motion_sheet"),
-        setOf("motion_jumpIn"),
-        setOf("motion_sheet", "motion_jumpIn", "motion_toastOut"),
-    )
-
-    private fun bridgeScan(body: String, imports: String = "", path: String = "kit/src/main/kotlin/A.kt", only: Boolean = false, bridge: BridgeRule = rule) =
-        syntax.scan(path, "package a\n$imports\nfun f() {\n$body\n}\n", emptySet(), HashSet(), bridge, only).map { it.what }
-
     @Test
     fun numericLiteralsOtherThanZeroAndOneFail() {
         caught("val a = 16f", "numeric literal 16f")
@@ -226,130 +217,6 @@ class SyntaxTest {
     }
 
     @Test
-    fun anOldNameReadsThroughOldAndFailsThroughTokInEveryForm() {
-        assertEquals(emptyList<String>(), bridgeScan("val a = Old.motion_sheet\nval b = OldBoard.r1.motion_sheet\nval c = Old::motion_sheet"))
-        val tok = listOf("Tok.motion_sheet is bridged: read Old.motion_sheet")
-        assertEquals(tok, bridgeScan("val a = Tok.motion_sheet"))
-        assertEquals(tok, bridgeScan("val a = net.seilent.funekit.gen.Tok.motion_sheet"))
-        assertEquals(tok, bridgeScan("", "import net.seilent.funekit.gen.Tok.motion_sheet"))
-        assertEquals(tok, bridgeScan("val a = T.motion_sheet", "import net.seilent.funekit.gen.Tok as T"))
-        assertEquals(tok, bridgeScan("val a = Tok::motion_sheet"))
-        assertEquals(tok, bridgeScan("val a = TokBoard.a105.motion_sheet"))
-        assertEquals(
-            listOf("Old is not the receiver of a member read", "motion_sheet is a bridged token read unqualified"),
-            bridgeScan("val a = with(Old) { motion_sheet }"),
-        )
-        assertEquals(listOf("::motion_sheet reads a bridged token unqualified"), bridgeScan("val a = ::motion_sheet"))
-    }
-
-    @Test
-    fun aPortedNameFailsThroughOldAndAnUnlistedChangedNameFailsEitherWay() {
-        assertEquals(emptyList<String>(), bridgeScan("val a = Tok.motion_jumpIn\nval b = Tok.motion_jumpRiseIn"))
-        val ported = listOf("Old.motion_jumpIn is ported: read Tok.motion_jumpIn")
-        assertEquals(ported, bridgeScan("val a = Old.motion_jumpIn"))
-        assertEquals(ported, bridgeScan("val a = O.motion_jumpIn", "import net.seilent.funekit.gen.Old as O"))
-        assertEquals(ported, bridgeScan("", "import net.seilent.funekit.gen.Old.motion_jumpIn"))
-        assertEquals(ported, bridgeScan("val a = Old::motion_jumpIn"))
-        assertEquals(ported, bridgeScan("val a = OldBoard.r1.motion_jumpIn"))
-        assertEquals(listOf("Old.motion_toastOut has no old line in a bridge file"), bridgeScan("val a = OldBoard.a105.motion_toastOut"))
-        assertEquals(listOf("Tok.motion_toastOut is changed and no bridge file lists it"), bridgeScan("val a = Tok.motion_toastOut"))
-        assertEquals(listOf("Old.motion_toastOut has no old line in a bridge file"), bridgeScan("val a = Old.motion_toastOut"))
-        assertEquals(listOf("motion_toastOut is a bridged token read unqualified"), bridgeScan("val a = with(Tok) { motion_toastOut }"))
-    }
-
-    @Test
-    fun oldAndOldBoardAreReadOnlyThroughAMember() {
-        assertEquals(
-            emptyList<String>(),
-            bridgeScan(
-                "val a = net.seilent.funekit.gen.Old.motion_sheet\nval b = net.seilent.funekit.gen.OldBoard.r1.motion_sheet\nval c = OldBoard.a105::motion_sheet\nval d = B.v1.motion_sheet",
-                "import net.seilent.funekit.gen.Old\nimport net.seilent.funekit.gen.OldBoard\nimport net.seilent.funekit.gen.OldBoard as B",
-            ),
-        )
-        assertEquals(listOf("Old is not the receiver of a member read"), bridgeScan("val a = with(Old) { motion_jumpIn }"))
-        assertEquals(listOf("Old is not the receiver of a member read"), bridgeScan("val a = Old"))
-        assertEquals(listOf("O is not the receiver of a member read"), bridgeScan("val a = with(O) { motion_jumpIn }", "import net.seilent.funekit.gen.Old as O"))
-        assertEquals(listOf("OldBoard.r1 is not the receiver of a member read"), bridgeScan("val a = OldBoard.r1"))
-        assertEquals(listOf("OldBoard.r1 is not the receiver of a member read"), bridgeScan("val a = with(OldBoard.r1) { motion_jumpIn }"))
-        assertEquals(listOf("OldBoard is not the receiver of a member read"), bridgeScan("val a = OldBoard::motion_jumpIn"))
-        assertEquals(listOf("B.r1 is not the receiver of a member read"), bridgeScan("val a = B.r1", "import net.seilent.funekit.gen.OldBoard as B"))
-    }
-
-    @Test
-    fun anImportOfANestedBoardMemberIsCheckedAndAWholeOldImportFails() {
-        assertEquals(emptyList<String>(), bridgeScan("", "import net.seilent.funekit.gen.OldBoard.r1.motion_sheet"))
-        assertEquals(listOf("Old.motion_jumpIn is ported: read Tok.motion_jumpIn"), bridgeScan("", "import net.seilent.funekit.gen.OldBoard.r1.motion_jumpIn"))
-        assertEquals(listOf("Tok.motion_sheet is bridged: read Old.motion_sheet"), bridgeScan("", "import net.seilent.funekit.gen.TokBoard.a105.motion_sheet"))
-        for (fq in listOf("OldBoard.r1", "OldBoard.Board", "Old.motion_sheet.x")) {
-            val got = bridgeScan("", "import net.seilent.funekit.gen.$fq")
-            assertTrue("$fq gave $got", got.contains("import net.seilent.funekit.gen.$fq reads the old set whole"))
-        }
-        for (fq in listOf("Old", "OldBoard", "OldBoard.r1")) {
-            assertEquals(listOf("import net.seilent.funekit.gen.$fq.* reads the old set whole"), bridgeScan("", "import net.seilent.funekit.gen.$fq.*"))
-        }
-    }
-
-    @Test
-    fun aChangedNameReadThroughAnyReceiverNeedsItsLine() {
-        val wide = BridgeRule(
-            setOf("motion_sheet"),
-            setOf("minTextPx", "vol_textGap"),
-            setOf("motion_sheet", "minTextPx", "vol_textGap", "npStatusGap"),
-        )
-        fun scan(body: String, path: String = "kit/src/main/kotlin/A.kt", only: Boolean = false) = bridgeScan(body, path = path, only = only, bridge = wide)
-        assertEquals(listOf("Tok.npStatusGap is changed and no bridge file lists it"), scan("val a = Tok.npStatusGap"))
-        assertEquals(listOf("Tok.npStatusGap is changed and no bridge file lists it"), scan("val a = TokBoard.r1.npStatusGap"))
-        assertEquals(listOf(".npStatusGap is changed and no bridge file lists it"), scan("val a = s.board.npStatusGap"))
-        assertEquals(listOf(".npStatusGap is changed and no bridge file lists it"), scan("val a = s?.board?.npStatusGap"))
-        assertEquals(listOf(".npStatusGap is changed and no bridge file lists it"), scan("val a = TokFit.at(h, p).npStatusGap"))
-        assertEquals(listOf(".npStatusGap is changed and no bridge file lists it"), scan("val a = b::npStatusGap"))
-        assertEquals(
-            emptyList<String>(),
-            scan("val a = Tok.minTextPx\nval b = TokBoard.v1.minTextPx\nval c = s.board.minTextPx\nval d = TokFit.at(h, p).minTextPx\nval e = b::minTextPx"),
-        )
-        assertEquals(listOf(".motion_sheet is bridged: read Old.motion_sheet"), scan("val a = s.board.motion_sheet"))
-        assertEquals(listOf(".motion_sheet is bridged: read Old.motion_sheet"), scan("val a = TokFit.at(h, p).motion_sheet"))
-        val stubs = "kit/src/test/kotlin/net/seilent/funekit/sheet/Stubs.kt"
-        assertEquals(
-            emptyList<String>(),
-            scan("ink.text(Roles.volLabel, \"artist\", Tok.vol_textX, v.vol_textY + v.vol_textGap)\nval x = 16f", path = stubs, only = true),
-        )
-        assertEquals(
-            listOf(".npStatusGap is changed and no bridge file lists it"),
-            scan("val g = s.board.npStatusGap + 6.4f", path = stubs, only = true),
-        )
-        assertEquals(emptyList<String>(), bridgeScan("val a = s.board.npStatusGap"))
-    }
-
-    @Test
-    fun theTestRootPassRunsTheBridgeChecksAlone() {
-        val path = "kit/src/test/kotlin/A.kt"
-        assertEquals(
-            listOf("Tok.motion_sheet is bridged: read Old.motion_sheet"),
-            bridgeScan("val a = 16f\nval b = Tok.motion_sheet\nval c = x.dp\nval d = Color.White\nval e = tween(300)", path = path, only = true),
-        )
-        assertEquals(listOf("Old.motion_jumpIn is ported: read Tok.motion_jumpIn"), bridgeScan("val a = Old.motion_jumpIn", path = path, only = true))
-        assertEquals(emptyList<String>(), bridgeScan("val a = 16f\nval b = Old.motion_sheet", path = path, only = true))
-    }
-
-    @Test
-    fun oldAndOldBoardAreTokReceiversForColoursAndSpecs() {
-        val listed = BridgeRule(setOf("color_bg", "color_ring", "motion_sheet", "motion_x", "motion_d", "motion_s"), emptySet(), emptySet())
-        val body = listOf(
-            "val c = Color(Old.color_bg)",
-            "val d = Color(OldBoard.r1.color_ring)",
-            "val s = tween(Old.motion_sheet.toInt(), easing = e)",
-            "val t = tween(OldBoard.a105.motion_x.toInt(), 0, e)",
-            "val u = spring(dampingRatio = Old.motion_d, stiffness = Old.motion_s)",
-        ).joinToString("\n")
-        assertEquals(emptyList<String>(), bridgeScan(body, bridge = listed))
-        assertEquals(
-            listOf("Color( without Tok", ".color_bg is bridged: read Old.color_bg"),
-            bridgeScan("val c = Color(Older.color_bg)", bridge = listed),
-        )
-    }
-
-    @Test
     fun aLiteralReasonTakesTheGrammarAndAnFbIdMustBeListed() {
         val ids = setOf("FB-lit-1")
         assertEquals(null, Literals.reasonError("fos player/ui/rows.cpp:815 the row inset", ids))
@@ -391,28 +258,7 @@ class SyntaxTest {
         val tree = Gen.scanRoots
             .flatMap { File(repo, it).walkTopDown().filter { f -> f.isFile && f.name.endsWith(".kt") }.toList() }
         val literals = Literals.read(File(repo, "kit/literals.txt"))
-        val bridge = Bridge.rule(File(repo, "tokens/funeos"), File(repo, "tokens/funeos-old"))
-        val counts = Bridge.lines(File(repo, "tokens/funeos-old/bridge")).groupingBy { it.file to it.kind }.eachCount()
-        assertEquals(
-            mapOf(
-                ("c1.txt" to "new") to 20, ("c3.txt" to "new") to 8, ("c4.txt" to "new") to 2,
-                ("c5.txt" to "new") to 6, ("c6.txt" to "new") to 5, ("c7.txt" to "new") to 6, ("c8.txt" to "new") to 1,
-                ("c9.txt" to "new") to 4,
-            ),
-            counts,
-        )
-        assertEquals(0, bridge.old.size)
-        assertEquals(52, bridge.new.size)
-        assertEquals(178, bridge.changed.size)
-        assertTrue(bridge.changed.containsAll(bridge.new))
-        val back = syntax.scan("kit/src/main/kotlin/A.kt", "package a\nval a = Old.motion_npDark\n", emptySet(), HashSet(), bridge)
-        assertEquals(listOf("Old.motion_npDark is ported: read Tok.motion_npDark"), back.map { it.what })
-        val tests = listOf("kit/src").flatMap { src ->
-            File(repo, src).listFiles().orEmpty().filter { it.isDirectory && it.name.startsWith("test") }
-                .flatMap { File(it, "kotlin").walkTopDown().filter { f -> f.isFile && f.name.endsWith(".kt") }.toList() }
-        } + File(repo, "sheet/src").walkTopDown().filter { it.isFile && it.name.endsWith(".kt") }
-        assertTrue(listOf("MovePaintTest.kt", "ArbiterTest.kt", "Regions.kt").all { n -> tests.any { it.name == n } })
-        assertEquals(emptyList<String>(), Syntax.scanFiles(repo, tree, literals, bridge, tests).map { it.toString() })
+        assertEquals(emptyList<String>(), Syntax.scanFiles(repo, tree, literals).map { it.toString() })
         for (a in literals.entries) {
             val text = File(repo, a.path).readText()
             val bare = syntax.scan(a.path, text, literals.allowed(a.path) - (a.site to a.text))

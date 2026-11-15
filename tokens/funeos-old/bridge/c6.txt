@@ -1,5 +1,0 @@
-new motion.pivotOut
-new motion.pivotStrip
-new motion.pivotRows
-new motion.pivotRowInShift
-new motion.pivotRowFade

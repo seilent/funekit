@@ -42,10 +42,6 @@ funekitSyntax {
     roots.set(listOf("kit/src/main/kotlin"))
     literals.set(layout.projectDirectory.file("literals.txt"))
     fallbacks.set(layout.projectDirectory.file("fallbacks.txt"))
-    tokens.set(layout.projectDirectory.dir("../tokens/funeos"))
-    old.set(layout.projectDirectory.dir("../tokens/funeos-old"))
-    tests.from(fileTree("src") { include("test*/kotlin/**/*.kt") })
-    tests.from(fileTree("../sheet/src") { include("**/*.kt") })
 }
 
 dependencies {

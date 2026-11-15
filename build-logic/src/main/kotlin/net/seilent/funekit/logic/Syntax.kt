@@ -14,7 +14,6 @@ import org.jetbrains.kotlin.config.CommonConfigurationKeys
 import org.jetbrains.kotlin.config.CompilerConfiguration
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.KtCallExpression
-import org.jetbrains.kotlin.psi.KtCallableReferenceExpression
 import org.jetbrains.kotlin.psi.KtConstantExpression
 import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.psi.KtImportDirective
@@ -110,38 +109,11 @@ class Syntax : AutoCloseable {
         text: String,
         allowed: Set<Pair<String, String>>,
         used: MutableSet<Pair<String, String>> = HashSet(),
-        bridge: BridgeRule = BridgeRule.NONE,
-        only: Boolean = false,
     ): List<Finding> {
         val file = factory.createFile(File(path).name, text)
         val out = ArrayList<Finding>()
-        val toks = mutableSetOf("Tok")
-        val olds = mutableSetOf("Old")
-        val oldBoards = mutableSetOf("OldBoard")
-        fun flag(e: PsiElement, what: String) {
-            out += Finding(path, text.substring(0, e.textRange.startOffset).count { it == '\n' } + 1, what)
-        }
         fun add(e: PsiElement, what: String) {
-            if (!only) flag(e, what)
-        }
-        fun side(r: KtExpression): Side? {
-            val segs = r.text.filterNot { it.isWhitespace() || it == '?' }.split('.')
-            val owner = segs.getOrNull(segs.size - 2)
-            return when {
-                segs.last() in olds -> Side.Old
-                segs.last() in toks -> Side.Tok
-                owner in oldBoards && segs.last() in boardNames -> Side.Old
-                owner == "TokBoard" && segs.last() in boardNames -> Side.Tok
-                else -> null
-            }
-        }
-        fun bridged(e: PsiElement, s: Side?, n: String) {
-            when (s) {
-                Side.Old -> if (n !in bridge.old) flag(e, if (n in bridge.new) "Old.$n is ported: read Tok.$n" else "Old.$n has no old line in a bridge file")
-                Side.Tok -> if (n in bridge.old) flag(e, "Tok.$n is bridged: read Old.$n") else if (bridge.unlisted(n)) flag(e, "Tok.$n is changed and no bridge file lists it")
-                Side.Other -> if (n in bridge.old) flag(e, ".$n is bridged: read Old.$n") else if (bridge.unlisted(n)) flag(e, ".$n is changed and no bridge file lists it")
-                null -> {}
-            }
+            out += Finding(path, text.substring(0, e.textRange.startOffset).count { it == '\n' } + 1, what)
         }
         fun allow(e: PsiElement, site: String, value: String, what: String) {
             if ((site to value) in allowed) used += site to value else add(e, what)
@@ -157,23 +129,7 @@ class Syntax : AutoCloseable {
                 val star = d.isAllUnder && segs.last() == "Color"
                 val alias = d.aliasName != null && segs.last() == "Color"
                 if (named || star || alias) allow(d, "import", fq, "Color import $fq")
-                if (segs.size >= 2) bridged(d, ownerSide(segs[segs.size - 2]), segs.last())
-                if (fq.startsWith("${Gen.pkg}.")) genImport(d, fq.removePrefix("${Gen.pkg}.").split('.'))
-                val tokAs = d.aliasName
-                if (segs.last() == "Tok" && tokAs != null) toks += tokAs
-                if (segs.last() == "Old" && tokAs != null) olds += tokAs
-                if (segs.last() == "OldBoard" && tokAs != null) oldBoards += tokAs
                 super.visitImportDirective(d)
-            }
-
-            private fun genImport(d: KtImportDirective, rest: List<String>) {
-                val star = d.isAllUnder
-                val nested = rest.size == 3 && rest[1] in boardNames && !star
-                if (nested && rest[0] == "OldBoard") bridged(d, Side.Old, rest[2])
-                if (nested && rest[0] == "TokBoard") bridged(d, Side.Tok, rest[2])
-                if (rest[0] != "Old" && rest[0] != "OldBoard") return
-                val member = !star && (rest.size == 1 || rest[0] == "Old" && rest.size == 2 || rest[0] == "OldBoard" && nested)
-                if (!member) flag(d, "import ${d.importedFqName?.asString()}${if (star) ".*" else ""} reads the old set whole")
             }
 
             override fun visitConstantExpression(e: KtConstantExpression) {
@@ -196,7 +152,6 @@ class Syntax : AutoCloseable {
                     is KtNameReferenceExpression -> {
                         val n = sel.getReferencedName()
                         if (n == "dp" || n == "sp") add(e, ".$n")
-                        bridged(e, side(e.receiverExpression) ?: Side.Other, n)
                         if (colorReceiver(e.receiverExpression) && n.first().isUpperCase()) add(e, "Color.$n")
                         if (last(e.receiverExpression) == "Spring" && n.first().isUpperCase()) add(e, "Spring.$n")
                         if (last(e.receiverExpression) == "TextUnitType" && (n == "Sp" || n == "Em"))
@@ -213,37 +168,7 @@ class Syntax : AutoCloseable {
             override fun visitSimpleNameExpression(e: KtSimpleNameExpression) {
                 val n = e.getReferencedName()
                 if ((n in banned || easing.matches(n)) && !header(e)) add(e, n)
-                if (e is KtNameReferenceExpression && !header(e)) bareBridged(e, n)
-                if (e is KtNameReferenceExpression && !header(e) && (n in olds || n in oldBoards)) oldRef(e, n)
                 super.visitSimpleNameExpression(e)
-            }
-
-            private fun read(x: PsiElement) = (x.parent as? KtQualifiedExpression)?.receiverExpression == x ||
-                (x.parent as? KtCallableReferenceExpression)?.receiverExpression == x
-
-            private fun oldRef(e: KtNameReferenceExpression, n: String) {
-                val q = e.parent as? KtQualifiedExpression
-                val unit = if (q != null && q.selectorExpression == e) q else e
-                if (!read(unit)) {
-                    flag(e, "$n is not the receiver of a member read")
-                    return
-                }
-                if (n !in oldBoards) return
-                val board = unit.parent as? KtQualifiedExpression
-                val b = (board?.selectorExpression as? KtNameReferenceExpression)?.getReferencedName()
-                if (board == null || b !in boardNames || !read(board)) flag(e, "$n${b?.let { ".$it" } ?: ""} is not the receiver of a member read")
-            }
-
-            private fun bareBridged(e: KtNameReferenceExpression, n: String) {
-                if ((e.parent as? KtQualifiedExpression)?.selectorExpression == e) return
-                val loose = n in bridge.old || bridge.unlisted(n)
-                val ref = e.parent as? KtCallableReferenceExpression
-                if (ref != null && ref.callableReference == e) {
-                    val r = ref.receiverExpression
-                    if (r != null) bridged(e, side(r) ?: Side.Other, n) else if (loose) flag(e, "::$n reads a bridged token unqualified")
-                    return
-                }
-                if (loose) flag(e, "$n is a bridged token read unqualified")
             }
 
             override fun visitCallExpression(e: KtCallExpression) {
@@ -316,17 +241,8 @@ class Syntax : AutoCloseable {
             "animateScrollToPage" to 2,
         )
         private val colorCalls = setOf("hsv", "hsl", "parseColor", "valueOf", "argb", "rgb")
-        private val tok = setOf("Tok", "TokBoard", "TokFit", "Old", "OldBoard")
-        private val colorTok = setOf("Tok", "TokBoard", "Old", "OldBoard")
-        private val boardNames = Gen.boards.map { it.first }.toSet()
-
-        private enum class Side { Tok, Old, Other }
-
-        private fun ownerSide(owner: String) = when (owner) {
-            "Tok" -> Side.Tok
-            "Old" -> Side.Old
-            else -> null
-        }
+        private val tok = setOf("Tok", "TokBoard", "TokFit")
+        private val colorTok = setOf("Tok", "TokBoard")
 
         private fun header(e: PsiElement) = PsiTreeUtil.getParentOfType(e, KtImportDirective::class.java) != null ||
             PsiTreeUtil.getParentOfType(e, KtPackageDirective::class.java) != null
@@ -365,23 +281,18 @@ class Syntax : AutoCloseable {
             root: File,
             files: List<File>,
             literals: Literals,
-            bridge: BridgeRule = BridgeRule.NONE,
-            tests: List<File> = emptyList(),
         ): List<Finding> {
             val known = files.map { it.relativeTo(root).invariantSeparatorsPath }.toSet()
             val stale = literals.entries.map { it.path }.filter { it !in known }.distinct()
             if (stale.isNotEmpty()) throw GenException("checkSyntax: kit/literals.txt names files outside the scan: $stale")
             return Syntax().use { s ->
-                val main = files.sortedBy { it.path }.flatMap { f ->
+                files.sortedBy { it.path }.flatMap { f ->
                     val rel = f.relativeTo(root).invariantSeparatorsPath
                     val used = HashSet<Pair<String, String>>()
-                    val got = s.scan(rel, f.readText(), literals.allowed(rel), used, bridge)
+                    val got = s.scan(rel, f.readText(), literals.allowed(rel), used)
                     val unused = literals.allowed(rel) - used
                     if (unused.isNotEmpty()) throw GenException("checkSyntax: kit/literals.txt entries for $rel match no site: $unused")
                     got
-                }
-                main + tests.sortedBy { it.path }.flatMap { f ->
-                    s.scan(f.relativeTo(root).invariantSeparatorsPath, f.readText(), emptySet(), bridge = bridge, only = true)
                 }
             }
         }

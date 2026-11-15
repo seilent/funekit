@@ -1,6 +1,0 @@
-new type.jumpExit.size
-new motion.sheet
-new motion.jumpIn
-new motion.jumpOut
-new motion.toastOut
-new motion.toastTravel
