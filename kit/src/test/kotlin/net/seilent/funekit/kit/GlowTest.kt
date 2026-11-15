@@ -110,4 +110,44 @@ class GlowTest {
         g.mask(d, emptyList(), Edges(0, 0, 10, 12), 2f)
         assertEquals(3, g.builds)
     }
+
+    @Test
+    fun aSecondRowsPressSwapsTheFirstRowsGlowOntoTheBackGlowAtItsLevel() {
+        val p = GlowPair()
+        p.arm(3, 0L)
+        p.glow.fade(100L)
+        val alone = Glow().also {
+            it.down(3, 0L)
+            it.fade(100L)
+        }
+        p.arm(5, 150L)
+        assertEquals(3, p.back.key)
+        assertEquals(alone.level(150L), p.back.level(150L), 0f)
+        assertTrue(p.back.level(150L) > 0f)
+        assertEquals(5, p.glow.key)
+        assertEquals(0f, p.glow.level(150L), 0f)
+    }
+
+    @Test
+    fun aPressOfTheRowTheBackGlowHoldsClearsTheBackGlow() {
+        val p = GlowPair()
+        p.arm(5, 0L)
+        p.arm(3, 10L)
+        assertEquals(5, p.back.key)
+        p.glow.off()
+        p.arm(5, 20L)
+        assertEquals(null, p.back.key)
+        assertEquals(5, p.glow.key)
+    }
+
+    @Test
+    fun offLeavesNeitherGlow() {
+        val p = GlowPair()
+        p.arm(3, 0L)
+        p.arm(5, 10L)
+        assertTrue(p.off())
+        assertEquals(null, p.glow.key)
+        assertEquals(null, p.back.key)
+        assertFalse(p.off())
+    }
 }

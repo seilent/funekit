@@ -93,6 +93,30 @@ object GlowMath {
     }
 }
 
+class GlowPair(glow: Glow = Glow(), back: Glow = Glow()) {
+    var glow by mutableStateOf(glow)
+        private set
+    var back by mutableStateOf(back)
+        private set
+
+    fun arm(row: Int, now: Long) {
+        if (back.key == row) back.clear()
+        val k = glow.key
+        if (k != null && k != row) {
+            val g = glow
+            glow = back
+            back = g
+        }
+        glow.down(row, now)
+    }
+
+    fun off(): Boolean {
+        val a = glow.off()
+        val b = back.off()
+        return a || b
+    }
+}
+
 class Glow(dilate: Float = Tok.pressGlowDilate, blur: Float = Tok.pressGlow, alpha: Float = Tok.pressGlowAlpha) {
     var dilate = dilate
         private set
