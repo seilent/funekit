@@ -127,8 +127,8 @@ class MotionSheetTest {
         val paint: DrawScope.(Long, Regions?) -> Unit,
     )
 
-    private inner class Board(val dev: Dev, val board: String, tb: TokBoard.Board, private val has: Set<String>, val off: Boolean = false, private val framesOn: Boolean = false, val nav: Nav = Nav.None) {
-        val s = scale(dev.window(nav), nav, Surface.Page, false)
+    private inner class Board(val dev: Dev, val board: String, tb: TokBoard.Board, private val has: Set<String>, val off: Boolean = false, private val framesOn: Boolean = false, val nav: Nav = Nav.None, private val large: Boolean = false) {
+        val s = scale(dev.window(nav), nav, Surface.Page, large)
         private val hs = scale(dev.window(nav), nav, Surface.Home, false)
         val w = dev.w
         val h = dev.h
@@ -348,6 +348,11 @@ class MotionSheetTest {
             }
         }
 
+        private fun restCase(name: String, note: String, page: Page, shots: Map<Long, String>, quiet: String): Case {
+            val st = stack(page)
+            return Case(name, note, st, emptyList(), 0L, { 0L }, shots, emptyList(), false, quiet) { t, rec -> world(st, t, rec) }
+        }
+
         private fun menuOf(form: MenuForm, title: String, items: List<String>): Triple<Menu, MenuInk, MenuPlan> {
             val m = Menu().also {
                 it.open(form, title, items, 0L)
@@ -501,6 +506,10 @@ class MotionSheetTest {
                 t5Case("t5-off", "the same pivot switch under ACCENT OFF at the series times", artists, false, series("t5", T5_OFF)),
                 t5Case("t5-songs", "pivot switch from albums to songs with the # divider focused, as main.cpp t5:300:songs", songsEnter, false, mapOf(300L to "t5-300-songs")),
                 moveCase("t7", "the songs hub to now playing, page form", t7) { t7.push(np, MoveKind.T7) },
+                restCase("hub", "the artists hub at rest with the # divider focused as main.cpp enter_hub leaves it (main.cpp hub), the list thumb faded", artists, mapOf(0L to "hub"), ARTISTS_QUIET),
+                restCase("hub-large", "the artists hub at rest under SIZE LARGE (main.cpp large hub)", artists, mapOf(0L to "large-hub"), ARTISTS_QUIET),
+                restCase("hub-songs", "the songs hub at rest with the # divider focused (main.cpp hub songs)", songsEnter, mapOf(0L to "hub-songs"), PRESS_QUIET),
+                restCase("hub-songs-large", "the songs hub at rest under SIZE LARGE (main.cpp large hub songs)", songsEnter, mapOf(0L to "large-hub-songs"), PRESS_QUIET),
                 overlayCase("t12-open", "the song sheet of the third song row over the songs hub, as main.cpp t12 (three knob steps from the # divider, open_sheet 400 ms after the last), with funeOS v0.4.2's eight song verbs (app.cpp library_sheet)", OverKind.Sheet, songsSheet, songsSheet.rows[SHEET_ROW].primary, SONG_VERBS, false, mapOf(150L to "t12-150", 500L to "t12-500"), emptyList(), if (board == "a105") emptyMap() else mapOf("t12-150" to listOf("sheet.thumb" to THUMB_565))),
                 overlayCase("t12-open-off", "the same song sheet under ACCENT OFF at the series times", OverKind.Sheet, songsSheet, songsSheet.rows[SHEET_ROW].primary, SONG_VERBS, false, series("t12", T12_OFF), emptyList()),
                 overlayCase("t12-close", "the same sheet closing, as main.cpp t12 close (the close 1000 ms after the open, the shot times after the close)", OverKind.Sheet, songsSheet, songsSheet.rows[SHEET_ROW].primary, SONG_VERBS, true, series("t12", T12_CLOSE, "-close").mapKeys { CLOSE_AT + it.key }, emptyList()),
@@ -530,7 +539,7 @@ class MotionSheetTest {
             return img.asAndroidBitmap()
         }
 
-        private fun shotsOf(c: Case) = c.shots.filterValues { it in has && it.endsWith(ACCENT_OFF) == off }
+        private fun shotsOf(c: Case) = c.shots.filterValues { it in has && it.endsWith(ACCENT_OFF) == off && it.startsWith(LARGE) == large }
 
         private fun runs(c: Case) = shotsOf(c).isNotEmpty() || (framesOn && c.shots.isEmpty())
 
@@ -582,7 +591,7 @@ class MotionSheetTest {
                 val (count, tiles) = play(c)
                 val shots = tiles.joinToString(", ") { "`${File(it.path).name}`" }
                 lines += "- `$FOLDER/$board/${c.name}/`: $count frames; ${c.note}" + if (shots.isEmpty()) "" else "; shots $shots"
-                if (tiles.isNotEmpty()) render.write(Sheet(FOLDER, if (framesOn) c.name else "$board-${if (off) "off-" else ""}${c.name}", listOf("${c.name} at the funeOS shot times: ${c.note}."), tiles))
+                if (tiles.isNotEmpty()) render.write(Sheet(FOLDER, if (framesOn) c.name else "$board-${if (off) "off-" else ""}${if (large) "large-" else ""}${c.name}", listOf("${c.name} at the funeOS shot times: ${c.note}."), tiles))
             }
         }
     }
@@ -592,6 +601,8 @@ class MotionSheetTest {
         val lines = mutableListOf("# Motion frames", "", "Frames at $FPS fps from the kit's PageMove, PageStack, Overlay, Toast and Press; shot tiles carry `<tile>.regions.json` for `tools/inkband.py`.", "")
         val boards = listOf(
             Board(A105, "a105", TokBoard.a105, A105_KINDS, framesOn = true),
+            Board(A105, "a105", TokBoard.a105, A105_KINDS, large = true),
+            Board(R1, "r1", TokBoard.r1, R1_KINDS, large = true),
             Board(A105, "a105", TokBoard.a105, A105_KINDS, off = true),
             Board(R1, "r1", TokBoard.r1, R1_KINDS),
             Board(R1, "r1", TokBoard.r1, R1_KINDS, off = true),
@@ -607,6 +618,8 @@ class MotionSheetTest {
         private val R1 = Dev("480x800", "funeOS R1 board", 480, 800, listOf(Nav.None))
         private val V1 = Dev("240x320", "funeOS V1 board", 240, 320, listOf(Nav.None))
         private const val ACCENT_OFF = "-accentoff"
+        private const val LARGE = "large-"
+        private const val ARTISTS_QUIET = "funeOS's artist rows draw the thumb strips of their albums under the title, which the kit page does not draw"
         private const val HELD = "rowpress-0-hubsongs-held"
         private const val JUMP_HELD = "rowpress-0-jump-held"
         private const val JUMP_PRESS = 1000L
@@ -632,10 +645,10 @@ class MotionSheetTest {
             "rowpress-0-hubsongs-down", "rowpress-0-hubsongs-tap", "rowpress-0-hubsongs-up", HELD, SERIES,
             "t5-100", "t5-250", "t5-450", "t5-700", "t5-1500", "t5-300-songs",
             "t13-120", "t13-400", "t13x-80", "t14-500-songs", "t14-150-songs", "t14x-120-songs",
-            "t12-150", "t12-500", JUMP_HELD,
+            "t12-150", "t12-500", JUMP_HELD, "hub", "large-hub", "large-hub-songs",
         ) + names(series("t5", T5_OFF)) + names(series("t12", T12_OFF)) + names(series("t12", T12_CLOSE, "-close")) + names(series("t14", T14_OFF, "-songs"))
-        private val R1_KINDS = setOf(HELD, SERIES, "t12-150", "t12-500", JUMP_HELD) + names(series("t5", T5_STATIC)) + names(series("t12", T12_STATIC)) + names(series("t12", T12_CLOSE_R1, "-close")) + names(series("t14", T14_STATIC, "-songs"))
-        private val V1_KINDS = setOf(HELD, SERIES, "t12-150", "t12-500") + names(series("t5", T5_STATIC)) + names(series("t12", T12_STATIC)) + names(series("t12", T12_CLOSE, "-close")) + names(series("t14", T14_STATIC, "-songs"))
+        private val R1_KINDS = setOf(HELD, SERIES, "t12-150", "t12-500", JUMP_HELD, "hub", "large-hub", "large-hub-songs") + names(series("t5", T5_STATIC)) + names(series("t12", T12_STATIC)) + names(series("t12", T12_CLOSE_R1, "-close")) + names(series("t14", T14_STATIC, "-songs"))
+        private val V1_KINDS = setOf(HELD, SERIES, "t12-150", "t12-500", "hub", "hub-songs") + names(series("t5", T5_STATIC)) + names(series("t12", T12_STATIC)) + names(series("t12", T12_CLOSE, "-close")) + names(series("t14", T14_STATIC, "-songs"))
         private const val FOLDER = "motion"
         private const val FPS = 40
         private const val STEP = 1000L / FPS
