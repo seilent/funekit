@@ -1,2 +1,3 @@
 stack1
 stack1b
+stack2
