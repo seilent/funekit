@@ -1,3 +1,4 @@
 a105/t4-100 funeOS t4 leaves the artist page, which the kit has no page for, and the arriving hub content steps in at 133 ms
 a105/rowpress-0-btarc-held the Bluetooth headphones page: the search row and the device rows are text (reported), the press glow is excluded and the page has no ring, tile or divider, so no region is gated
 r1/rowpress-0-btarc-held the Bluetooth headphones page: the search row and the device rows are text (reported), the press glow is excluded and the page has no ring, tile or divider, so no region is gated
+v1/rowpress-0-btarc-held the Bluetooth headphones page: the search row and the device rows are text (reported), the press glow is excluded and the page has no ring, tile or divider, so no region is gated

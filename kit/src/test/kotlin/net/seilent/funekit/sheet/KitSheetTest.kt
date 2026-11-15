@@ -130,7 +130,7 @@ class KitSheetTest {
             val tiles = boards.map { (dev, large) ->
                 val (bmp, s, rec) = page(dev, large, p)
                 val board = boardOf.getValue(dev)
-                val id = if (!large && dev !== v1 && p.kind != null) "$board-${p.kind}" else "${dev.id}${if (large) "-large" else ""}-${p.id}"
+                val id = if (!large && p.kind != null) "$board-${p.kind}" else "${dev.id}${if (large) "-large" else ""}-${p.id}"
                 render.tile(f, id, "${dev.label}${if (large) " LARGE" else ""}", listOf(render.facts(dev, Nav.None, s), p.note), bmp, emptyList(), s.stdPpu, rec)
             }
             render.write(Sheet(f, p.id, listOf("Kit rows, page header word and pivots (funeOS ui/rows.cpp draw_list_row, Chrome::draw)."), tiles))
@@ -142,7 +142,7 @@ class KitSheetTest {
         render.write(Sheet(f, "letters", listOf("Letter tiles (funeOS ui/rows.cpp draw_letter_tile, draw_press_frame)."), letterTiles))
         render.index(f, listOf(
             "# Kit rows and chrome", "",
-            "- `kit/bt-headphones.png`: V1, R1, A105 and A105 LARGE; the R1 and A105 tiles are `<board>-rowpress-0-btarc-held`, paired with the funeOS shot of that name",
+            "- `kit/bt-headphones.png`: V1, R1, A105 and A105 LARGE; the V1, R1 and A105 tiles are `<board>-rowpress-0-btarc-held`, paired with the funeOS shot of that name",
             "- `kit/forms.png`: the other row forms",
             "- `kit/letters.png`: letter tiles idle, focused and with the F15 press frame at V1, R1 and A105",
             "- the hub scenes (hub, rowpress-0-hubsongs-held, jump, toast, thumbfade, fling) are `app/build/sheets/music/` (HubSheetTest)",
