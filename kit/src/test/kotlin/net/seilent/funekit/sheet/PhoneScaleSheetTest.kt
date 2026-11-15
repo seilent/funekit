@@ -243,7 +243,7 @@ class PhoneScaleSheetTest {
             val before = shot(dev) { fitRuler(it, TokBoard.r1) }
             listOf(
                 tile("${dev.id}-units", "${dev.label}: the R1 and A105 values", dev, before),
-                tile("${dev.id}-v042", "${dev.label}: the rule at funeOS v0.4.2", dev, after, listOf(FIT_NOTE)),
+                tile("${dev.id}-rule", "${dev.label}: the rule at funeOS v0.4.2", dev, after, listOf(FIT_NOTE)),
             )
         }
         render.write(Sheet(FIT, "fitbyheight", listOf(FIT_FORM, Phones.SAME_SIZE), tiles))

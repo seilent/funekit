@@ -52,7 +52,7 @@ class PageMoveTest {
     }
 
     @Test
-    fun aPivotPopRunsTheV042PivotPopKeys() {
+    fun aPivotPopRunsTheFuneOsPivotPopKeys() {
         val m = PageMove()
         m.start(MoveKind.T4, 1000, pop, forms)
         m.release(Part.Content, 1000)
