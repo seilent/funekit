@@ -5,7 +5,6 @@ import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.Constraints
 import net.seilent.funekit.Roles
 import net.seilent.funekit.Scale
-import net.seilent.funekit.gen.Old
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.px
 import net.seilent.funekit.textPx
@@ -32,6 +31,7 @@ fun Modifier.pxAt(e: Edges): Modifier = layout { m, _ ->
 
 private const val PEN = 64
 private const val INDENT_DIGITS = 4
+private const val HALF = 2
 
 fun pen64(u: Float, ppu: Float): Int = Math.round(u * ppu * PEN)
 
@@ -71,6 +71,18 @@ object Layout {
         return max(indent, digits * digit64 + indent - INDENT_DIGITS * digit64)
     }
 
+    fun collectionBase(s: Scale, top: Int): Int {
+        val cap = Math.round(Tok.capHeight * rolePx(Roles.listCollection, s))
+        return top + (px(Tok.rowPlayRing, s.ppu) + cap + 1) / HALF
+    }
+
+    fun thumbsTop(s: Scale, top: Int): Int = collectionBase(s, top) + px(Tok.rowThumbDrop, s.ppu)
+
+    fun thumbsX(s: Scale, collection: Boolean): Int {
+        val x64 = if (collection) pen64(Tok.rowCollectionTextX, s.ppu) else pen64(Tok.hubEdge + Tok.songIndent, s.ppu)
+        return Math.floorDiv(x64 + pen64(Tok.rowThumbIndent, s.ppu) + PEN / HALF, PEN)
+    }
+
     fun row(
         s: Scale,
         top: Int,
@@ -81,32 +93,47 @@ object Layout {
         ring: Boolean,
         number64: Int = 0,
         appTile: Boolean = false,
+        song: Boolean = false,
     ): RowLines {
-        val pitch = px(if (collection) Tok.rowCollection else Tok.rowHeight, s.ppu)
+        val pitch = Rows.pitch(s, collection, song)
         val inset = px(Tok.rowTextInset, s.ppu)
         val primary = rolePx(
             when {
                 collection -> Roles.listCollection
+                song -> Roles.listSong
                 bold -> Roles.listPlaylist
                 else -> Roles.listPrimary
             },
             s,
         )
-        val secondary = rolePx(if (countLine || bold) Roles.listCount else Roles.listSecondary, s)
+        val secondary = rolePx(
+            when {
+                collection -> Roles.listCollectionCount
+                song -> Roles.listSongSub
+                countLine || bold -> Roles.listCount
+                else -> Roles.listSecondary
+            },
+            s,
+        )
         val cap = Math.round(Tok.capHeight * primary)
         val tile = if (appTile) Rows.appTile(s, top, collection) else null
         val title = when {
             tile != null -> Rows.capBaseline(tile, cap)
-            collection -> top + inset + cap
+            collection -> top + (px(Tok.rowPlayRing, s.ppu) + cap + 1) / HALF
+            song -> top + (px(Tok.dividerTileCollection, s.ppu) - cap - px(Tok.songSubDrop, s.ppu)) / HALF + cap
             twoLine -> top + inset + Metrics.ascent(primary)
             else -> Metrics.centered(top, pitch, primary)
         }
-        val sub = top + pitch - inset - Metrics.descent(secondary)
+        val sub = when {
+            song -> title + px(Tok.songSubDrop, s.ppu)
+            collection && tile == null -> title + px(Tok.rowCountDrop, s.ppu) + Math.round(Tok.capHeight * secondary)
+            else -> top + pitch - inset - Metrics.descent(secondary)
+        }
         val x64 = when {
             tile != null -> pen64(Rows.appTextX(tile, s).toFloat())
-            collection && ring -> pen64(Old.rowCollectionTextX, s.ppu)
+            collection && ring -> pen64(Tok.rowCollectionTextX, s.ppu)
             ring -> pen64(Tok.hubEdge + Tok.songIndent, s.ppu)
-            number64 > 0 -> pen64(Tok.hubEdge, s.ppu) + number64
+            number64 > 0 && !song -> pen64(Tok.hubEdge, s.ppu) + number64
             else -> pen64(Tok.hubEdge, s.ppu)
         }
         return RowLines(pitch, title, sub, x64)

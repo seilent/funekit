@@ -231,7 +231,7 @@ class MotionSheetTest {
 
     private fun DrawScope.listThumb(p: Page, rec: Regions?, name: String, fade: Float) {
         if (fade <= 0f || p.rows.isEmpty()) return
-        val r = listThumbOf(s, px(s.board.page_contentTop, s.ppu), px(s.stdContentBottom, s.stdPpu), p.listRows, Rows.pitch(s, p.rows.first().collection), 0L) ?: return
+        val r = listThumbOf(s, px(s.board.page_contentTop, s.ppu), px(s.stdContentBottom, s.stdPpu), p.listRows, Rows.pitch(s, p.rows.first()), 0L) ?: return
         thumb(r, fade)
         rec?.thumbParts(name, r, Tok.scrollbar_alpha * fade, bands, accent)
     }
@@ -388,7 +388,7 @@ class MotionSheetTest {
         val o = Overlay(OverKind.Jump)
         val acts = listOf(Act(0L) { st.open(o) }) + if (close) listOf(Act(CLOSE_AT) { st.close() }) else emptyList()
         val from = if (close) CLOSE_AT else 0L
-        val below = px(s.board.page_contentTop, s.ppu) + base.rows.sumOf { Rows.pitch(s, it.collection) }
+        val below = px(s.board.page_contentTop, s.ppu) + base.rows.sumOf { Rows.pitch(s, it) }
         return Case(name, note, st, acts, from, { from + o.dur() }, shots, rules, frames, FADE_QUIET) { t, rec ->
             val open = st.overlay
             if (open == null) {

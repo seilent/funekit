@@ -276,10 +276,10 @@ class Regions(
 
     override fun row(name: String, ink: RowInk, s: Scale, w: Int, alpha: Float, focused: Boolean, press: Float, glow: Boolean, accent: Color, accentOff: Boolean, focusShown: Boolean) {
         val r = ink.r
-        val h = Rows.pitch(s, r.collection).toFloat()
+        val h = Rows.pitch(s, r).toFloat()
         val wf = w.toFloat()
         if (r.kind == RowKind.Divider) {
-            val t = Rows.divider(s, 0, r.collection, ink.primary.width, r.appTile)
+            val t = Rows.divider(s, 0, r.collection, ink.primary.width, r.appTile, r.song)
             val ba = Rows.dividerAlpha(focused)
             val lx = Rows.letterRight(t, s) - ink.primary.width
             val lb = Rows.letterBaseline(t, s).toFloat()
@@ -309,7 +309,7 @@ class Regions(
                     if (r.ringBare) glyphs("$name.glyph", parts, c, slot, spot.alpha) else glyphs("$name.glyph", parts, c, slot, spot.alpha, d.toFloat(), stroke)
                 }
             }
-            if (r.number.isNotEmpty()) clip(0f, 0f, wf, h) { word("$name.number", ink.number, penPx(pen64(Tok.hubEdge, s.ppu)), base, Roles.listCount.alpha) }
+            if (r.number.isNotEmpty() && !r.song) clip(0f, 0f, wf, h) { word("$name.number", ink.number, penPx(pen64(Tok.hubEdge, s.ppu)), base, Roles.listCount.alpha) }
             if (r.trailing.isNotEmpty()) clip(0f, 0f, wf, h) { word("$name.trailing", ink.trailing, penPx(ink.trailingX64), base, Roles.listCount.alpha) }
             if (glow && !r.hide && (!r.accent || accentOff)) {
                 val pad = px(Tok.pressGlowDilate, s.ppu) + px(Tok.pressGlow, s.ppu)
@@ -323,7 +323,7 @@ class Regions(
                 }
             }
             if (r.secondary.isNotEmpty()) {
-                val sa = if (r.libSub) Roles.listLibSecondary.alpha else Rows.secondaryRole(r).alpha
+                val sa = if (r.libSub && !r.song) Roles.listLibSecondary.alpha else Rows.secondaryRole(r).alpha
                 clip(clipL, 0f, ink.right.toFloat(), h) { word("$name.secondary", ink.secondary, penPx(lines.titleX64), lines.sub.toFloat(), sa) }
             }
         }

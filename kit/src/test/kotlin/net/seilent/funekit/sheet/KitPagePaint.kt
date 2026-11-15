@@ -36,7 +36,7 @@ class KitPagePaint(
     private val bands: List<Band>,
     private val accent: Color,
 ) : PagePaint {
-    private val ys: List<Int> = page.rows.runningFold(px(s.board.page_contentTop, s.ppu)) { y, r -> y + Rows.pitch(s, r.collection) }
+    private val ys: List<Int> = page.rows.runningFold(px(s.board.page_contentTop, s.ppu)) { y, r -> y + Rows.pitch(s, r) }
 
     override val grounded: Boolean = true
     override val top: Int = px(s.board.page_contentTop, s.ppu)

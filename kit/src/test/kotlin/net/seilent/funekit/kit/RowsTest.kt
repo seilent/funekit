@@ -52,8 +52,9 @@ class RowsTest {
         assertEquals(listOf(20, 2, 71, 38), edges(Rows.divider(v1, 0, collection = false, label = 38.02f)))
         assertEquals(listOf(40, 4, 112, 76), edges(Rows.divider(r1, 0, collection = false, label = 48f)))
         assertEquals(listOf(40, 4, 113, 76), edges(Rows.divider(r1, 0, collection = false, label = 48.5f)))
-        assertEquals(listOf(60, 171, 213, 324), edges(Rows.divider(a105, 165, collection = true, label = 117f)))
-        assertEquals(listOf(60, 171, 214, 324), edges(Rows.divider(a105, 165, collection = true, label = 117.2f)))
+        assertEquals(listOf(60, 165, 198, 303), edges(Rows.divider(a105, 165, collection = true, label = 102f)))
+        assertEquals(listOf(60, 165, 199, 303), edges(Rows.divider(a105, 165, collection = true, label = 102.2f)))
+        assertEquals(listOf(60, 165, 198, 303), edges(Rows.divider(a105, 165, collection = false, label = 0f, song = true)))
     }
 
     @Test
@@ -79,7 +80,7 @@ class RowsTest {
         assertEquals(150, Rows.letterRight(t, a105))
         assertEquals(90, Rows.letterBaseline(t, a105))
         val c = Rows.divider(a105, 165, collection = true, label = 0f)
-        assertEquals(listOf(60, 171, 213, 324), edges(c))
+        assertEquals(listOf(60, 165, 198, 303), edges(c))
     }
 
     @Test
@@ -106,7 +107,7 @@ class RowsTest {
         val off = Rows.ring(a105, 0, RowModel(ring = true, ringToggle = true, ringOn = false), focused = true)
         assertEquals(0.6f, off.alpha, 0f)
         val collection = Rows.ring(a105, 0, RowModel(ring = true, collection = true), focused = false)
-        assertEquals(listOf(78, 82, 99), listOf(collection.cx, collection.cy, collection.d))
+        assertEquals(listOf(103, 43, 87), listOf(collection.cx, collection.cy, collection.d))
     }
 
     @Test
@@ -146,5 +147,23 @@ class RowsTest {
         assertEquals(364.04f, p2160.w, 0.005f)
         assertEquals(1021, Rows.right(p2160))
         assertEquals(1021 * 64 - 2000, Rows.trailingX64(p2160, 2000))
+    }
+
+    @Test
+    fun aSongRowTakesNoNumberColumnAndItsOwnRoles() {
+        val r = RowModel(primary = "Slow Comet", secondary = "Amber", number = "12", song = true)
+        assertEquals(Roles.listSong, Rows.primaryRole(r))
+        assertEquals(Roles.listSongSub, Rows.secondaryRole(r))
+        assertEquals(Roles.listCollectionCount, Rows.secondaryRole(RowModel(collection = true)))
+        assertEquals(160, Rows.pitch(a105, r))
+        val lines = Layout.row(a105, 0, collection = false, bold = false, countLine = false, twoLine = true, ring = false, number64 = 7 * 3 * 64, song = true)
+        assertEquals(60, lines.titleX)
+    }
+
+    @Test
+    fun theThumbStripStartsAtTheIndentPastTheCollectionName() {
+        assertEquals(180, Layout.thumbsX(a105, true))
+        assertEquals(78, Layout.thumbsTop(a105, 0))
+        assertEquals(Layout.collectionBase(a105, 165) + 18, Layout.thumbsTop(a105, 165))
     }
 }

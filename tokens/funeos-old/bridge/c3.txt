@@ -1,8 +1,8 @@
-old type.listCollection.size
-old rowPlayRing
-old rowPlayRingX
-old rowCollectionTextX
-old rowThumb
-old rowThumbDrop
-old dividerTileCollection
-old rowThumbGap
+new type.listCollection.size
+new rowPlayRing
+new rowPlayRingX
+new rowCollectionTextX
+new rowThumb
+new rowThumbDrop
+new dividerTileCollection
+new rowThumbGap

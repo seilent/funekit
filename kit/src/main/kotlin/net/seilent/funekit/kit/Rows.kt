@@ -26,7 +26,6 @@ import net.seilent.funekit.Roles
 import net.seilent.funekit.Scale
 import net.seilent.funekit.gen.Glyph
 import net.seilent.funekit.gen.Glyphs
-import net.seilent.funekit.gen.Old
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.px
 import kotlin.math.max
@@ -52,6 +51,7 @@ data class RowModel(
     val ringBare: Boolean = false,
     val hide: Boolean = false,
     val collection: Boolean = false,
+    val song: Boolean = false,
     val libSub: Boolean = false,
     val glyph: Glyph = Glyphs.play,
     val wifi: Boolean = false,
@@ -67,22 +67,31 @@ class RingSpot(val cx: Int, val cy: Int, val d: Int, val stroke: Int, val alpha:
 object Rows {
     fun primaryRole(r: RowModel): Role = when {
         r.collection -> Roles.listCollection
+        r.song -> Roles.listSong
         r.bold -> Roles.listPlaylist
         else -> Roles.listPrimary
     }
 
-    fun secondaryRole(r: RowModel): Role = if (r.countLine || r.bold) Roles.listCount else Roles.listSecondary
+    fun secondaryRole(r: RowModel): Role = when {
+        r.collection -> Roles.listCollectionCount
+        r.song -> Roles.listSongSub
+        r.countLine || r.bold -> Roles.listCount
+        else -> Roles.listSecondary
+    }
 
-    fun pitch(s: Scale, collection: Boolean): Int = px(if (collection) Tok.rowCollection else Tok.rowHeight, s.ppu)
+    fun pitch(s: Scale, collection: Boolean, song: Boolean = false): Int =
+        px(if (collection) Tok.rowCollection else if (song) Tok.rowSong else Tok.rowHeight, s.ppu)
+
+    fun pitch(s: Scale, r: RowModel): Int = pitch(s, r.collection, r.song)
 
     fun right(s: Scale): Int = px(s.w - Tok.hubEdge, s.ppu)
 
-    private fun ringSide(s: Scale, collection: Boolean): Int = px(if (collection) Old.rowPlayRing else Tok.rowRing, s.ppu)
+    private fun ringSide(s: Scale, collection: Boolean): Int = px(if (collection) Tok.rowPlayRing else Tok.rowRing, s.ppu)
 
-    private fun ringCx(s: Scale, collection: Boolean, appTile: Boolean, d: Int): Int =
-        if (collection && !appTile) px(Old.rowPlayRingX, s.ppu) else px(Tok.hubEdge, s.ppu) + d / HALF
+    private fun ringCx(s: Scale, d: Int): Int = px(Tok.hubEdge, s.ppu) + d / HALF
 
-    private fun ringCy(s: Scale, top: Int, collection: Boolean): Int = top + pitch(s, collection) / HALF
+    private fun ringCy(s: Scale, top: Int, collection: Boolean, appTile: Boolean, d: Int): Int =
+        if (collection && !appTile) top + d / HALF else top + pitch(s, collection) / HALF
 
     private fun square(cx: Int, cy: Int, d: Int): Edges {
         val x0 = cx - d / HALF
@@ -94,27 +103,27 @@ object Rows {
         val d = ringSide(s, r.collection)
         val lit = if (r.ringToggle) r.ringOn else focused
         val stroke = px(if (focused) Tok.ringStrokeFocused else Tok.ringStrokeIdle, s.ppu)
-        return RingSpot(ringCx(s, r.collection, r.appTile, d), ringCy(s, top, r.collection), d, stroke, if (lit) Tok.alpha_full else Tok.alpha_mid)
+        return RingSpot(ringCx(s, d), ringCy(s, top, r.collection, r.appTile, d), d, stroke, if (lit) Tok.alpha_full else Tok.alpha_mid)
     }
 
     fun artSlot(spot: RingSpot): Edges = square(spot.cx, spot.cy, spot.d)
 
     fun appTile(s: Scale, top: Int, collection: Boolean): Edges {
         val d = ringSide(s, collection)
-        return square(ringCx(s, collection, true, d), ringCy(s, top, collection), d)
+        return square(ringCx(s, d), ringCy(s, top, collection, true, d), d)
     }
 
     fun capBaseline(tile: Edges, cap: Int): Int = tile.y0 + (tile.h + cap) / HALF
 
     fun appTextX(tile: Edges, s: Scale): Int = tile.x1 + px(Tok.tileLGutter, s.ppu)
 
-    fun divider(s: Scale, top: Int, collection: Boolean, label: Float, appTile: Boolean = false): Edges {
+    fun divider(s: Scale, top: Int, collection: Boolean, label: Float, appTile: Boolean = false, song: Boolean = false): Edges {
         if (appTile) return this.appTile(s, top, collection)
-        val h = pitch(s, collection)
-        val d = px(if (collection) Old.dividerTileCollection else Tok.dividerTile, s.ppu)
+        val h = pitch(s, collection, song)
+        val d = px(if (collection || song) Tok.dividerTileCollection else Tok.dividerTile, s.ppu)
         val inset = px(Tok.letterInsetX, s.ppu)
         val x = px(Tok.hubEdge, s.ppu)
-        val y = top + (h - d) / HALF
+        val y = if (collection || song) top else top + (h - d) / HALF
         return Edges(x, y, x + max(d, penCeil(pen64(label)) + inset + inset), y + d)
     }
 
@@ -193,7 +202,7 @@ fun rowInk(m: TextMeasurer, fonts: FontFamily.Resolver, r: RowModel, s: Scale, d
     val number = if (divider) Word.none else text(r.number, Roles.listCount, count)
     val trailing = if (divider) Word.none else text(r.trailing, Roles.listCount, count)
     val number64 = if (r.number.isEmpty()) 0 else Layout.numberColumn64(s, r.number.length, digit)
-    val lines = Layout.row(s, 0, r.collection, r.bold, r.countLine, r.secondary.isNotEmpty(), r.ring, number64, r.appTile)
+    val lines = Layout.row(s, 0, r.collection, r.bold, r.countLine, r.secondary.isNotEmpty(), r.ring, number64, r.appTile, r.song)
     val right = Rows.right(s)
     val tx64 = Rows.trailingX64(s, if (r.trailing.isEmpty()) 0 else pen64(trailing.width))
     val primaryRight = if (r.trailing.isEmpty()) right else penFloor(tx64) - px(Tok.gutter, s.ppu)
@@ -239,10 +248,10 @@ fun DrawScope.listRow(
     ringLit: Float = 0f,
 ) {
     val r = ink.r
-    val h = Rows.pitch(s, r.collection)
+    val h = Rows.pitch(s, r)
     val w = size.width
     if (r.kind == RowKind.Divider) {
-        val t = Rows.divider(s, 0, r.collection, ink.primary.width, r.appTile)
+        val t = Rows.divider(s, 0, r.collection, ink.primary.width, r.appTile, r.song)
         letterTile(t, Rows.dividerBorder(s, focused), Rows.dividerAlpha(focused))
         clipRect(0f, 0f, w, h.toFloat()) {
             word(ink.primary, Rows.letterRight(t, s) - ink.primary.width, Rows.letterBaseline(t, s).toFloat(), Ink.white, Roles.letterGlyph.alpha)
@@ -277,7 +286,7 @@ fun DrawScope.listRow(
                 if (r.arc > 0) arc(c, d.toFloat(), stroke, Tok.ringArcStart, r.arc.toFloat(), accent, 1f)
             }
         }
-        if (r.number.isNotEmpty()) {
+        if (r.number.isNotEmpty() && !r.song) {
             clipRect(0f, 0f, w, h.toFloat()) {
                 word(ink.number, penPx(pen64(Tok.hubEdge, s.ppu)), base, Ink.white, Roles.listCount.alpha)
             }
@@ -295,7 +304,7 @@ fun DrawScope.listRow(
             }
         }
         if (r.secondary.isNotEmpty()) {
-            val sa = if (r.libSub) Roles.listLibSecondary.alpha else Rows.secondaryRole(r).alpha
+            val sa = if (r.libSub && !r.song) Roles.listLibSecondary.alpha else Rows.secondaryRole(r).alpha
             clipRect(clipL, 0f, ink.right.toFloat(), h.toFloat()) {
                 word(ink.secondary, penPx(lines.titleX64), lines.sub.toFloat(), Ink.white, sa)
             }
@@ -318,5 +327,5 @@ fun ListRow(
     ringLit: () -> Float = { 0f },
 ) {
     val ink = rememberRowInk(r, s, accentOff)
-    Canvas(modifier.pxSize(s.widthPx, Rows.pitch(s, r.collection))) { listRow(ink, s, alpha, focused, press(), accent, accentOff, glow?.invoke(), focusShown = focusShown, ringLit = ringLit()) }
+    Canvas(modifier.pxSize(s.widthPx, Rows.pitch(s, r))) { listRow(ink, s, alpha, focused, press(), accent, accentOff, glow?.invoke(), focusShown = focusShown, ringLit = ringLit()) }
 }

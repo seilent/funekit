@@ -93,7 +93,7 @@ class KitSheetTest {
                 listRow(ink, s, alpha, focused, press, accent, false, if (pressed) RowGlow(glow, glow.level(Tok.motion_pressGlow.toLong())) else null, focusShown = true)
             }
             rec.move(0f, y.toFloat()) { rec.row("row$i", ink, s, w, alpha, focused, press, pressed, accent, false, focusShown = true) }
-            y += Rows.pitch(s, r.collection)
+            y += Rows.pitch(s, r)
         }
     }
 

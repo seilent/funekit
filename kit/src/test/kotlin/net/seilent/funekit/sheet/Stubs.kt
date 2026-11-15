@@ -28,9 +28,8 @@ object Stubs {
         var t = top
         var i = 1
         while (t < bottom) {
-            val mid = t + Tok.rowCollection / HALF
-            ink.ring(Old.rowPlayRingX, mid, Old.rowPlayRing, Tok.ringStrokeIdle)
-            ink.text(Roles.listCollection, "row $i", Old.rowCollectionTextX, mid + ink.centre(Roles.listCollection))
+            ink.ring(Tok.rowPlayRingX, t + Tok.rowPlayRing / HALF, Tok.rowPlayRing, Tok.ringStrokeIdle)
+            ink.text(Roles.listCollection, "row $i", Tok.rowCollectionTextX, t + (Tok.rowPlayRing + Tok.capHeight * Roles.listCollection.size) / HALF)
             t += Tok.rowCollection
             i++
         }

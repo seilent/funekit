@@ -395,14 +395,14 @@ class SyntaxTest {
         val counts = Bridge.lines(File(repo, "tokens/funeos-old/bridge")).groupingBy { it.file to it.kind }.eachCount()
         assertEquals(
             mapOf(
-                ("c1.txt" to "new") to 20, ("c3.txt" to "old") to 8, ("c4.txt" to "old") to 2,
+                ("c1.txt" to "new") to 20, ("c3.txt" to "new") to 8, ("c4.txt" to "old") to 2,
                 ("c5.txt" to "old") to 7, ("c6.txt" to "old") to 8, ("c7.txt" to "old") to 15, ("c8.txt" to "old") to 1,
                 ("c9.txt" to "old") to 43,
             ),
             counts,
         )
-        assertEquals(84, bridge.old.size)
-        assertEquals(20, bridge.new.size)
+        assertEquals(76, bridge.old.size)
+        assertEquals(28, bridge.new.size)
         assertEquals(178, bridge.changed.size)
         assertTrue(bridge.changed.containsAll(bridge.new))
         val back = syntax.scan("kit/src/main/kotlin/A.kt", "package a\nval a = Tok.motion_sheet\n", emptySet(), HashSet(), bridge)

@@ -66,7 +66,7 @@ class RowDrawTest {
         alpha: Float = 1f,
         focusShown: Boolean = false,
         ringLit: Float = 0f,
-    ) = shot(720, Rows.pitch(a105, r.collection)) {
+    ) = shot(720, Rows.pitch(a105, r)) {
         listRow(rowInk(measurer, fonts, r, a105, unitDensity, false, null), a105, alpha, focused, press, accent, false, glow, focusShown = focusShown, ringLit = ringLit)
     }
 
@@ -219,11 +219,28 @@ class RowDrawTest {
     }
 
     @Test
+    fun aSongRowDrawsItsTitleAtTheEdgeAndItsSubAtTheDrop() {
+        val r = RowModel(primary = "Slow Comet", secondary = "Amber Field", number = "12", song = true)
+        val ink = rowInk(measurer, fonts, r, a105, unitDensity, false, null)
+        assertEquals(60, ink.lines.titleX)
+        assertEquals(ink.lines.title + 44, ink.lines.sub)
+        val s = row(r)
+        near(bg, most(s, 0, 59, 0, 160), 0)
+        assertTrue(most(s, 60, 400, ink.lines.title - 20, ink.lines.title) > 200)
+        assertTrue(most(s, 60, 400, ink.lines.sub - 10, ink.lines.sub) > 0x40)
+    }
+
+    @Test
     fun aCollectionRowDrawsItsPlayRingAndBoldTitle() {
-        val s = row(RowModel(ring = true, collection = true, primary = "Lantern Hours"))
-        near(over(0.6f), s.red(123, 82))
-        assertTrue(most(s, 134, 400, 20, 50) > 200)
-        near(bg, most(s, 134, 400, 52, 70), 0)
+        val r = RowModel(ring = true, collection = true, primary = "Lantern Hours")
+        val ink = rowInk(measurer, fonts, r, a105, unitDensity, false, null)
+        val spot = ink.spot!!
+        assertEquals(listOf(103, 43, 87), listOf(spot.cx, spot.cy, spot.d))
+        val s = row(r)
+        near(over(0.6f), s.red(spot.cx + (spot.d - spot.stroke) / 2, spot.cy))
+        assertEquals(165, ink.lines.titleX)
+        assertTrue(most(s, 165, 400, ink.lines.title - 20, ink.lines.title) > 200)
+        near(bg, most(s, 165, 400, ink.lines.title + 2, ink.lines.title + 10), 0)
     }
 
     @Test
