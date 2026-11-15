@@ -231,6 +231,46 @@ class ArbiterTest {
     }
 
     @Test
+    fun aMoveInsideTheSlopKeepsTheHoldTimedFromTheDown() {
+        list()
+        rule.mainClock.autoAdvance = false
+        rule.onRoot().performTouchInput { down(center) }
+        rule.mainClock.advanceTimeBy(200, ignoreFrameDuration = true)
+        rule.onRoot().performTouchInput { moveBy(Offset(0f, 2f), delayMillis = 0) }
+        rule.mainClock.advanceTimeBy(199, ignoreFrameDuration = true)
+        assertEquals(0, longs)
+        rule.mainClock.advanceTimeBy(17, ignoreFrameDuration = true)
+        assertEquals(1, longs)
+    }
+
+    @Test
+    fun aMovePastTheSlopBeforeTheHoldFiresNoLongPress() {
+        list()
+        rule.mainClock.autoAdvance = false
+        rule.onRoot().performTouchInput { down(center) }
+        rule.mainClock.advanceTimeBy(100, ignoreFrameDuration = true)
+        rule.onRoot().performTouchInput { moveBy(Offset(0f, 60f)) }
+        rule.mainClock.advanceTimeBy(500, ignoreFrameDuration = true)
+        assertEquals(0, longs)
+        rule.onRoot().performTouchInput { up() }
+        rule.mainClock.advanceTimeBy(16)
+        assertEquals(0, longs)
+        assertEquals(0, taps)
+    }
+
+    @Test
+    fun anUpBeforeTheHoldTapsAndFiresNoLongPress() {
+        list()
+        rule.mainClock.autoAdvance = false
+        rule.onRoot().performTouchInput { down(center) }
+        rule.mainClock.advanceTimeBy(300, ignoreFrameDuration = true)
+        rule.onRoot().performTouchInput { up() }
+        rule.mainClock.advanceTimeBy(500, ignoreFrameDuration = true)
+        assertEquals(0, longs)
+        assertEquals(1, taps)
+    }
+
+    @Test
     fun aLongPressTheTapRefusesStillTapsAtTheUp() {
         takesLong = false
         list()
