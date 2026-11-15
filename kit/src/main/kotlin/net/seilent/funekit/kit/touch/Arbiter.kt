@@ -148,7 +148,7 @@ class ListTouch(
         sync()
     }
 
-    internal var cuts = 0
+    var cuts = 0
         private set
 
     fun cancel() {
@@ -159,7 +159,7 @@ class ListTouch(
         sync()
     }
 
-    internal fun stop() {
+    fun stop() {
         stopped = true
         clock?.cancel()
         clock = null
@@ -185,7 +185,7 @@ class ListTouch(
 }
 
 @Composable
-internal fun rememberCoast(kind: Kind, scale: Scale): FloatDecayAnimationSpec? {
+fun rememberCoast(kind: Kind, scale: Scale): FloatDecayAnimationSpec? {
     val density = LocalDensity.current
     return remember(kind, scale.coast, density) { if (kind == Kind.List && scale.coast) SplineBasedFloatDecayAnimationSpec(density) else null }
 }
