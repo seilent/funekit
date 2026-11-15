@@ -41,6 +41,7 @@ class Tap(
     val onLong: (() -> Boolean)? = null,
     val solo: Boolean = false,
     val onAt: ((Offset) -> Unit)? = null,
+    val onCut: (() -> Unit)? = null,
 )
 
 class TapSlot {
@@ -393,14 +394,17 @@ fun Modifier.arbiter(a: Arbiter, swipes: Swipes): Modifier {
             val bottom = open && page.bottom && y0 >= size.height - px(Tok.gesture_bottom, a.scale.touchPpu)
             a.gesture.arm(x0, y0, edge, bottom, open && page.turn, t0)
 
-            fun drop() {
-                tap?.onCancel?.invoke()
+            fun drop(cut: Boolean = false) {
+                tap?.let {
+                    val c = it.onCut
+                    if (cut && c != null) c() else it.onCancel()
+                }
                 tap = null
                 long = false
             }
 
-            fun take() {
-                drop()
+            fun take(cut: Boolean = false) {
+                drop(cut)
                 list?.let {
                     if (dragging) it.scroll.endDrag()
                     it.sync()
@@ -418,7 +422,7 @@ fun Modifier.arbiter(a: Arbiter, swipes: Swipes): Modifier {
 
             fun cutOff() {
                 if (list?.let { it.cuts != cut } != true) return
-                drop()
+                drop(true)
                 list = null
                 dragging = false
             }
@@ -481,7 +485,7 @@ fun Modifier.arbiter(a: Arbiter, swipes: Swipes): Modifier {
                     val y = c.position.y
                     val t = c.uptimeMillis
                     if (c.isConsumed) {
-                        take()
+                        take(true)
                         a.gesture.cancel()
                         panned?.end(Swipe.None)
                         panned = null
@@ -525,7 +529,7 @@ fun Modifier.arbiter(a: Arbiter, swipes: Swipes): Modifier {
                 }
             } finally {
                 under?.pressed = false
-                drop()
+                drop(true)
                 panned?.end(Swipe.None)
             }
         }

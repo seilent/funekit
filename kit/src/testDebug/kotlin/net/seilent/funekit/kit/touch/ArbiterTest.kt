@@ -18,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -58,6 +59,7 @@ class ArbiterTest {
     private val swipes = mutableListOf<Swipe>()
     private var presses = 0
     private var cancels = 0
+    private var cutCount = 0
     private var taps = 0
     private var longs = 0
     private var takesLong = true
@@ -628,11 +630,69 @@ class ArbiterTest {
         assertEquals(1, cancels)
     }
 
+    @Test
+    fun aGestureCutBeforeItsUpRunsItsCutAndNotItsCancel() {
+        var a by mutableStateOf(Arbiter(v1))
+        rule.setContent {
+            Box(Modifier.fillMaxSize().arbiter(a, page(turn = false))) {
+                Box(Modifier.fillMaxSize().tapTarget(a, Tap(onPress = { presses++ }, onCancel = { cancels++ }, onTap = { taps++ }, onCut = { cutCount++ })))
+            }
+        }
+        rule.onRoot().performTouchInput { down(center) }
+        rule.waitForIdle()
+        assertEquals(1, presses)
+        rule.runOnIdle { a = Arbiter(v1) }
+        rule.waitForIdle()
+        assertEquals(1, cutCount)
+        assertEquals(0, cancels)
+        rule.onRoot().performTouchInput { up() }
+        rule.waitForIdle()
+        assertEquals(0, taps)
+        assertEquals(1, cutCount)
+        assertEquals(0, cancels)
+    }
+
+    @Test
+    fun aMoveAChildConsumesCutsTheTapAndDoesNotCancelIt() {
+        rule.setContent {
+            val a = remember { Arbiter(v1) }
+            Box(Modifier.fillMaxSize().arbiter(a, page(turn = false))) {
+                Box(
+                    Modifier.fillMaxSize()
+                        .tapTarget(a, Tap(onPress = { presses++ }, onCancel = { cancels++ }, onTap = { taps++ }, onCut = { cutCount++ }))
+                        .pointerInput(Unit) {
+                            awaitEachGesture {
+                                awaitFirstDown(requireUnconsumed = false)
+                                while (true) {
+                                    val e = awaitPointerEvent()
+                                    if (e.changes.any { it.positionChanged() }) e.changes.forEach { it.consume() }
+                                    if (e.changes.none { it.pressed }) break
+                                }
+                            }
+                        },
+                )
+            }
+        }
+        rule.onRoot().performTouchInput {
+            down(center)
+            moveBy(Offset(2f, 0f))
+        }
+        rule.waitForIdle()
+        assertEquals(1, presses)
+        assertEquals(1, cutCount)
+        assertEquals(0, cancels)
+        rule.onRoot().performTouchInput { up() }
+        rule.waitForIdle()
+        assertEquals(0, taps)
+        assertEquals(1, cutCount)
+        assertEquals(0, cancels)
+    }
+
     private val a105 = scale(Window(720, 1280, 35, none, none, none, none, none), Nav.None, Surface.Page, false)
     private val rowTaps = HashMap<Int, Tap>()
     private val tapped = mutableListOf<Int>()
 
-    private fun rowTap(i: Int): Tap = rowTaps.getOrPut(i) { Tap(onPress = { presses++ }, onCancel = { cancels++ }, onTap = { tapped += i }) }
+    private fun rowTap(i: Int): Tap = rowTaps.getOrPut(i) { Tap(onPress = { presses++ }, onCancel = { cancels++ }, onTap = { tapped += i }, onCut = { cutCount++ }) }
 
     private fun rowList(layer: Int = 0, modal: Boolean = false) {
         rule.setContent {
@@ -730,6 +790,25 @@ class ArbiterTest {
 
     @Test
     @Config(qualifiers = "w720dp-h1280dp-mdpi")
+    fun aListCancelCutsTheRowTapUnderTheDown() {
+        rowList()
+        rule.onRoot().performTouchInput { down(Offset(360f, 600f)) }
+        rule.waitForIdle()
+        assertEquals(1, presses)
+        rule.runOnIdle { touch.cancel() }
+        rule.onRoot().performTouchInput { moveTo(Offset(360f, 602f)) }
+        rule.waitForIdle()
+        assertEquals(1, cutCount)
+        assertEquals(0, cancels)
+        rule.onRoot().performTouchInput { up() }
+        rule.waitForIdle()
+        assertTrue(tapped.isEmpty())
+        assertEquals(1, cutCount)
+        assertEquals(0, cancels)
+    }
+
+    @Test
+    @Config(qualifiers = "w720dp-h1280dp-mdpi")
     fun aRowDownMovedPastTheSlopCancelsItsTapAndDragsTheList() {
         rowList()
         rule.onRoot().performTouchInput {
@@ -740,10 +819,12 @@ class ArbiterTest {
         rule.waitForIdle()
         assertEquals(1, presses)
         assertEquals(1, cancels)
+        assertEquals(0, cutCount)
         assertEquals(1050, touch.px)
         rule.onRoot().performTouchInput { up() }
         rule.waitForIdle()
         assertTrue(tapped.isEmpty())
+        assertEquals(0, cutCount)
     }
 
     @Test
