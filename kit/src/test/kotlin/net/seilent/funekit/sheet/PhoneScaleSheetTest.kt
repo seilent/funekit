@@ -242,7 +242,7 @@ class PhoneScaleSheetTest {
             val after = shot(dev) { fitRuler(it, it.board) }
             val before = shot(dev) { fitRuler(it, TokBoard.r1) }
             listOf(
-                tile("${dev.id}-today", "${dev.label}: today, the R1 and A105 values", dev, before),
+                tile("${dev.id}-units", "${dev.label}: the R1 and A105 values", dev, before),
                 tile("${dev.id}-v042", "${dev.label}: the rule at funeOS v0.4.2", dev, after, listOf(FIT_NOTE)),
             )
         }
@@ -252,7 +252,7 @@ class PhoneScaleSheetTest {
             "",
             FIT_FORM,
             "",
-            "- ${Render.BASE}/$FIT `$FIT/fitbyheight.png`: each pair today (left) against the rule (right): the album caption pitch, the caption band (the green line, which on a 320 u canvas runs past the hit cell, as funeOS draws it) and the coming up lines, on the Galaxy Z Flip7 cover, the 720 x 748 cover sheet window and a 1080 x 1600 window.",
+            "- ${Render.BASE}/$FIT `$FIT/fitbyheight.png`: each pair with the R1 and A105 values (left) against the rule (right): the album caption pitch, the caption band (the green line, which on a 320 u canvas runs past the hit cell, as funeOS draws it) and the coming up lines, on the Galaxy Z Flip7 cover, the 720 x 748 cover sheet window and a 1080 x 1600 window.",
             "- clean tiles at device px: ${Render.BASE}/$FIT/tiles",
         ))
     }
@@ -260,8 +260,8 @@ class PhoneScaleSheetTest {
     @Test
     fun phoneScale() {
         val pages = listOf(
-            tile("a105-songs", "A105 songs hub, fit base (today, the reference)", a105, shot(a105) { hub(it, songs) }),
-            tile("a105-artists", "A105 artists hub, fit base (today)", a105, shot(a105) { hub(it, artists) }, listOf(ARTISTS_NOTE)),
+            tile("a105-songs", "A105 songs hub, fit base (the reference)", a105, shot(a105) { hub(it, songs) }),
+            tile("a105-artists", "A105 artists hub, fit base", a105, shot(a105) { hub(it, artists) }, listOf(ARTISTS_NOTE)),
             tile("p2160-songs", "Mi MIX 2S songs hub, page base", p2160, shot(p2160) { hub(it, songs) }, listOf(KEPT_HEADER)),
             tile("p2160-artists", "Mi MIX 2S artists hub, page base", p2160, shot(p2160) { hub(it, artists) }, listOf(KEPT_HEADER, ARTISTS_NOTE)),
             tile("p2160-songs-large", "Mi MIX 2S songs hub, page base at SIZE LARGE", p2160, shot(p2160, large = true) { hub(it, songs) }),
