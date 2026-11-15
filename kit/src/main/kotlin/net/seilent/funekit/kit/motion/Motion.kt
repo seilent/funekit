@@ -330,6 +330,8 @@ class Tw {
     fun done(now: Float): Boolean = dur <= 0f || now - start >= dur
 }
 
+data class PressLook(val factor: Float, val lit: Float, val ring: Float, val framed: Boolean)
+
 class Press {
     var revision by mutableIntStateOf(0)
         private set
@@ -457,6 +459,8 @@ class Press {
         draw(now)
         return litShown
     }
+
+    fun at(now: Float): PressLook = PressLook(factorOf(step(now)), lit(now), ring(now), framed(now))
 
     fun rest(now: Float): Boolean = !moving(now) && scale(now) == 1f
 

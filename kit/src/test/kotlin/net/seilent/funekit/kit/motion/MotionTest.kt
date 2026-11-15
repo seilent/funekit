@@ -349,4 +349,27 @@ class MotionTest {
         o.close(200)
         assertTrue(o.land(250))
     }
+
+    @Test
+    fun atReadsThePressWithNoShownStateAndEqualsTheNextLook() {
+        val p = Press()
+        p.down(0f)
+        val now = SETTLED
+        assertFalse(p.moving(now))
+        assertTrue(p.stale(now))
+        val a = p.at(now)
+        assertEquals(a, p.at(now))
+        assertTrue(p.stale(now))
+        assertEquals(1f, a.lit, 0f)
+        assertEquals(1f, a.ring, 0f)
+        assertTrue(a.framed)
+        val f = p.draw(now)
+        assertEquals(a.factor, f, 0f)
+        assertEquals(a.lit, p.look(now), 0f)
+        assertFalse(p.stale(now))
+    }
+
+    private companion object {
+        const val SETTLED = 10000f
+    }
 }
