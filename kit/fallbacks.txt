@@ -14,3 +14,6 @@ FB-lit-10 pending the T7 pane scale floor of one 16.16 step, cited at the funeOS
 FB-textfloor pending the smallest text px is 8 px per u times the window's px per u, V1's own 10 px only on the V1 board at its own ppu
 FB-fitbyheight pending windows whose height limits them take V1's values for the tokens V1 alone changed at funeOS v0.4.2
 FB-lit-11 pending the platform letter spacing at the glyph ends is probed per typeface by the kit, not read from funeOS
+FB-bound pending a play open with no player answer by its bound, the boundMs the host passes from the tap, turns back to the page it came from; a later answer changes no page
+FB-rel pending a play open ended before Now Playing is ready (its ready cap of boundMs after the answer, a host land, HOME, an accessibility action, a restart) shows Now Playing landed with what it has
+FB-lpreplay pending a down held through a play open fires its long press a hold time after the replay, up to the wait later than funeOS
