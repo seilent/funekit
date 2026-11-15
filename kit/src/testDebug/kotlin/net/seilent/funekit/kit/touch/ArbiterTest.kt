@@ -152,6 +152,55 @@ class ArbiterTest {
         assertEquals(1, cancels)
     }
 
+    private fun cutList() {
+        rule.setContent {
+            val a = remember { Arbiter(v1) }
+            arb = a
+            touch = rememberListTouch(Kind.List, v1)
+            Box(Modifier.fillMaxSize().arbiter(a, page())) {
+                FuneList(a, touch, Modifier.fillMaxSize()) {
+                    items(200) { Box(Modifier.fillMaxWidth().height(40.dp).tapTarget(a, Tap(onPress = { presses++ }, onCancel = { cancels++ }, onTap = { taps++ }, onCut = { cutCount++ }))) }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun aSwipeTakeCutsThePressItsSlopExitFaded() {
+        cutList()
+        rule.onRoot().performTouchInput {
+            down(center)
+            moveBy(Offset(0f, -40f))
+            moveBy(Offset(0f, -40f))
+            moveBy(Offset(-30f, 0f))
+            moveBy(Offset(-30f, 0f))
+            moveBy(Offset(-30f, 0f))
+            up()
+        }
+        rule.waitForIdle()
+        assertEquals(listOf(Swipe.Left), swipes)
+        assertEquals(1, presses)
+        assertEquals(1, cancels)
+        assertEquals(1, cutCount)
+        assertEquals(0, taps)
+    }
+
+    @Test
+    fun aSlopExitWithNoSwipeTakeOnlyFadesThePress() {
+        cutList()
+        rule.onRoot().performTouchInput {
+            down(center)
+            moveBy(Offset(0f, -40f))
+            moveBy(Offset(0f, -40f))
+            up()
+        }
+        rule.waitForIdle()
+        assertEquals(emptyList<Swipe>(), swipes)
+        assertEquals(1, presses)
+        assertEquals(1, cancels)
+        assertEquals(0, cutCount)
+    }
+
     @Test
     fun aTouchOnAFlingingListOnlyStopsIt() {
         list()

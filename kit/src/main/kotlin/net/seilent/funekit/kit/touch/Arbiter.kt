@@ -399,10 +399,13 @@ fun Modifier.arbiter(a: Arbiter, swipes: Swipes): Modifier {
             val bottom = open && page.bottom && y0 >= size.height - px(Tok.gesture_bottom, a.scale.touchPpu)
             a.gesture.arm(x0, y0, edge, bottom, open && page.turn, t0)
 
+            var faded: Tap? = null
+
             fun drop(cut: Boolean = false) {
                 tap?.let {
                     val c = it.onCut
                     if (cut && c != null) c() else it.onCancel()
+                    if (!cut) faded = it
                 }
                 tap = null
                 long = false
@@ -416,6 +419,13 @@ fun Modifier.arbiter(a: Arbiter, swipes: Swipes): Modifier {
                 }
                 list = null
                 dragging = false
+            }
+
+            fun swipeTake() {
+                val f = faded
+                faded = null
+                take(true)
+                f?.onCut?.invoke()
             }
 
             fun begin(x: Float, origin: Float): Boolean {
@@ -457,11 +467,11 @@ fun Modifier.arbiter(a: Arbiter, swipes: Swipes): Modifier {
                     tap?.onAt?.invoke(Offset(x, y))
                 }
                 val locked = a.gesture.move(x, y, t)
-                if (locked && a.gesture.state == Gesture.State.Horizontal && !a.gesture.turned && begin(x, a.gesture.originX)) take()
+                if (locked && a.gesture.state == Gesture.State.Horizontal && !a.gesture.turned && begin(x, a.gesture.originX)) swipeTake()
                 if (a.gesture.turned && !took && page.acts(a.gesture.commitAt(x, y))) {
                     took = true
                     a.gesture.keep()
-                    take()
+                    swipeTake()
                     begin(x, a.gesture.originX)
                 }
                 panned?.drag(x)
@@ -506,7 +516,7 @@ fun Modifier.arbiter(a: Arbiter, swipes: Swipes): Modifier {
                             if (lift.turned && page.acts(lift.swipe)) {
                                 took = true
                                 a.gesture.keep()
-                                take()
+                                swipeTake()
                                 begin(lift.x, lift.origin)
                             }
                         }
