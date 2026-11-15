@@ -126,7 +126,7 @@ class MotionSheetTest {
         val paint: DrawScope.(Long, Regions?) -> Unit,
     )
 
-    private inner class Board(val dev: Dev, val board: String, tb: TokBoard.Board, val off: Boolean = false, val nav: Nav = Nav.None) {
+    private inner class Board(val dev: Dev, val board: String, tb: TokBoard.Board, private val has: Set<String>, val off: Boolean = false, private val framesOn: Boolean = false, val nav: Nav = Nav.None) {
         val s = scale(dev.window(nav), nav, Surface.Page, false)
         private val hs = scale(dev.window(nav), nav, Surface.Home, false)
         val w = dev.w
@@ -142,7 +142,6 @@ class MotionSheetTest {
         private val songsRest = KitPages.songs.at(-1, -1)
         private val songsEnter = KitPages.songs.at(0, -1)
         private val songsPress = KitPages.songs
-        private val songsPlaying = KitPages.songs.playing(KitPages.songs.pressed).at(KitPages.songs.focused, KitPages.songs.pressed)
         private val np = Page("np", "now playing", "", emptyList(), -1, emptyList(), -1, -1)
 
         private fun style(r: Role, ppu: Float = s.stdPpu) = roleStyle(r, s, unitDensity, KitInk.white, ppu = ppu)
@@ -438,31 +437,30 @@ class MotionSheetTest {
             val p = Press()
             val glow = Glow()
             val focus = FocusTrack().also { it.attach() }
-            val row = songsPress.rows[songsPress.pressed]
-            val strip = Toast()
-            val toastInk = ToastInk(measure(row.secondary, Roles.toastArtist, s.ppu), measure(row.primary, Roles.toastTitle, s.ppu))
+            val st = stack(songsPress)
             val acts = listOf(
                 Act(0L) {
                     p.down(0f)
                     glow.down(songsPress.pressed, 0L)
                     focus.set(songsPress.pressed, songsPress.rows.size, 0L, true)
                 },
+            ) + if (up < 0L) emptyList() else listOf(
                 Act(up) {
                     p.tap(up.toFloat())
-                    strip.show(up, row.secondary, row.primary, track = true)
-                    strip.frame(ToastPlace.Bottom, h, up)
+                    st.push(np, MoveKind.T7)
                 },
             )
-            val end = (up + Tok.motion_touchReturnDelay + Tok.motion_press).toLong()
-            return Case(name, note, stack(songsPress), acts, 0L, { end }, shots, emptyList(), frames, PRESS_QUIET) { t, rec ->
-                val now = t.toFloat()
-                ground()
-                val scale = p.draw(now)
-                with(kit(if (t > up) songsPlaying else songsPress)) { whole(rec, "page", scale, if (p.scale(now) < 1f) RowGlow(glow, glow.level(t)) else null, focus, t) }
-                chromeAt(inkOf(songsPress).chrome, t, rec, "page.chrome")
-                strip.frame(ToastPlace.Bottom, h, t)
-                toast(strip, toastInk, s, t)
-                rec?.toast("toast", strip, toastInk, s, t, w)
+            val end = if (up < 0L) shots.keys.max() else max(shots.keys.max(), (up + Tok.motion_touchReturnDelay + Tok.motion_press).toLong())
+            return Case(name, note, st, acts, 0L, { end }, shots, emptyList(), frames, if (up < 0L) PRESS_QUIET else PLAY_QUIET) { t, rec ->
+                if (st.top === np || (st.phase != Phase.Rest && st.turn != null)) {
+                    world(st, t, rec)
+                } else {
+                    val now = t.toFloat()
+                    ground()
+                    val scale = p.draw(now)
+                    with(kit(songsPress)) { whole(rec, "page", scale, if (p.scale(now) < 1f) RowGlow(glow, glow.level(t)) else null, focus, t) }
+                    chromeAt(inkOf(songsPress).chrome, t, rec, "page.chrome")
+                }
             }
         }
 
@@ -498,8 +496,11 @@ class MotionSheetTest {
                 jumpCase("t14-songs", "the jump grid open over the songs hub, as main.cpp t14:500:songs", songsRest, false, false, mapOf(500L to "t14-500-songs"), emptyList(), KitPages.jumpAvail, null),
                 jumpCase("t14-fade-songs", "the jump grid cross fade over the songs hub with its # divider focused as main.cpp enter_hub leaves it, as main.cpp t14:150:songs", songsEnter, false, false, mapOf(150L to "t14-150-songs"), T14_SONGS, KitPages.jumpAvail, null),
                 jumpCase("t14-close-songs", "the jump grid closing 600 ms after the open over the songs hub with its # divider focused, as main.cpp t14x:120:songs", songsEnter, true, false, mapOf(CLOSE_AT + T14X to "t14x-120-songs"), T14_SONGS, KitPages.jumpAvail, null),
-                pressCase("f3-tap", "a tap on the first song row: down at 0, up at 50 (main.cpp rowpress tap), the press held 200 past the up, then 100 back; after the up the song plays (accent title, no press glow) and its track toast rises", TAP_UP, true, mapOf(DOWN_SHOT to "rowpress-0-hubsongs-down", TAP_SHOT to "rowpress-0-hubsongs-tap")),
-                pressCase("f3-up", "the same row with the up at 150 (main.cpp rowpress up), shot at 650 with the song playing and its track toast up", UP_AT, false, mapOf(UP_SHOT to "rowpress-0-hubsongs-up")),
+                pressCase("f3-tap", "a tap on the first song row: down at 0, up at 50 (main.cpp rowpress tap); the tap plays the song and opens now playing with T7, as funeOS v0.4.2 hub_play goes through play_open; a plain T7 push stands in for the play open, its hold not modelled, since the T7 quads record no region", TAP_UP, true, mapOf(TAP_SHOT to "rowpress-0-hubsongs-tap")),
+                pressCase("f3-down", "the first song row down with no up (main.cpp rowpress down), shot at 50", -1L, false, mapOf(DOWN_SHOT to "rowpress-0-hubsongs-down")),
+                pressCase("f3-up", "the same row with the up at 150 (main.cpp rowpress up), shot at 650, 500 ms into the T7 of the play open", UP_AT, false, mapOf(UP_SHOT to "rowpress-0-hubsongs-up")),
+                pressCase("f3-held", "the first song row held with no up (main.cpp rowpress held), shot at 150", -1L, false, mapOf(HELD_SHOT to "rowpress-0-hubsongs-held")),
+                pressCase("f3-series", "the first song row down with no up under ACCENT OFF (main.cpp rowpress 100 hubsongs down series), shot 100 ms after the down", -1L, false, mapOf(SERIES_SHOT to "rowpress-100-hubsongs-down-series-accentoff")),
                 toastCase("f11-drop", "the track toast dropping in at the top over the songs hub", false),
                 toastCase("f11-leave", "the same toast leaving after its hold", true),
             )
@@ -514,7 +515,12 @@ class MotionSheetTest {
             return img.asAndroidBitmap()
         }
 
+        private fun shotsOf(c: Case) = c.shots.filterValues { it in has && it.endsWith(ACCENT_OFF) == off }
+
+        private fun runs(c: Case) = shotsOf(c).isNotEmpty() || (framesOn && c.shots.isEmpty())
+
         private fun play(c: Case): Pair<Int, List<Tile>> {
+            val shots = shotsOf(c)
             val dir = File(root, "$board/${c.name}")
             dir.deleteRecursively()
             val acts = c.acts.sortedBy { it.at }
@@ -526,12 +532,12 @@ class MotionSheetTest {
             acts.map { it.at }.filter { it < c.from }.distinct().sorted().forEach { at(it) }
             at(c.from)
             val last = c.end()
-            val frames = if (c.frames) generateSequence(c.from) { it + STEP }.takeWhile { it <= last }.toSet() else emptySet()
+            val frames = if (framesOn && c.frames) generateSequence(c.from) { it + STEP }.takeWhile { it <= last }.toSet() else emptySet()
             if (frames.isNotEmpty()) dir.mkdirs()
             val names = mutableListOf<String>()
             val tiles = mutableListOf<Tile>()
             fun shoot(t: Long) {
-                val kind = c.shots[t]
+                val kind = shots[t]
                 if (kind == null && t !in frames) return
                 val rec = kind?.let { Regions(board, w, h, s, c.rules).also { it.residualWhy = c.quiet } }
                 val bmp = paint(c, t, rec)
@@ -547,7 +553,7 @@ class MotionSheetTest {
                 }
             }
             shoot(c.from)
-            val times = (frames + c.shots.keys + acts.map { it.at }).filter { it > c.from }.toSortedSet()
+            val times = (frames + shots.keys + acts.map { it.at }).filter { it > c.from }.toSortedSet()
             for (t in times) {
                 at(t)
                 shoot(t)
@@ -557,11 +563,11 @@ class MotionSheetTest {
         }
 
         fun run(cases: List<Case>, lines: MutableList<String>) {
-            for (c in cases) {
+            for (c in cases.filter { runs(it) }) {
                 val (count, tiles) = play(c)
                 val shots = tiles.joinToString(", ") { "`${File(it.path).name}`" }
                 lines += "- `$FOLDER/$board/${c.name}/`: $count frames; ${c.note}" + if (shots.isEmpty()) "" else "; shots $shots"
-                if (tiles.isNotEmpty()) render.write(Sheet(FOLDER, c.name, listOf("${c.name} at the funeOS shot times: ${c.note}."), tiles))
+                if (tiles.isNotEmpty()) render.write(Sheet(FOLDER, if (framesOn) c.name else "$board-${if (off) "off-" else ""}${c.name}", listOf("${c.name} at the funeOS shot times: ${c.note}."), tiles))
             }
         }
     }
@@ -569,13 +575,32 @@ class MotionSheetTest {
     @Test
     fun motionFramesAndShotTiles() {
         val lines = mutableListOf("# Motion frames", "", "Frames at $FPS fps from the kit's PageMove, PageStack, Overlay, Toast and Press; shot tiles carry `<tile>.regions.json` for `tools/inkband.py`.", "")
-        val a105 = Board(A105, "a105", TokBoard.a105)
-        a105.run(a105.cases(), lines)
+        val boards = listOf(
+            Board(A105, "a105", TokBoard.a105, A105_KINDS, framesOn = true),
+            Board(A105, "a105", TokBoard.a105, A105_KINDS, off = true),
+            Board(R1, "r1", TokBoard.r1, R1_KINDS),
+            Board(R1, "r1", TokBoard.r1, R1_KINDS, off = true),
+            Board(V1, "v1", TokBoard.v1, V1_KINDS),
+            Board(V1, "v1", TokBoard.v1, V1_KINDS, off = true),
+        )
+        for (b in boards) b.run(b.cases(), lines)
         render.index(FOLDER, lines)
     }
 
     companion object {
         private val A105 = Dev("720x1280", "funeOS A105 board", 720, 1280, listOf(Nav.None))
+        private val R1 = Dev("480x800", "funeOS R1 board", 480, 800, listOf(Nav.None))
+        private val V1 = Dev("240x320", "funeOS V1 board", 240, 320, listOf(Nav.None))
+        private const val ACCENT_OFF = "-accentoff"
+        private const val HELD = "rowpress-0-hubsongs-held"
+        private const val SERIES = "rowpress-100-hubsongs-down-series-accentoff"
+        private val A105_KINDS = setOf(
+            "rowpress-0-hubsongs-down", "rowpress-0-hubsongs-tap", "rowpress-0-hubsongs-up", HELD, SERIES,
+            "t5-100", "t5-250", "t5-450", "t5-700", "t5-1500", "t5-300-songs",
+            "t13-120", "t13-400", "t13x-80", "t14-500-songs", "t14-150-songs", "t14x-120-songs",
+        )
+        private val R1_KINDS = setOf(HELD, SERIES)
+        private val V1_KINDS = setOf(HELD, SERIES)
         private const val FOLDER = "motion"
         private const val FPS = 40
         private const val STEP = 1000L / FPS
@@ -589,6 +614,8 @@ class MotionSheetTest {
         private const val TAP_SHOT = 200L
         private const val UP_AT = 150L
         private const val UP_SHOT = 650L
+        private const val HELD_SHOT = 150L
+        private const val SERIES_SHOT = 100L
         private const val WATERMARK = "fune"
         private const val POWER = "power"
         private val POWER_ITEMS = listOf("screen off", "power off")
@@ -597,6 +624,7 @@ class MotionSheetTest {
         private const val MOVE_QUIET = "page moves and pivot switches draw funeOS content the kit has no page or part for (the ALBUMS grid, the artist page, the artist row thumb strips)"
         private const val OVERLAY_QUIET = "the page or home under the overlay shows funeOS fixture rows and home items the kit page does not draw"
         private const val FADE_QUIET = "below full alpha the grid cross fades over the funeOS page under it"
+        private const val PLAY_QUIET = "after the up funeOS v0.4.2 opens now playing with T7 (play_open): the hub turns out on the NpLeave pane and now playing turns in, drawn through quads that record no region"
         private const val PRESS_QUIET = "the funeOS songs hub shows a seventh song row below the kit page's last row"
         private const val JUMP_LOUD = "the opaque jump grid covers the page, so every funeOS mark on it is a kit element"
         private const val T14_THUMB = "funeOS draws the songs hub list thumb under the cross fading grid thumb (+45 on the thumb column in t14-150-songs and t14x-120-songs); the jump scenes draw no page list thumb under the grid, so the kit has +25 and +17"
