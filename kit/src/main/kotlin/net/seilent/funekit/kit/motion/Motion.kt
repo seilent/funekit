@@ -3,7 +3,6 @@ package net.seilent.funekit.kit.motion
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
-import net.seilent.funekit.gen.Old
 import net.seilent.funekit.gen.Tok
 import kotlin.math.log2
 import kotlin.math.max
@@ -12,6 +11,7 @@ import kotlin.math.roundToInt
 
 private const val PRESS_STEPS = 16f
 private const val LOG_STEPS = 10f
+private const val MS_PER_S = 1000f
 
 fun lerp(a: Float, b: Float, t: Float): Float = a + (b - a) * t
 
@@ -194,16 +194,103 @@ class Pivot(val stripDx: Float, val stripAlpha: Float, val rowsDx: Float, val ro
 
 fun pivotAt(e: Float, dir: Int): Pivot {
     val d = dir.toFloat()
-    val strip = (e / Old.motion_pivotStrip).coerceIn(0f, 1f)
-    val stripDx = d * Old.motion_pivotStripShift * (1 - Curves.cubicOut.at(strip))
-    val stripAlpha = lerp(Old.motion_pivotStripAlpha, 1f, strip)
-    if (e < Old.motion_pivotOut) {
-        val o = Curves.strip.at(e / Old.motion_pivotOut)
-        return Pivot(stripDx, stripAlpha, -d * Old.motion_pivotShift * o, 1 - o, false)
+    val out = Tok.motion_pivotOut
+    if (e < out) return Pivot(0f, 1f, -d * Tok.motion_pivotPaneSpeed * e / MS_PER_S, 1 - e / out, false)
+    val k = e - out
+    val s = 1 - Curves.easeOut.at((k / Tok.motion_pivotRows).coerceIn(0f, 1f))
+    return Pivot(0f, 1f, d * Tok.motion_pivotRowInShift * s, (k / Tok.motion_pivotRowFade).coerceIn(0f, 1f), true)
+}
+
+class PivotMotion {
+    private var at = -1L
+    private var back = -1L
+    private var dir = 1
+    private var from = 0f
+    private var stamp = 0L
+    private var ready = false
+    var offset = 0f
+        private set
+    var dragging = false
+        private set
+
+    fun begin(now: Long, dir: Int, from: Float = 0f) {
+        at = now
+        back = -1L
+        this.dir = dir
+        this.from = from
+        offset = 0f
+        dragging = false
+        ready = false
     }
-    val k = e - Old.motion_pivotOut
-    val dx = d * Old.motion_pivotRowInShift * (1 - Curves.cubicOut.at(k / Old.motion_pivotRows))
-    return Pivot(stripDx, stripAlpha, dx, (k / Old.motion_pivotRowFade).coerceIn(0f, 1f), true)
+
+    fun drag(dx: Float) {
+        dragging = true
+        at = -1L
+        back = -1L
+        offset = dx
+    }
+
+    fun release(now: Long) {
+        if (!dragging) return
+        dragging = false
+        ready = false
+        from = offset
+        offset = 0f
+        back = now
+    }
+
+    fun end() {
+        at = -1L
+        back = -1L
+        offset = 0f
+        from = 0f
+        dragging = false
+        ready = false
+    }
+
+    fun prepare(stamp: Long) {
+        ready = true
+        this.stamp = stamp
+    }
+
+    fun prepared(stamp: Long): Boolean = ready && this.stamp == stamp
+
+    fun active(now: Long): Boolean {
+        if (dragging) return true
+        if (back >= 0) return now - back < Tok.motion_pivotStrip
+        return at >= 0 && now - at < Tok.motion_pivotOut + max(Tok.motion_pivotRows, Tok.motion_pivotRowFade)
+    }
+
+    fun switching(now: Long): Boolean = at >= 0 && active(now)
+
+    fun entering(now: Long): Boolean = at >= 0 && active(now) && now - at >= Tok.motion_pivotOut
+
+    fun alpha(now: Long): Float {
+        if (dragging || at < 0) return 1f
+        val e = now - at
+        val out = Tok.motion_pivotOut
+        if (e < out) return 1 - e / out
+        val k = e - out
+        return if (k >= Tok.motion_pivotRowFade) 1f else k / Tok.motion_pivotRowFade
+    }
+
+    fun dx(now: Long, ppu: Float): Int {
+        if (dragging) return (offset * ppu).roundToInt()
+        if (back >= 0) {
+            val d = Tok.motion_pivotStrip
+            val e = (now - back).coerceIn(0L, d.toLong())
+            return (from * (1 - Curves.expOut6.at(e / d)) * ppu).roundToInt()
+        }
+        if (at < 0) return 0
+        val e = max(0L, now - at)
+        if (e < Tok.motion_pivotOut) return ((from - dir * Tok.motion_pivotPaneSpeed * e / MS_PER_S) * ppu).roundToInt()
+        val k = (e - Tok.motion_pivotOut).coerceIn(0f, Tok.motion_pivotRows)
+        return dir * (Tok.motion_pivotRowInShift * (1 - Curves.easeOut.at(k / Tok.motion_pivotRows)) * ppu).roundToInt()
+    }
+
+    fun thumbIn(now: Long): Boolean = !active(now) || entering(now)
+
+    fun thumbAlpha(now: Long): Float = if (active(now)) alpha(now) else 1f
 }
 
 class Tw {

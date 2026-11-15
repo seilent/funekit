@@ -27,11 +27,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import net.seilent.funekit.Roles
 import net.seilent.funekit.Scale
-import net.seilent.funekit.gen.Old
 import net.seilent.funekit.gen.Tok
-import net.seilent.funekit.kit.motion.Pivot
+import net.seilent.funekit.kit.motion.Curves
 import net.seilent.funekit.kit.motion.lerp
-import net.seilent.funekit.kit.motion.pivotAt
 import net.seilent.funekit.kit.touch.Arbiter
 import net.seilent.funekit.kit.touch.Tap
 import net.seilent.funekit.kit.touch.tapTarget
@@ -77,7 +75,7 @@ class Chrome(val scale: Scale, val header: Word, val pivots: List<PivotInk>) {
         at = now
     }
 
-    fun moving(now: Long): Boolean = at?.let { now - it < Old.motion_pivotStrip.toLong() } ?: false
+    fun moving(now: Long): Boolean = at?.let { now - it < Tok.motion_pivotStrip.toLong() } ?: false
 
     fun since(now: Long): Long? = at?.let { now - it }
 
@@ -149,14 +147,17 @@ class Chrome(val scale: Scale, val header: Word, val pivots: List<PivotInk>) {
 
     fun pivotW(i: Int): Float = (if (i == active) pivots[i].active else pivots[i].rest).width
 
-    private fun t5(now: Long): Pivot? {
-        val e = since(now) ?: return null
-        return if (e < 0) null else pivotAt(e.toFloat(), dir)
+    private fun strip(now: Long, std: Boolean): Float {
+        val e = since(now) ?: return 0f
+        val d = Tok.motion_pivotStrip
+        if (e < 0 || e >= d) return 0f
+        val p = 1 - Curves.expOut6.at(e / d)
+        return Math.round((pos(active, std) - pos(fromActive, std)) * p).toFloat()
     }
 
-    fun row(now: Long): Float = rest(false) + (t5(now)?.stripDx ?: 0f) * scale.ppu
+    fun row(now: Long): Float = rest(false) + strip(now, false)
 
-    private fun stdRow(now: Long): Float = rest(true) + (t5(now)?.stripDx ?: 0f) * scale.stdPpu
+    private fun stdRow(now: Long): Float = rest(true) + strip(now, true)
 
     fun pivotOn(i: Int, now: Long): Float {
         val e = since(now)
@@ -171,8 +172,7 @@ class Chrome(val scale: Scale, val header: Word, val pivots: List<PivotInk>) {
 
     fun pivotAlpha(i: Int, now: Long): Float {
         if (lit(i, now)) return Tok.alpha_full
-        val sa = t5(now)?.stripAlpha ?: 1f
-        return lerp(Roles.pivotInactive.alpha, Roles.pivotActive.alpha, pivotOn(i, now)) * sa
+        return lerp(Roles.pivotInactive.alpha, Roles.pivotActive.alpha, pivotOn(i, now))
     }
 
     private fun headerAt(stdRow: Float): Float = headerPen * scale.stdPpu + (stdRow - Tok.hubEdge * scale.stdPpu) * Tok.motion_pivotHeaderParallax

@@ -1,8 +1,5 @@
-old motion.pivotOut
-old motion.pivotStrip
-old motion.pivotRows
-old motion.pivotShift
-old motion.pivotStripShift
-old motion.pivotStripAlpha
-old motion.pivotRowInShift
-old motion.pivotRowFade
+new motion.pivotOut
+new motion.pivotStrip
+new motion.pivotRows
+new motion.pivotRowInShift
+new motion.pivotRowFade

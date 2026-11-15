@@ -6,6 +6,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.pow
+import kotlin.math.roundToInt
 
 class MotionTest {
     private fun bezier(x1: Double, y1: Double, x2: Double, y2: Double, t: Double): Double {
@@ -60,9 +61,9 @@ class MotionTest {
     }
 
     @Test
-    fun t5At250IsTheRestFrame() {
+    fun t5At308IsTheRestFrame() {
         for (dir in listOf(-1, 1)) {
-            val p = pivotAt(250f, dir)
+            val p = pivotAt(308f, dir)
             assertEquals(0f, p.stripDx, 0.0001f)
             assertEquals(1f, p.stripAlpha, 0.0001f)
             assertEquals(0f, p.rowsDx, 0.0001f)
@@ -70,7 +71,49 @@ class MotionTest {
         }
         val out = pivotAt(25f, 1)
         assertEquals(false, out.rowsIn)
-        assertEquals(1 - bezier(0.2, 0.8, 0.2, 1.0, 0.5), out.rowsAlpha.toDouble(), 0.002)
+        assertEquals(1 - 25f / 133, out.rowsAlpha, 0.0001f)
+        assertEquals(-450f * 25 / 1000, out.rowsDx, 0.0001f)
+        val into = pivotAt(133f + 87.5f, -1)
+        assertEquals(true, into.rowsIn)
+        assertEquals(-41f * (1 - Curves.easeOut.at(0.5f)), into.rowsDx, 0.0001f)
+        assertEquals(0.5f, into.rowsAlpha, 0.0001f)
+    }
+
+    @Test
+    fun aDraggedPaneFollowsTheFingerAndAReleaseLandsItOnTheStripCurve() {
+        val m = PivotMotion()
+        m.drag(30f)
+        assertTrue(m.dragging)
+        assertTrue(m.active(0))
+        assertEquals(90, m.dx(0, 3f))
+        assertEquals(1f, m.alpha(0), 0f)
+        m.release(1000)
+        assertFalse(m.dragging)
+        assertEquals(90, m.dx(1000, 3f))
+        assertEquals((30f * (1 - Curves.expOut6.at(0.5f)) * 3).roundToInt(), m.dx(1118, 3f))
+        assertEquals(0, m.dx(1236, 3f))
+        assertFalse(m.active(1236))
+    }
+
+    @Test
+    fun aSwitchFromADragCarriesItsOffsetOutAtThePaneSpeed() {
+        val m = PivotMotion()
+        m.begin(0, 1, 20f)
+        assertEquals(60, m.dx(0, 3f))
+        assertEquals(((20f - 450f * 100 / 1000) * 3).roundToInt(), m.dx(100, 3f))
+        assertFalse(m.entering(132))
+        assertTrue(m.entering(133))
+        assertEquals((41f * 3).roundToInt(), m.dx(133, 3f))
+        assertEquals(0, m.dx(133 + 175, 3f))
+        assertTrue(m.active(307))
+        assertFalse(m.active(308))
+        assertFalse(m.thumbIn(100))
+        assertTrue(m.thumbIn(200))
+        m.prepare(7L)
+        assertTrue(m.prepared(7L))
+        assertFalse(m.prepared(8L))
+        m.end()
+        assertFalse(m.active(0))
     }
 
     @Test

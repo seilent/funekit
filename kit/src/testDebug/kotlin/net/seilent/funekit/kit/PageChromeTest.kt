@@ -128,7 +128,7 @@ class PageChromeTest {
         assertEquals(1, chrome.active)
         assertEquals(1, chrome.pressed)
         assertTrue(chrome.lit(1, rule.mainClock.currentTime))
-        rule.mainClock.advanceTimeBy(64)
+        rule.mainClock.advanceTimeBy(192)
         assertNull(chrome.pressed)
         assertFalse(chrome.lit(1, rule.mainClock.currentTime))
         rule.mainClock.autoAdvance = true

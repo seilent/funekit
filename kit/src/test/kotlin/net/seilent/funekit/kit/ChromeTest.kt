@@ -5,6 +5,7 @@ import net.seilent.funekit.Nav
 import net.seilent.funekit.Scale
 import net.seilent.funekit.Surface
 import net.seilent.funekit.Window
+import net.seilent.funekit.Roles
 import net.seilent.funekit.kit.motion.Curves
 import net.seilent.funekit.scale
 import org.junit.Assert.assertEquals
@@ -86,20 +87,21 @@ class ChromeTest {
     }
 
     @Test
-    fun theNewStripSlidesInAndFadesUpOverTheStrip() {
+    fun theStripMovesOnePitchToItsRestInWholePixels() {
         val c = chrome(v1)
         c.switchTo(1, 1000, 1)
-        val rest = c.row(1133)
-        assertEquals(rest + 22.5f, c.row(1000), 0.001f)
-        assertEquals(rest + 22.5f * (1 - Curves.cubicOut.at(66f / 133)), c.row(1066), 0.001f)
-        assertEquals(0.4f, c.pivotAlpha(1, 1000), 0.001f)
-        assertEquals(1f, c.pivotAlpha(1, 1133), 0.001f)
-        assertEquals(0.28f, c.pivotAlpha(0, 1133), 0.001f)
-        assertEquals(0.28f * 0.4f, c.pivotAlpha(2, 1000), 0.001f)
-        assertTrue(c.moving(1132))
-        assertFalse(c.moving(1133))
+        val d = c.pivotOffset(1) - c.pivotOffset(0)
+        val rest = c.row(1236)
+        assertEquals(rest + Math.round(d), c.row(1000), 0.001f)
+        val mid = c.row(1118) - rest
+        assertEquals(Math.round(d * (1 - Curves.expOut6.at(0.5f))).toFloat(), mid, 0f)
+        assertEquals(mid, Math.round(mid).toFloat(), 0f)
+        assertEquals(Roles.pivotActive.alpha, c.pivotAlpha(1, 1000), 0.001f)
+        assertEquals(Roles.pivotInactive.alpha, c.pivotAlpha(2, 1000), 0.001f)
+        assertTrue(c.moving(1235))
+        assertFalse(c.moving(1236))
         c.switchTo(0, 2000, -1)
-        assertEquals(c.row(2133) - 22.5f, c.row(2000), 0.001f)
+        assertEquals(c.row(2236) + Math.round(c.pivotOffset(0) - c.pivotOffset(1)), c.row(2000), 0.001f)
     }
 
     @Test
@@ -110,8 +112,8 @@ class ChromeTest {
         assertEquals(1f, c.pivotAlpha(1, 0), 0f)
         c.switchTo(1, 10, 1)
         c.lift()
-        assertTrue(c.lit(1, 100))
-        assertFalse(c.lit(1, 143))
+        assertTrue(c.lit(1, 245))
+        assertFalse(c.lit(1, 246))
         c.clear()
         c.press(Chrome.HEADER)
         c.lift()
@@ -148,9 +150,9 @@ class ChromeTest {
         assertFalse(c.lit(1, 100))
         c.settle()
         assertTrue(c.lit(1, 100))
-        c.tick(100, leavesLit = false)
+        c.tick(245, leavesLit = false)
         assertEquals(1, c.pressed)
-        c.tick(143, leavesLit = false)
+        c.tick(246, leavesLit = false)
         assertEquals(null, c.pressed)
     }
 

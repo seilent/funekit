@@ -421,7 +421,7 @@ class MotionSheetTest {
         val c = chromeOf(measurer, fonts, s, unitDensity, to.header, to.pivots, covers).also { it.select(0) }
         val leave = songsRest
         val fade = ThumbFade()
-        val end = max(Old.motion_pivotStrip, Old.motion_pivotOut + max(Old.motion_pivotRows, Old.motion_pivotRowFade)).toLong()
+        val end = max(Tok.motion_pivotStrip, Tok.motion_pivotOut + max(Tok.motion_pivotRows, Tok.motion_pivotRowFade)).toLong()
         val switch = Act(0L) {
             c.switchTo(to.active, 0L, 1)
             fade.track(true, false, 0L)
