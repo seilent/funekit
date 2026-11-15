@@ -150,4 +150,28 @@ class GlowTest {
         assertEquals(null, p.back.key)
         assertFalse(p.off())
     }
+
+    @Test
+    fun aSecondFadeWhileFadingKeepsTheFirstFadeStart() {
+        val g = Glow().also {
+            it.down(1, 0L)
+            it.fade(100L)
+            it.fade(150L)
+        }
+        val first = Glow().also {
+            it.down(1, 0L)
+            it.fade(100L)
+        }
+        val later = Glow().also {
+            it.down(1, 0L)
+            it.fade(150L)
+        }
+        assertTrue(g.fading)
+        assertEquals(first.level(MID), g.level(MID), 0f)
+        assertTrue(later.level(MID) != first.level(MID))
+    }
+
+    private companion object {
+        const val MID = 170L
+    }
 }
