@@ -35,6 +35,7 @@ import net.seilent.funekit.kit.proj.M3
 import net.seilent.funekit.kit.proj.camTurn
 import net.seilent.funekit.kit.proj.edgeAngle
 import net.seilent.funekit.kit.proj.facing
+import net.seilent.funekit.kit.proj.inverse
 import net.seilent.funekit.kit.proj.turn
 import net.seilent.funekit.kit.quickplay.menuPeek
 import net.seilent.funekit.kit.rolePx
@@ -459,6 +460,51 @@ internal fun npCam(r: Float, slide: Float, hinge: Float, d: Float, eye: Float, c
     return M3.translate(slide, 0f) * camTurn(r, hinge, eye, d, cx - slide)
 }
 
+internal class CarryAt(
+    val kind: MoveKind,
+    val toHome: Boolean,
+    val rows: Boolean,
+    val bar: Float,
+    val contentTop: Float = 0f,
+    val bandTop: Float = 0f,
+    val pivotTop: Float = 0f,
+    val pivotBottom: Float = 0f,
+    val xa: Float = 0f,
+    val ya: Float = 0f,
+    val ox: Float = 0f,
+    val oy: Float = 0f,
+    val ca: Float = 0f,
+    val cs: Float = 1f,
+    val cx: Float = 0f,
+    val pa: Float = 0f,
+    val px: Float = 0f,
+    val py: Float = 0f,
+    val under: M3? = null,
+)
+
+internal fun carryOf(x: Float, y: Float, c: CarryAt): M3? {
+    if (y >= c.bar || c.kind == MoveKind.T7) return null
+    if (c.kind == MoveKind.T8) {
+        val inv = c.under?.inverse() ?: return null
+        val w = inv.g * x + inv.h * y + inv.i
+        if (!(w > 0f)) return null
+        val u = (inv.a * x + inv.b * y + inv.c) / w
+        val v = (inv.d * x + inv.e * y + inv.f) / w
+        return M3.translate(u - x, v - y)
+    }
+    if (c.toHome) return null
+    val content = c.ca > 0f && y >= c.contentTop
+    val pivots = c.pa > 0f && y >= c.pivotTop && y < c.pivotBottom
+    return when {
+        content && c.rows -> if (y >= c.ya + c.cs * (c.bandTop - c.ya)) carryPart(max(c.cs, 1f), c.xa, c.ya, Math.round(c.cx).toFloat(), 0f) else null
+        content -> carryPart(max(c.cs, 1f), c.ox, c.oy, 0f, 0f)
+        pivots -> M3.translate(-Math.round(c.px).toFloat(), -Math.round(c.py).toFloat())
+        else -> null
+    }
+}
+
+private fun carryPart(s: Float, ox: Float, oy: Float, dx: Float, dy: Float): M3 = M3(1f / s, 0f, ox - (dx + ox) / s, 0f, 1f / s, oy - (dy + oy) / s, 0f, 0f, 1f)
+
 internal fun npFrontUnder(l: Float, r: Float, hinge: Float, edge: Float, eye: Float, d: Float): M3 =
     M3.translate(Math.round(l).toFloat(), 0f) * turn(edgeAngle(edge, edge + (r - l), hinge, d), hinge, eye, d)
 
@@ -823,6 +869,53 @@ class MovePaint(private val move: PageMove) {
         if (rec == null) draw() else rec.quad(name, a, t, src, draw)
     }
 
+    private fun underXf(m: MoveCtx, now: Long): M3? {
+        val v = move
+        val s = (m.from ?: return null).scale
+        val p = s.stdPpu
+        val h = m.home
+        val d = max(1f, whole(Tok.motion_perspective, p))
+        val ineye = Math.round(Tok.motion_t8InEye * s.heightPx).toFloat()
+        return when {
+            m.ends.npForm == NpForm.Front && h != null && h.paint.frontPane() != null -> {
+                val edge = px(Tok.qpEdge + Tok.qpTile + Tok.qpGutter, p) + px(Tok.qpTile, p)
+                npFrontUnder(v.at(Part.NpUnder, Prop.X, now), v.at(Part.NpEdge, Prop.X, now), px(Tok.qpEdge, p).toFloat(), edge.toFloat(), ineye, d)
+            }
+            m.to != null -> turn(v.at(Part.NpUnder, Prop.R, now), 0f, ineye, max(1f, whole(Tok.motion_t8InD, p)))
+            else -> {
+                val eye = Math.round(s.board.motion_t7EyeY * s.heightPx).toFloat()
+                cam(Part.NpUnder, max(1f, whole(Tok.motion_t7Persp, p)), eye, Math.round(Tok.motion_t7EyeX * s.widthPx).toFloat(), now)
+            }
+        }
+    }
+
+    fun carry(x: Float, y: Float, now: Long): android.graphics.Matrix? {
+        val m = ctx
+        val v = move
+        val k = v.kind
+        if (m === MoveCtx.None) return null
+        val to = m.to
+        val s = (to ?: m.from ?: return null).scale
+        val bar = if (s.navOn) px(s.stdContentBottom, s.stdPpu).toFloat() else Float.MAX_VALUE
+        val c = if (k == MoveKind.T8) {
+            CarryAt(k, true, false, bar, under = if (v.at(Part.NpUnder, Prop.A, now) > 0f) underXf(m, now) else null)
+        } else if (to == null) {
+            CarryAt(k, true, false, bar)
+        } else {
+            val ts = to.scale
+            val top = px(ts.board.page_contentTop, ts.ppu).toFloat()
+            CarryAt(
+                k, false, m.rows, bar, top, to.paint.bandsAt()?.y?.first()?.toFloat() ?: top,
+                px(ts.board.pivotTop, ts.ppu).toFloat(), px(ts.board.pivotBottom, ts.ppu).toFloat(),
+                m.xa, m.ya, Tok.motion_contentX * ts.widthPx, Tok.motion_contentY * ts.heightPx,
+                v.at(Part.Content, Prop.A, now), v.at(Part.Content, Prop.S, now), v.at(Part.Content, Prop.X, now),
+                v.at(Part.Pivots, Prop.A, now), v.at(Part.Pivots, Prop.X, now), v.at(Part.Pivots, Prop.Y, now),
+            )
+        }
+        val t = carryOf(x, y, c) ?: return null
+        return android.graphics.Matrix().also { it.setValues(floatArrayOf(t.a, t.b, t.c, t.d, t.e, t.f, t.g, t.h, t.i)) }
+    }
+
     private fun DrawScope.npMove(m: MoveCtx, now: Long, rec: DrawRecord?) {
         val v = move
         val e = m.ends
@@ -851,21 +944,18 @@ class MovePaint(private val move: PageMove) {
         if (v.kind == MoveKind.T8) {
             val out = npEye(p, s.heightPx, Tok.motion_t8OutHinge, Tok.motion_t8OutEye)
             quadAt(rec, NP_OUT, v.at(Part.NpOut, Prop.A, now), quad(v.at(Part.NpOut, Prop.R, now), out, 0f, 0f)) { with(np.paint) { content(Content.Rest, now, null, "leave") } }
-            val ineye = Math.round(Tok.motion_t8InEye * s.heightPx).toFloat()
             val to = m.to
             val ua = v.at(Part.NpUnder, Prop.A, now)
             when {
                 front && h != null -> {
                     peek()
-                    val hinge = x1.toFloat()
-                    val t = npFrontUnder(v.at(Part.NpUnder, Prop.X, now), v.at(Part.NpEdge, Prop.X, now), hinge, (x2 + side).toFloat(), ineye, d)
-                    quadAt(rec, NP_PANE, ua, t, src) { with(h.paint) { front(now) } }
+                    quadAt(rec, NP_PANE, ua, underXf(m, now), src) { with(h.paint) { front(now) } }
                 }
                 to != null -> {
-                    val t = turn(v.at(Part.NpUnder, Prop.R, now), 0f, ineye, max(1f, whole(Tok.motion_t8InD, p)))
+                    val t = underXf(m, now)
                     for ((b, part) in underBands(to, p)) quadAt(rec, NP_UNDER + part.name, v.at(part, Prop.A, now), t, b) { restOf(to, now, null, "arrive") }
                 }
-                else -> quadAt(rec, NP_HOME, ua, cam(Part.NpUnder, max(1f, whole(Tok.motion_t7Persp, p)), peye, cx, now)) { if (h != null) npHomeAt(h, now, now) }
+                else -> quadAt(rec, NP_HOME, ua, underXf(m, now)) { if (h != null) npHomeAt(h, now, now) }
             }
             return
         }

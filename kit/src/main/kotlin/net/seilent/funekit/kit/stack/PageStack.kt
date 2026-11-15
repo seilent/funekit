@@ -94,9 +94,14 @@ class PageStack<P : Any>(
 
             override val armed: Boolean get() = opened != null
 
+            override val turning: Boolean
+                get() = phase != Phase.Rest && opened == null && pending == 0 && overlay.let { it == null || !(it.closing || it.moving(clock)) }
+
             override fun cut() = npCut()
 
             override fun back() = backKey()
+
+            override fun land() = carryLand()
         }
     }
 
@@ -276,6 +281,15 @@ class PageStack<P : Any>(
         ask { now ->
             val o = overlay
             if (o == null || !(o.closing || o.moving(now))) touch(now)
+        }
+    }
+
+    private fun carryLand() {
+        held = null
+        ask { now ->
+            val o = overlay
+            if (o == null || !(o.closing || o.moving(now))) touch(now)
+            replayDue = true
         }
     }
 

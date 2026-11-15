@@ -1,13 +1,16 @@
 package net.seilent.funekit.kit.stack
 
+import android.graphics.Matrix
 import android.view.KeyEvent
 import android.view.MotionEvent
 
 internal interface GateHost {
     val asked: Int
     val armed: Boolean
+    val turning: Boolean get() = false
     fun cut()
     fun back()
+    fun land() {}
 }
 
 class InputGate {
@@ -16,7 +19,7 @@ class InputGate {
         open val action: Int get() = -1
     }
 
-    private class Touch(val ev: MotionEvent, val pass: (MotionEvent) -> Boolean) :
+    private class Touch(val ev: MotionEvent, val pass: (MotionEvent) -> Boolean, val m: Matrix? = null) :
         Kept(if (ev.historySize > 0) ev.getHistoricalEventTime(0) else ev.eventTime) {
         override val action: Int get() = ev.actionMasked
 
@@ -39,6 +42,13 @@ class InputGate {
     internal val queued: Boolean get() = queue.isNotEmpty()
 
     internal var backOwed = false
+
+    var carry: ((x: Float, y: Float) -> Matrix?)? = null
+
+    var holds: ((MotionEvent) -> Boolean)? = null
+
+    private var carried: Matrix? = null
+    private var tail = 0L
 
     private val queue = ArrayDeque<Kept>()
     private val keysHeld = mutableSetOf<Int>()
@@ -67,9 +77,47 @@ class InputGate {
                 }
             }
         }
-        if (!holding && queue.isEmpty()) return deliver(ev, pass)
-        keep(Touch(MotionEvent.obtain(ev), pass))
+        if (!holding && queue.isEmpty()) {
+            if (ev.actionMasked == MotionEvent.ACTION_DOWN) {
+                carried = null
+                tail = 0L
+            }
+            val live = carried
+            val k = tail
+            if (live != null || k != 0L) {
+                val c = (if (k != 0L) ev.shifted(k) else MotionEvent.obtain(ev)).also { if (live != null) it.transform(live) }
+                ends(ev)
+                return try {
+                    deliver(c, pass)
+                } finally {
+                    c.recycle()
+                }
+            }
+            if (ev.actionMasked == MotionEvent.ACTION_DOWN && carries(ev)) {
+                carried = carry?.invoke(ev.x, ev.y)
+                queue.addLast(Touch(MotionEvent.obtain(ev), pass, carried))
+                host?.land()
+                return true
+            }
+            return deliver(ev, pass)
+        }
+        if (ev.actionMasked == MotionEvent.ACTION_DOWN) carried = null
+        keep(Touch(MotionEvent.obtain(ev), pass, carried))
+        ends(ev)
         return true
+    }
+
+    private fun carries(ev: MotionEvent): Boolean {
+        val h = holds ?: return false
+        return carry != null && host?.turning == true && !h(ev)
+    }
+
+    private fun ends(ev: MotionEvent) {
+        val a = ev.actionMasked
+        if (a == MotionEvent.ACTION_UP || a == MotionEvent.ACTION_CANCEL) {
+            carried = null
+            tail = 0L
+        }
     }
 
     fun key(ev: KeyEvent, pass: (KeyEvent) -> Boolean): Boolean {
@@ -180,6 +228,8 @@ class InputGate {
             }
         }
         close()
+        carried = null
+        tail = 0L
         if (pressed) swallowTouch = true
         queue.clear()
         swallow += keysHeld
@@ -198,6 +248,7 @@ class InputGate {
                 when (k) {
                     is Touch -> {
                         val c = k.ev.shifted(shift)
+                        k.m?.let { c.transform(it) }
                         try {
                             deliver(c, k.pass)
                         } finally {
@@ -212,6 +263,7 @@ class InputGate {
             if (holding) return false
             if (host?.asked != asked) return queue.isNotEmpty()
         }
+        if (gesture) tail = shift
         shift = 0L
         keysHeld.clear()
         return false
