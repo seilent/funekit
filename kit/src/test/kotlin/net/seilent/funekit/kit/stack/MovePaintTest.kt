@@ -78,8 +78,10 @@ class MovePaintTest {
     private val pitch = Rows.pitch(s, true)
     private val top = px(s.board.page_contentTop, s.ppu)
     private val bottom = px(s.stdContentBottom, s.stdPpu)
-    private val ya = s.heightPx - Old.motion_rowsYa * s.stdPpu
+    private val ya = s.heightPx - Tok.motion_rowsYa * s.stdPpu
     private val xa = Tok.hubEdge * s.stdPpu
+    private val barX = px(s.w - Tok.scrollbar_width, s.ppu).toFloat()
+    private val anchor = PageMove.popAnchor(MoveKind.T4h, top, s.heightPx, s.stdPpu).toFloat()
     private val zoomForms = MoveForms.board(s.board)
 
     private class Geo(val s: Scale, val chrome: Chrome, val pitch: Int, val top: Int, val bottom: Int)
@@ -275,6 +277,14 @@ class MovePaintTest {
         override fun DrawScope.bands(b: Bands, now: Long, rec: DrawRecord?, name: String) = bandRows(this@Painted, b, now, rec, name)
     }
 
+    private class NowPlaying(d: PagePaint) : PagePaint by d {
+        override val nowPlaying = true
+    }
+
+    private class Queue(d: PagePaint) : PagePaint by d {
+        override val queue = true
+    }
+
     private inner class Run(
         private val off: () -> Float = { 0f },
         private val rows: Map<String, Int> = emptyMap(),
@@ -383,7 +393,7 @@ class MovePaintTest {
         assertEquals(xa, held.xa, 0f)
         assertEquals(ya, held.ya, 0f)
         assertTrue(c.ends.leaveRows)
-        val anchor = b.y[minOf(b.dy.size, BANDS) - 1].toFloat()
+        assertEquals(1444f, anchor, 0f)
         assertEquals(anchor, c.leaveAnchor, 0f)
         val ox = dx + (1 - sy) * xa
         val oy = (1 - sy) * ya
@@ -416,7 +426,7 @@ class MovePaintTest {
     @Test
     fun aT2FrameZoomsTheArrivingRowsAboutHubEdgeAndTheRowsPivot() {
         assertEquals(60f, xa, 0f)
-        assertEquals(1174.1f, ya, 0.01f)
+        assertEquals(1232.3f, ya, 0.01f)
         assertEquals(360, top)
         val r = Run(forms = zoomForms)
         r.stack.push("drawer", MoveKind.T2)
@@ -427,9 +437,9 @@ class MovePaintTest {
         assertEquals(ya, c.ya, 0f)
         assertEquals(Tok.motion_rowsDx * s.stdPpu, c.ends.rowsDx, 0f)
         val typed = listOf(
-            listOf(17f, 0.80375f, 57f, 68.775f, 230.412f, 519.76f),
-            listOf(100f, 0.86625f, 39f, 47.025f, 157.036f, 468.89f),
-            listOf(200f, 0.93005f, 20f, 24.197f, 82.128f, 416.95f),
+            listOf(17f, 0.80375f, 57f, 68.775f, 241.834f, 531.186f),
+            listOf(100f, 0.86625f, 39f, 47.025f, 164.82f, 476.67f),
+            listOf(200f, 0.93005f, 20f, 24.197f, 86.198f, 421.017f),
         )
         for (row in typed) {
             val t = row[0]
@@ -442,8 +452,9 @@ class MovePaintTest {
             assertEquals(sy, r.move.at(Part.Content, Prop.S, at), 1e-4f)
             assertEquals(dx, Math.round(r.move.at(Part.Content, Prop.X, at)).toFloat(), 0f)
             r.draw(at)
-            val a = r.arrive()
-            assertEquals((0..r.pages.getValue("drawer").last()).toList(), a.map { it.row })
+            val last = r.pages.getValue("drawer").last()
+            val a = r.arrive().take(last + 1)
+            assertEquals((0..last).toList(), a.map { it.row })
             for (d in a) {
                 assertEquals("k at $t", sy, d.k, 1e-4f)
                 assertEquals("x at $t", rx, d.dx, 0.01f)
@@ -470,9 +481,9 @@ class MovePaintTest {
         val c = r.paint.ctx
         assertTrue(c.xa != Tok.hubEdge * hs.stdPpu)
         val pxa = Tok.hubEdge * ps.stdPpu
-        val pya = 2160 - Old.motion_rowsYa * ps.stdPpu
+        val pya = 2160 - Tok.motion_rowsYa * ps.stdPpu
         assertEquals(59.30f, pxa, 0.01f)
-        assertEquals(2055.33f, pya, 0.01f)
+        assertEquals(2112.85f, pya, 0.01f)
         assertEquals(pxa, c.xa, 0f)
         assertEquals(pya, c.ya, 0f)
         assertEquals(Tok.motion_rowsDx * ps.stdPpu, c.ends.rowsDx, 0f)
@@ -488,7 +499,7 @@ class MovePaintTest {
         assertTrue(a.isNotEmpty())
         for (d in a) {
             assertEquals(68.64f, d.dx, 0.01f)
-            assertEquals(403.35f + sy * d.y, d.top, 0.02f)
+            assertEquals(414.64f + sy * d.y, d.top, 0.02f)
         }
     }
 
@@ -525,26 +536,100 @@ class MovePaintTest {
     }
 
     @Test
-    fun aT3FrameKeepsTheSpreadBands() {
+    fun aT3FrameZoomsTheArrivingRowsAsOneBandLayer() {
         val r = Run(forms = zoomForms)
         r.stack.pages.add(A)
         r.stack.push(B, MoveKind.T3)
         r.stack.frame(0L)
         assertTrue(r.paint.ctx.rows)
-        assertFalse(r.paint.ctx.lift)
+        assertTrue(r.paint.ctx.lift)
         r.stack.frame(r.move.swapAt)
         val at = r.move.swapAt + ENTER
+        assertEquals(207L, at)
+        val sy = r.move.at(Part.Content, Prop.S, at)
+        assertEquals(0.92468f, sy, 1e-4f)
+        assertEquals(22f, Math.round(r.move.at(Part.Content, Prop.X, at)).toFloat(), 0f)
+        assertTrue(r.move.at(Part.Content, Prop.A, at) > 0f)
+        r.draw(at)
+        val y = bandTops()
+        val a = r.arrive().take(y.size - 1)
+        assertEquals((0 until y.size - 1).toList(), a.map { it.row })
+        for (d in a) {
+            assertEquals("k of row ${d.row}", sy, d.k, 0f)
+            assertEquals("x of row ${d.row}", 26.519f, d.dx, 0.01f)
+            assertEquals("y of row ${d.row}", 92.811f, d.dy, 0.01f)
+            assertEquals("top of row ${d.row}", 92.811f + sy * d.y, d.top, 0.01f)
+            assertEquals("bar clip of row ${d.row}", d.dx + sy * barX, d.clip[2], 0.01f)
+        }
+    }
+
+    @Test
+    fun aT2IntoAListWhoseLastBandTopIsBelowTheRowsPivotDrawsItsTailRows() {
+        val r = Run(scrolls = mapOf(B to 70), forms = zoomForms)
+        r.stack.push(B, MoveKind.T2)
+        r.stack.frame(0L)
+        val p = r.pages.getValue(B)
+        assertEquals(5, p.last())
+        assertEquals(1280, p.rowTop(6))
+        val hb = requireNotNull(p.bandTops()).last()
+        assertEquals(1280, hb)
+        assertTrue(hb > ya)
+        val at = 100L
         val sy = r.move.at(Part.Content, Prop.S, at)
         assertTrue(sy < 1f)
         assertTrue(r.move.at(Part.Content, Prop.A, at) > 0f)
         r.draw(at)
-        val a = r.arrive()
-        val y = bandTops()
-        assertEquals(y.size - 1, a.size)
-        a.forEachIndexed { k, d ->
-            assertEquals(1f, d.k, 0f)
-            assertEquals(Math.round((1 - sy) * (ya - y[k])).toFloat(), d.dy, 0f)
+        assertEquals(13, r.paint.ctx.tail)
+        val tail = r.arrive().filter { it.row == 6 }
+        assertEquals("tail rows ${r.arrive().map { it.row }}", 1, tail.size)
+        val d = tail[0]
+        val ry = (1 - sy) * ya
+        assertEquals(sy, d.k, 0f)
+        assertEquals(ry + sy * hb, d.top, 0.01f)
+        assertEquals(1273.62f, d.clip[1], 0.01f)
+        assertTrue(ry + sy * (hb + 13) > hb)
+        assertEquals("tail clip ${d.clip}", hb.toFloat(), d.clip[3], 0f)
+    }
+
+    @Test
+    fun aQueuePushFromNowPlayingCutsTheLeavingPage() {
+        val r = Run(wraps = mapOf(A to { p: PagePaint -> NowPlaying(p) }, B to { p: PagePaint -> Queue(p) }), forms = zoomForms)
+        r.stack.pages.add(A)
+        r.stack.push(B, MoveKind.T3)
+        r.stack.frame(0L)
+        assertTrue(r.paint.ctx.ends.npQueue)
+        assertTrue(r.move.cut)
+        for (at in listOf(0L, 17L, r.move.swapAt + ENTER)) {
+            assertEquals("leave alpha at $at", 0f, r.move.at(Part.Leave, Prop.A, at), 0f)
+            r.draw(at)
+            assertTrue("leave rows at $at", leaveOf(r).isEmpty())
         }
+    }
+
+    @Test
+    fun aPivotMorphPushZoomsTheLeavingPageAboutTheTappedRowCentre() {
+        val r = morphRun { A }
+        r.stack.pages.add("a")
+        r.stack.push("b", MoveKind.T3, row = 3)
+        r.stack.frame(0L)
+        val c = r.paint.ctx
+        assertTrue(c.ends.morph)
+        assertFalse(c.rows)
+        val p = r.pages.getValue("a")
+        assertEquals(855, p.rowTop(3))
+        assertEquals(p.rowTop(3) + pitch / 2f, c.ends.tapY, 0f)
+        assertEquals(937.5f, c.ends.tapY, 0f)
+        assertEquals(s.widthPx / 2f, c.ends.tapX, 0f)
+        val at = 117L
+        val ls = r.move.at(Part.Leave, Prop.S, at)
+        assertEquals(1.11f, ls, 1e-4f)
+        assertTrue(r.move.at(Part.Leave, Prop.A, at) > 0f)
+        r.draw(at)
+        val leave = p.restAt.filter { it.name == "leave" }
+        assertEquals(1, leave.size)
+        assertEquals(ls, leave[0].k, 0f)
+        assertEquals(-39.6f, leave[0].dx, 0.01f)
+        assertEquals("about y ${c.ends.tapY}, not ${s.heightPx / 2f}", -103.125f, leave[0].dy, 0.01f)
     }
 
     @Test
@@ -559,14 +644,14 @@ class MovePaintTest {
         val c = r.paint.ctx
         assertTrue(c.lift)
         assertEquals(Math.round(Tok.hubEdge * large.stdPpu).toFloat(), c.xa, 0f)
-        assertEquals(large.heightPx - Math.round(Old.motion_rowsYa * large.stdPpu).toFloat(), c.ya, 0f)
-        assertEquals(1174f, c.ya, 0f)
+        assertEquals(large.heightPx - Math.round(Tok.motion_rowsYa * large.stdPpu).toFloat(), c.ya, 0f)
+        assertEquals(1232f, c.ya, 0f)
         assertEquals(Math.round(Tok.motion_rowsDx * large.stdPpu).toFloat(), c.ends.rowsDx, 0f)
         assertEquals(62f, c.ends.rowsDx, 0f)
         val std = Run(forms = zoomForms)
         std.stack.push("drawer", MoveKind.T2)
         std.stack.frame(0L)
-        assertEquals(1174.1f, std.paint.ctx.ya, 0.01f)
+        assertEquals(1232.3f, std.paint.ctx.ya, 0.01f)
         assertEquals(61.5f, std.paint.ctx.ends.rowsDx, 0f)
     }
 
@@ -591,20 +676,20 @@ class MovePaintTest {
 
     @Test
     fun aTallNavBarKeepsTheZoomedRowsAboveTheContentBottom() {
-        val none = Insets(0, 0, 0, 0)
-        val bar = Insets(0, 0, 0, 168)
-        val ns = scale(Window(1080, 2160, 35, none, bar, bar, none, none), Nav.Buttons, Surface.Page, false)
+        val ns = window(1080, 2160, Nav.Buttons, 132)
         assertTrue(ns.navOn)
         assertEquals(4.5f, ns.stdPpu, 0f)
-        assertTrue(168 / ns.stdPpu > Old.motion_rowsYa)
+        assertTrue(132 / ns.stdPpu > Tok.motion_rowsYa)
         val cut = px(ns.stdContentBottom, ns.stdPpu).toFloat()
-        assertEquals(1992f, cut, 0f)
+        assertEquals(2028f, cut, 0f)
         val g = geoOf(ns)
         val r = Run(forms = MoveForms.board(ns.board), g = g)
         r.stack.push("drawer", MoveKind.T2)
         r.stack.frame(0L)
         val c = r.paint.ctx
         assertEquals(cut, c.cut)
+        assertEquals(2088.45f, c.ya, 0.01f)
+        assertEquals(cut, g.bottom.toFloat(), 0f)
         val sy = r.move.at(Part.Content, Prop.S, 17L)
         assertTrue((1 - sy) * c.ya + sy * g.bottom > cut)
         r.draw(17L)
@@ -665,20 +750,21 @@ class MovePaintTest {
         r.stack.frame(at)
         val c = r.paint.ctx
         assertNull(c.leaveBands)
-        assertEquals(top.toFloat(), c.leaveAnchor, 0f)
+        assertFalse(c.ends.leaveRows)
+        assertEquals(0f, c.leaveAnchor, 0f)
         val held = requireNotNull(c.leaveAt)
         assertEquals(sy, held.s, 0f)
         val t = at + 1
         val ls = r.move.at(Part.Leave, Prop.S, t)
         val lx = Math.round(r.move.at(Part.Leave, Prop.X, t)).toFloat()
-        assertEquals(0.97294f, ls, 1e-4f)
-        assertEquals(8f, lx, 0f)
+        assertEquals(1f, ls, 0f)
+        assertEquals(0f, lx, 0f)
         r.draw(t)
         val leave = r.pages.values.flatMap { it.restAt }.filter { it.name == "leave" }
         assertEquals(1, leave.size)
         val k = sy * ls
         val ox = dx + (1 - sy) * xa + sy * (lx + (1 - ls) * xa)
-        val oy = (1 - sy) * ya + sy * (1 - ls) * top
+        val oy = (1 - sy) * ya
         assertEquals(k, leave[0].k, 1e-5f)
         assertEquals(ox, leave[0].dx, 0.01f)
         assertEquals(oy, leave[0].dy, 0.01f)
@@ -745,7 +831,7 @@ class MovePaintTest {
     }
 
     @Test
-    fun aT3MorphsThePivotIntoTheHeaderOnTheMorphPushLegs() {
+    fun aT3MorphsThePivotIntoTheHeaderAsOneSpriteOnTheMorphPushLegs() {
         val r = morphRun { A }
         r.stack.pages.add("a")
         r.stack.push("b", MoveKind.T3)
@@ -759,19 +845,25 @@ class MovePaintTest {
         val half = (Tok.motion_t4mDelay + Tok.motion_morphPush / 2).toLong()
         val v = r.move
         assertEquals(Tok.motion_t4mDelay + Tok.motion_morphPush, v.wordEnd.toFloat(), 0f)
-        for (q in Prop.entries) assertFalse("leave word $q", v.has(Part.LeaveWord, q))
+        assertTrue(e.lhead)
+        assertEquals(px(Tok.page_headerBaseline, s.stdPpu).toFloat(), e.lheadBase, 0f)
+        assertEquals(chrome.headerAlpha, requireNotNull(r.paint.ctx.leaveWord).alpha, 0f)
+        assertFalse(r.paint.ctx.rows)
         assertEquals(1f, v.at(Part.Word, Prop.A, half), 0f)
         assertEquals(PIVOT_S + (HEADER_S - PIVOT_S) * cubicOut(0.5f), v.at(Part.Word, Prop.S, half), 1e-4f)
         assertEquals(PIVOT_X + (HEADER_X - PIVOT_X) * cubicOut(0.5f), v.at(Part.Word, Prop.X, half), 1e-3f)
         assertEquals(PIVOT_Y + (HEADER_Y - PIVOT_Y) * cubicOut(0.5f), v.at(Part.Word, Prop.Y, half), 1e-3f)
+        val early = r.draw(50L)
+        assertEquals(chrome.headerAlpha * 0.52f, early.alphas.getValue("leave.zoom"), 1e-4f)
         val rec = r.draw(half)
-        assertTrue("morph.leave" !in rec.words)
-        assertEquals(HEADER_LOOK, rec.alphas.getValue("morph.arrive"), 1e-4f)
+        assertEquals(listOf("morph"), rec.words.filter { it.startsWith("morph") })
+        assertEquals(HEADER_LOOK, rec.alphas.getValue("morph"), 1e-4f)
         assertTrue("word" !in rec.words)
+        assertTrue("leave.zoom" !in rec.words)
     }
 
     @Test
-    fun aT4MorphsTheHeaderBackIntoThePivotOnTheMorphPopLegs() {
+    fun aT4MorphsTheHeaderBackIntoThePivotAsOneSpriteOnTheMorphPopLegs() {
         val r = morphRun { A }
         r.stack.pages.addAll(listOf("a", "b"))
         r.stack.pop(MoveKind.T4)
@@ -787,8 +879,9 @@ class MovePaintTest {
         assertEquals(0.35f, v.at(Part.Word, Prop.A, at), 1e-4f)
         assertEquals(HEADER_S + (PIVOT_S - HEADER_S) * cubicOut((at - Tok.motion_t4mDelay) / Tok.motion_morphPop), v.at(Part.Word, Prop.S, at), 1e-4f)
         val rec = r.draw(at)
-        assertTrue("morph.leave" !in rec.words)
-        assertEquals(PIVOT_LOOK * 0.35f, rec.alphas.getValue("morph.arrive"), 1e-4f)
+        assertEquals(listOf("morph"), rec.words.filter { it.startsWith("morph") })
+        assertEquals(HEADER_LOOK, r.paint.ctx.morphLook, 0f)
+        assertEquals(HEADER_LOOK * 0.35f, rec.alphas.getValue("morph"), 1e-4f)
     }
 
     @Test
@@ -801,7 +894,8 @@ class MovePaintTest {
         val at = r.move.swapAt + ENTER
         assertTrue(at < r.move.t0 + r.move.wordEnd)
         val ws = r.move.at(Part.Word, Prop.S, at)
-        val mla = r.move.at(Part.LeaveWord, Prop.A, at)
+        val mwa = r.move.at(Part.Word, Prop.A, at)
+        assertTrue(mwa > 0f)
         r.stack.back { MoveKind.T4 }
         r.stack.frame(at)
         val c = r.paint.ctx
@@ -809,11 +903,12 @@ class MovePaintTest {
         assertTrue(c.ends.morphBack)
         assertTrue(c.fades.isEmpty())
         assertEquals(ws, requireNotNull(r.move.leg(Part.Word, Prop.S)).from, 1e-4f)
-        assertEquals(mla, requireNotNull(r.move.leg(Part.Word, Prop.A)).from, 1e-4f)
+        assertEquals(mwa, requireNotNull(r.move.leg(Part.Word, Prop.A)).from, 1e-4f)
+        assertEquals(listOf("morph"), r.draw(at + 1).words.filter { it.startsWith("morph") || it.startsWith("fade") })
     }
 
     @Test
-    fun aT3RetargetedIntoAnotherMorphFadesTheOldWordsOutOverTheLeave() {
+    fun aT3RetargetedIntoAnotherMorphFadesTheOldWordOutOverTheLeave() {
         var pivot = A
         val r = morphRun { pivot }
         r.stack.pages.add("a")
@@ -821,22 +916,20 @@ class MovePaintTest {
         r.stack.frame(0L)
         r.stack.frame(r.move.swapAt)
         val at = r.move.swapAt + ENTER
-        val mla = r.move.at(Part.LeaveWord, Prop.A, at)
         val mwa = r.move.at(Part.Word, Prop.A, at)
+        assertTrue(mwa > 0f)
         pivot = OTHER
         r.stack.back { MoveKind.T4 }
         r.stack.frame(at)
         val c = r.paint.ctx
         assertFalse(c.ends.morphBack)
-        assertEquals(2, c.fades.size)
-        assertEquals(PIVOT_LOOK * mla, c.fades[0].a, 1e-4f)
-        assertEquals(HEADER_LOOK * mwa, c.fades[1].a, 1e-4f)
+        assertEquals(1, c.fades.size)
+        assertEquals(HEADER_LOOK * mwa, c.fades[0].a, 1e-4f)
         assertEquals(HEADER_S, requireNotNull(r.move.leg(Part.Word, Prop.S)).from, 0f)
-        assertEquals(0f, mla, 0f)
         val rec = r.draw(at + 1)
         val k = 1 - 1f / Tok.motion_leave
-        assertTrue("fade.leave" !in rec.words)
-        assertEquals(HEADER_LOOK * mwa * k, rec.alphas.getValue("fade.arrive"), 1e-4f)
+        assertTrue("fade.arrive" !in rec.words)
+        assertEquals(HEADER_LOOK * mwa * k, rec.alphas.getValue("fade.leave"), 1e-4f)
     }
 
     @Test
@@ -902,14 +995,14 @@ class MovePaintTest {
         assertEquals(1, p.first())
         assertTrue(p.rowTop(1) < top)
         r.draw(at)
-        val a = r.arrive()
-        assertEquals(1, a[0].row)
+        val n = p.last() - p.first() + 1
+        val a = r.arrive().take(n)
+        assertEquals((p.first()..p.last()).toList(), a.map { it.row })
         val ry = (1 - sy) * ya
         assertEquals(ry + sy * top, a[0].clip[1], 0.01f)
         assertEquals(ry + sy * p.rowTop(1), a[0].top, 0.01f)
         assertTrue(a[0].top < a[0].clip[1])
         assertEquals(ry + sy * bottom, a.last().clip[3], 0.01f)
-        assertEquals(p.last() - p.first() + 1, a.size)
     }
 
     @Test
@@ -940,10 +1033,13 @@ class MovePaintTest {
         assertTrue(sy < 1f)
         assertTrue(r.move.at(Part.Content, Prop.A, at) > 0f)
         r.draw(at)
-        val arrive = r.drawn.filter { it.name == "arrive" }
+        val arrive = r.drawn.filter { it.name == "arrive" }.take(ys.size)
         assertEquals((7..12).toList(), arrive.map { it.row })
         assertEquals(ys, arrive.map { it.y })
-        for (k in arrive.indices) assertEquals(Math.round((1 - sy) * (ya - tops[k])).toFloat(), arrive[k].dy, 0f)
+        for (d in arrive) {
+            assertEquals("y of row ${d.row}", (1 - sy) * ya, d.dy, 0.01f)
+            assertEquals("top of row ${d.row}", (1 - sy) * ya + sy * d.y, d.top, 0.01f)
+        }
     }
 
     private fun closing(
@@ -992,14 +1088,15 @@ class MovePaintTest {
         assertTrue(c.ends.leaveRows)
         assertEquals(s.ppu, c.ends.pxU, 0f)
         assertEquals(listOf(360, 525, 690, 855, 1020, 1185, 1280), requireNotNull(c.leaveBands).y.toList())
-        assertEquals(1185f, c.leaveAnchor, 0f)
+        assertEquals(1444f, c.leaveAnchor, 0f)
         assertEquals(60f, requireNotNull(c.leaveAt).xa, 0f)
+        assertEquals(708f, barX, 0f)
         val typed = listOf(
-            listOf(0f, 0.975f, 8f, 9.5f, 29.625f, 380.625f, 1f),
-            listOf(17f, 0.94f, 16f, 19.6f, 71.1f, 409.5f, 0.89820f),
-            listOf(50f, 0.928f, 20f, 24.32f, 85.32f, 419.40f, 1 - 50 / 167f),
-            listOf(100f, 0.885f, 34f, 40.9f, 136.275f, 454.875f, 1 - 100 / 167f),
-            listOf(150f, 0.885f, 34f, 40.9f, 136.275f, 454.875f, 0.10180f),
+            listOf(0f, 0.975f, 8f, 9.5f, 36.1f, 387.1f, 1f),
+            listOf(17f, 0.94f, 16f, 19.6f, 86.64f, 425.04f, 0.89820f),
+            listOf(50f, 0.928f, 20f, 24.32f, 103.968f, 438.048f, 1 - 50 / 167f),
+            listOf(100f, 0.885f, 34f, 40.9f, 166.06f, 484.66f, 1 - 100 / 167f),
+            listOf(150f, 0.885f, 34f, 40.9f, 166.06f, 484.66f, 0.10180f),
         )
         for (row in typed) {
             val at = row[0].toLong()
@@ -1017,7 +1114,7 @@ class MovePaintTest {
                 assertEquals("top of row ${d.row} at $at", ty + k * d.y, d.top, 0.01f)
                 assertEquals("alpha at $at", row[6], d.alpha, 1e-4f)
                 assertEquals(tx, d.clip[0], 0.01f)
-                assertEquals(tx + k * s.widthPx, d.clip[2], 0.01f)
+                assertEquals(tx + k * barX, d.clip[2], 0.01f)
             }
             assertEquals(row[5], l[0].top, 0.01f)
             assertEquals(ty + k * top, l[0].clip[1], 0.01f)
@@ -1025,8 +1122,8 @@ class MovePaintTest {
         }
         r.draw(100L)
         val l = leaveOf(r)
-        assertEquals(listOf(40.9f, 454.875f, 678.1f), listOf(l[0].clip[0], l[0].clip[1], l[0].clip[2]).map { Math.round(it * 1000) / 1000f })
-        assertEquals(1269.075f, l.last().clip[3], 0.01f)
+        assertEquals(listOf(40.9f, 484.66f, 667.48f), listOf(l[0].clip[0], l[0].clip[1], l[0].clip[2]).map { Math.round(it * 1000) / 1000f })
+        assertEquals(1298.86f, l.last().clip[3], 0.01f)
         r.draw(167L)
         assertTrue(leaveOf(r).isEmpty())
     }
@@ -1036,38 +1133,40 @@ class MovePaintTest {
         val r = closing(rows = 30, scroll = 1000)
         val c = r.paint.ctx
         assertEquals(listOf(360, 515, 680, 845, 1010, 1175, 1280), requireNotNull(c.leaveBands).y.toList())
-        assertEquals(1175f, c.leaveAnchor, 0f)
-        assertOneLayer(r, 100L, 1175f, xa, (6..11).toList())
+        assertEquals(1444f, c.leaveAnchor, 0f)
+        assertOneLayer(r, 100L, 1444f, xa, (6..11).toList())
         val row7 = leaveOf(r).first { it.row == 7 }
-        assertEquals(0.115f * 1175 + 0.885f * 515, row7.top, 0.01f)
-        assertEquals(590.9f, row7.top, 0.01f)
+        assertEquals(0.115f * 1444 + 0.885f * 515, row7.top, 0.01f)
+        assertEquals(621.835f, row7.top, 0.01f)
     }
 
     @Test
     fun aT4nTakesTheSameLeavingLayer() {
         val r = closing(MoveKind.T4n)
         assertTrue(r.paint.ctx.ends.leaveRows)
-        assertEquals(1185f, r.paint.ctx.leaveAnchor, 0f)
-        assertOneLayer(r, 100L, 1185f, xa, (0..5).toList())
+        assertEquals(1444f, r.paint.ctx.leaveAnchor, 0f)
+        assertOneLayer(r, 100L, 1444f, xa, (0..5).toList())
         val l = leaveOf(r)
         assertEquals(40.9f, l[0].dx, 0.01f)
-        assertEquals(454.875f, l[0].top, 0.01f)
+        assertEquals(484.66f, l[0].top, 0.01f)
     }
 
     @Test
-    fun aT4hFromAListWithNoVisibleRowShrinksItsRestAboutTheContentTop() {
+    fun aT4hFromAListWithNoVisibleRowLeavesItsRestWhole() {
         val r = closing(rows = 0)
         val c = r.paint.ctx
-        assertTrue(c.ends.leaveRows)
+        assertFalse(c.ends.leaveRows)
         assertNull(c.leaveBands)
-        assertEquals(top.toFloat(), c.leaveAnchor, 0f)
+        assertEquals(0f, c.leaveAnchor, 0f)
+        assertFalse(r.move.has(Part.Leave, Prop.S))
+        assertFalse(r.move.has(Part.Leave, Prop.X))
         r.draw(100L)
         val rest = r.pages.getValue(B).restAt.filter { it.name == "leave" }
         assertEquals(1, rest.size)
-        assertEquals(0.885f, rest[0].k, 1e-4f)
-        assertEquals(40.9f, rest[0].dx, 0.01f)
-        assertEquals(41.4f, rest[0].dy, 0.01f)
-        assertEquals(listOf(40.9f, 360f, 678.1f, 1174.2f), rest[0].clip.map { Math.round(it * 100) / 100f })
+        assertEquals(1f, rest[0].k, 0f)
+        assertEquals(0f, rest[0].dx, 0f)
+        assertEquals(0f, rest[0].dy, 0f)
+        assertEquals(listOf(0f, 360f, 720f, 1280f), rest[0].clip)
     }
 
     @Test
@@ -1103,12 +1202,13 @@ class MovePaintTest {
         assertEquals(356, p.top)
         assertEquals(163, p.rowY(1) - p.rowY(0))
         assertEquals(11, p.last())
-        assertEquals(2149f, c.leaveAnchor, 0f)
-        assertOneLayer(r, 100L, 2149f, x0, (0..11).toList())
+        assertEquals(2322f, c.leaveAnchor, 0f)
+        assertEquals(2160 - px(Tok.motion_t4hRowsYa, ps.stdPpu), c.leaveAnchor.toInt())
+        assertOneLayer(r, 100L, 2322f, x0, (0..11).toList())
     }
 
     @Test
-    fun aTallPageAnchorsTheLeavingLayerAtTheTwelfthBandTop() {
+    fun aTallPageAnchorsTheLeavingLayerAtT4hRowsYaBelowTheScreenWhateverItsBands() {
         val ts = pageBase(1080, 2520, 397.3f)
         assertNotNull(ts.fit)
         val g = geoOf(ts)
@@ -1116,27 +1216,27 @@ class MovePaintTest {
         val p = r.pages.getValue(B)
         val c = r.paint.ctx
         val b = requireNotNull(c.leaveBands)
-        assertTrue("${b.dy.size} bands", b.dy.size > BANDS)
+        assertEquals(14, b.dy.size)
         assertEquals(351, p.top)
         assertEquals(161, p.rowY(1) - p.rowY(0))
         assertEquals(13, p.last())
-        assertEquals(2122f, c.leaveAnchor, 0f)
-        assertTrue(p.rowTop(p.last()) > 2122)
-        assertOneLayer(r, 100L, 2122f, Tok.hubEdge * ts.stdPpu, (0..13).toList())
+        assertEquals(2680f, c.leaveAnchor, 0f)
+        assertEquals(2520 - px(Tok.motion_t4hRowsYa, ts.stdPpu), c.leaveAnchor.toInt())
+        assertOneLayer(r, 100L, 2680f, Tok.hubEdge * ts.stdPpu, (0..13).toList())
     }
 
     @Test
-    fun aCarriedTallPageAnchorsAtTheTwelfthFrozenBandTop() {
+    fun aCarriedTallPageAnchorsAtT4hRowsYaOfThePop() {
         val ts = pageBase(1080, 2520, 397.3f)
         val r = Run(forms = MoveForms.board(ts.board), g = geoOf(ts))
         retargeted(r, Tok.motion_t2Swap.toLong() + ENTER)
         val c = r.paint.ctx
         val b = requireNotNull(c.leaveBands)
         assertNotNull(c.leaveAt)
-        assertTrue("${b.dy.size} bands", b.dy.size > BANDS)
-        assertEquals(2122, b.y[BANDS - 1])
-        assertEquals(2122f, c.leaveAnchor, 0f)
-        assertTrue(b.y[b.dy.size - 1] > b.y[BANDS - 1])
+        assertEquals(14, b.dy.size)
+        assertEquals(351, b.y[0])
+        assertEquals(2680f, c.leaveAnchor, 0f)
+        assertEquals(PageMove.popAnchor(MoveKind.T4h, b.y[0], 2520, ts.stdPpu).toFloat(), c.leaveAnchor, 0f)
     }
 
     @Test
@@ -1159,7 +1259,7 @@ class MovePaintTest {
     private fun thumbOf(r: Run, name: String): Drawn? = r.drawn.firstOrNull { it.name == "$name.thumb" }
 
     @Test
-    fun aT2DrawsThePageThumbInsideItsZoomLayer() {
+    fun aT2DrawsThePageThumbUnscaledAtItsRestRectInTheBarStrip() {
         val r = Run(forms = zoomForms, bars = mapOf(B to (bar to seenAt(0L))))
         r.stack.push(B, MoveKind.T2)
         r.stack.frame(0L)
@@ -1167,12 +1267,14 @@ class MovePaintTest {
         assertEquals(0L, c.thumbAt)
         assertEquals(1f, c.arriveThumb, 0f)
         r.draw(17L)
+        assertTrue(r.arrive().all { it.k < 1f })
         val d = requireNotNull(thumbOf(r, "arrive"))
-        assertEquals(0.80375f, d.k, 1e-4f)
-        assertEquals(637.83f, d.dx + d.k * bar.x0, 0.01f)
-        assertEquals(647.48f, d.dx + d.k * bar.x1, 0.01f)
-        assertEquals(519.76f, d.top, 0.01f)
-        assertEquals(706.23f, d.bottom, 0.01f)
+        assertEquals(1f, d.k, 0f)
+        assertEquals(0f, d.dx, 0f)
+        assertEquals(0f, d.dy, 0f)
+        assertEquals(bar.y0.toFloat(), d.top, 0f)
+        assertEquals(bar.y1.toFloat(), d.bottom, 0f)
+        assertEquals(listOf(barX, top.toFloat(), s.widthPx.toFloat(), bottom.toFloat()), d.clip)
         assertEquals(Tok.motion_rowsT2Alpha, d.alpha, 1e-4f)
         assertEquals(0.6f, d.alpha, 1e-4f)
     }
@@ -1211,7 +1313,7 @@ class MovePaintTest {
     }
 
     @Test
-    fun aT4hDrawsTheLeavingThumbAtTheTurnStartValue() {
+    fun aT4hDrawsTheLeavingThumbUnscaledInTheBarStripAtTheTurnStartValue() {
         val fade = seenAt(-1700L)
         val v = fade.at(0L)
         assertTrue(v > 0f && v < 1f)
@@ -1222,9 +1324,11 @@ class MovePaintTest {
             r.draw(at)
             val rows = leaveOf(r)
             val d = requireNotNull(thumbOf(r, "leave"))
-            assertEquals(rows[0].k, d.k, 1e-6f)
-            assertEquals(rows[0].dx, d.dx, 1e-4f)
-            assertEquals(d.dy + d.k * bar.y0, d.top, 1e-3f)
+            assertTrue(rows[0].k < 1f)
+            assertEquals(1f, d.k, 0f)
+            assertEquals(0f, d.dx, 0f)
+            assertEquals(bar.y0.toFloat(), d.top, 0f)
+            assertEquals(listOf(barX, top.toFloat(), s.widthPx.toFloat(), bottom.toFloat()), d.clip)
             assertEquals(rows[0].alpha * v, d.alpha, 1e-4f)
         }
     }
@@ -1242,7 +1346,9 @@ class MovePaintTest {
         r.draw(r.move.t0 + 1)
         val rows = leaveOf(r)
         val d = requireNotNull(thumbOf(r, "leave"))
-        assertEquals(rows[0].k, d.k, 1e-6f)
+        assertTrue(rows[0].k < 1f)
+        assertEquals(1f, d.k, 0f)
+        assertEquals(bar.y0.toFloat(), d.top, 0f)
         assertEquals(rows[0].alpha * v, d.alpha, 1e-4f)
     }
 
@@ -1418,19 +1524,19 @@ class MovePaintTest {
         assertEquals(MoveKind.T4n, c.kind)
         assertEquals(90f, c.leaveDx, 0f)
         assertEquals(listOf(360, 525, 690, 855, 1020, 1185, 1280), requireNotNull(c.leaveBands).y.toList())
-        assertEquals(1185f, c.leaveAnchor, 0f)
+        assertEquals(1444f, c.leaveAnchor, 0f)
         val held = requireNotNull(c.leaveAt)
-        assertEquals(listOf(1f, 90f, 0f, 60f, 1185f), listOf(held.s, held.dx, held.dy, held.xa, held.ya))
+        assertEquals(listOf(1f, 90f, 0f, 60f, 1444f), listOf(held.s, held.dx, held.dy, held.xa, held.ya))
         val rec = r.draw(at)
         val l = leaveOf(r)
         assertEquals((0..5).toList(), l.map { it.row })
         for (d in l) {
             assertEquals(0.975f, d.k, 1e-4f)
             assertEquals(99.5f, d.dx, 0.01f)
-            assertEquals(29.625f + 0.975f * d.y, d.top, 0.01f)
+            assertEquals(36.1f + 0.975f * d.y, d.top, 0.01f)
             assertEquals(0.70054f, d.alpha, 1e-4f)
         }
-        assertEquals(380.625f, l[0].top, 0.01f)
+        assertEquals(387.1f, l[0].top, 0.01f)
         val h = rec.chromes.getValue("leave.chrome")
         assertEquals(chrome.headerRestX() + 90f, h[0], 1e-3f)
         assertEquals(chrome.headerAlpha * 0.70054f, h[1], 1e-4f)
@@ -1444,7 +1550,6 @@ class MovePaintTest {
 
     companion object {
         private const val FRAME = 16L
-        private const val BANDS = 12
         private const val ROWS = 40
         private const val OFF = 7.3f
         private const val ENTER = 40L

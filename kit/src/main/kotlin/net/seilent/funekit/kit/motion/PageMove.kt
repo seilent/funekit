@@ -128,10 +128,7 @@ data class MoveEnds(
     val morphBack: Boolean = false,
     val rows: Boolean = false,
     val retarget: Boolean = false,
-    val rowAscent: Float = 0f,
-    val rowBand: Float = 0f,
     val rowsDx: Float = 0f,
-    val rowLive: Boolean = false,
     val endAt: Int = 0,
     val npForm: NpForm = NpForm.Page,
     val npCut: Boolean = false,
@@ -277,6 +274,19 @@ class PageMove {
     fun from(p: Part, q: Prop, v: Float) {
         val l = leg(p, q)
         if (l != null) l.from = v else set(p, q, v)
+    }
+
+    fun fadeFrom(p: Part, a: Float) {
+        val f = leg(p, Prop.A)
+        if (f == null || f.from != 1f || legsOf(p, Prop.A) <= 1) {
+            from(p, Prop.A, a)
+            return
+        }
+        val i = list.indexOfFirst { it.part == p && it.prop == Prop.A }
+        for (k in i until list.size) {
+            val l = list[k]
+            if (l.part == p && l.prop == Prop.A) list[k] = MoveLeg(l.part, l.prop, l.from * a, l.to * a, l.delay, l.dur, l.curve, l.pin)
+        }
     }
 
     private fun erase(p: Part, q: Prop) {

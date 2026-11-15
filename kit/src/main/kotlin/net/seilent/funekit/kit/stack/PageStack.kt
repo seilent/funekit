@@ -29,7 +29,7 @@ enum class Phase { Rest, Exit, Enter }
 
 enum class PageKind { Grid, Hub, Plain }
 
-class Turn<P : Any>(val kind: MoveKind, val from: P?, val to: P?, val popping: Boolean, val retarget: Boolean = false, val at: Long = 0L)
+class Turn<P : Any>(val kind: MoveKind, val from: P?, val to: P?, val popping: Boolean, val retarget: Boolean = false, val at: Long = 0L, val row: Int = -1, val album: Long = -1L)
 
 class PageStack<P : Any>(
     var forms: MoveForms,
@@ -97,15 +97,15 @@ class PageStack<P : Any>(
         asked++
     }
 
-    fun push(page: P, kind: MoveKind) = ask { now ->
+    fun push(page: P, kind: MoveKind, row: Int = -1, album: Long = -1L) = ask { now ->
         if (phase != Phase.Rest || overlay != null) return@ask
-        start(Turn(kind, top, page, popping = false), now, retarget = false)
+        start(Turn(kind, top, page, popping = false, row = row, album = album), now, retarget = false)
     }
 
-    fun pop(kind: MoveKind) = ask { now ->
+    fun pop(kind: MoveKind, album: Long = -1L) = ask { now ->
         if (phase != Phase.Rest) land(now)
         if (pages.isEmpty()) return@ask
-        start(Turn(kind, top, under, popping = true), now, retarget = false)
+        start(Turn(kind, top, under, popping = true, album = album), now, retarget = false)
     }
 
     fun entry(): Long = entries++
@@ -283,7 +283,7 @@ class PageStack<P : Any>(
         if (!from.popping) from.to?.let(enter)
         seq++
         swapHeld = false
-        val t = Turn(from.kind, from.from, from.to, from.popping, retarget, now)
+        val t = Turn(from.kind, from.from, from.to, from.popping, retarget, now, from.row, from.album)
         turn = t
         started(t)
         starting(t)
@@ -320,17 +320,16 @@ class PageStack<P : Any>(
         val tx = cur(Part.Tile, Prop.X)
         val ty = cur(Part.Tile, Prop.Y)
         val wasMorph = moveEnds.morph && now < v.t0 + v.wordEnd
-        val mla = cur(Part.LeaveWord, Prop.A)
         val mwa = cur(Part.Word, Prop.A)
         val t = Turn(MoveKind.None, top, under, popping = true)
         start(Turn(popKind(t), t.from, t.to, popping = true), now, retarget = true)
         val n = move
         val e = moveEnds
         val leave = (if (n.kind == MoveKind.T4h || n.kind == MoveKind.T4n) Tok.motion_t4hContent else Tok.motion_leave).toInt()
-        n.from(Part.Leave, Prop.A, ca)
+        n.fadeFrom(Part.Leave, ca)
         n.set(Part.Leave, Prop.S, cs)
-        n.from(Part.LeaveHeader, Prop.A, ha)
-        n.from(Part.LeavePivots, Prop.A, pa)
+        n.fadeFrom(Part.LeaveHeader, ha)
+        n.fadeFrom(Part.LeavePivots, pa)
         if (n.has(Part.LeavePivots, Prop.X)) {
             n.from(Part.LeavePivots, Prop.X, pvx)
             n.from(Part.LeavePivots, Prop.Y, pvy)
@@ -340,20 +339,16 @@ class PageStack<P : Any>(
         }
         if (n.has(Part.LeaveGround, Prop.A)) n.from(Part.LeaveGround, Prop.A, ga)
         if (wasMorph && e.morph && e.morphBack) {
-            for (p in listOf(Part.LeaveWord, Part.Word)) {
-                n.from(p, Prop.S, ws)
-                n.from(p, Prop.X, wx)
-                n.from(p, Prop.Y, wy)
-            }
-            n.from(Part.LeaveWord, Prop.A, mwa)
-            n.from(Part.Word, Prop.A, mla)
-            if (e.morphKind != MorphKind.Row) {
-                n.shift(Part.LeaveWord, -Tok.motion_t4mDelay.toInt())
-                n.shift(Part.Word, -Tok.motion_t4mDelay.toInt())
-            }
+            n.from(Part.Word, Prop.S, ws)
+            n.from(Part.Word, Prop.X, wx)
+            n.from(Part.Word, Prop.Y, wy)
+            n.from(Part.Word, Prop.A, mwa)
+            if (e.morphKind != MorphKind.Row) n.shift(Part.Word, -Tok.motion_t4mDelay.toInt())
         } else if (zoomed && !e.morph) {
             n.set(Part.LeaveWord, Prop.S, zs)
             n.add(MoveLeg(Part.LeaveWord, Prop.A, 1f, 0f, 0, leave))
+        } else if (zoomed) {
+            n.from(Part.LeaveHeader, Prop.A, 1f)
         }
         if (word && !e.morph && n.has(Part.Word, Prop.S)) {
             n.from(Part.Word, Prop.S, ws)
