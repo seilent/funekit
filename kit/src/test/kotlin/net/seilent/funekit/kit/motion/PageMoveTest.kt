@@ -6,7 +6,8 @@ import net.seilent.funekit.Nav
 import net.seilent.funekit.Roles
 import net.seilent.funekit.Surface
 import net.seilent.funekit.Window
-import net.seilent.funekit.gen.Rel
+import net.seilent.funekit.gen.Moves
+import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.gen.TokBoard
 import net.seilent.funekit.kit.rolePx
 import net.seilent.funekit.scale
@@ -101,7 +102,7 @@ class PageMoveTest {
 
     @Test
     fun t2RowsInkAtSeventeenMsThenFadeFromRowsT2Alpha() {
-        assertEquals(17, Rel.T2_ROWS_INK)
+        assertEquals(17, Moves.kT2RowsInk)
         val m = released(MoveKind.T2, t2Ends)
         assertEquals(300L, m.swapAt)
         rowsInk(m, Part.Content)
@@ -222,10 +223,10 @@ class PageMoveTest {
             assertNotNull("$w x $h takes the page base", page.fit)
             val ws = rolePx(Roles.homeItem, home, home.stdPpu).toFloat() / rolePx(Roles.pageHeader, page, page.stdPpu)
             assertEquals("$w x $h wordS0", want, ws.toDouble(), 0.0001)
-            assertTrue(ws < Rel.T2_SCALE.v[0])
+            assertTrue(ws < Moves.kT2Scale.v[0])
             val m = released(MoveKind.T2, t2Ends.copy(wordS0 = ws))
             var last = m.at(Part.Word, Prop.S, 0)
-            for (t in Rel.T2_SCALE.t) {
+            for (t in Moves.kT2Scale.t) {
                 val v = m.at(Part.Word, Prop.S, t.toLong())
                 assertTrue("$w x $h S rises at $t", v > last)
                 last = v
@@ -502,7 +503,7 @@ class PageMoveTest {
 
     @Test
     fun theT4hPeekComesInFrom50Ms() {
-        assertEquals(50f, Rel.motion_t4hPeekDelay, 0f)
+        assertEquals(50f, Tok.motion_t4hPeekDelay, 0f)
         for (k in listOf(MoveKind.T4h, MoveKind.T4n)) {
             val m = started(k, back)
             tight(0.0, m.at(Part.Peek, Prop.A, 50), "$k peek at 50")

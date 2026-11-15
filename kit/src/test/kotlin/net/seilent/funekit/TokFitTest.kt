@@ -1,5 +1,6 @@
 package net.seilent.funekit
 
+import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.gen.TokBoard
 import net.seilent.funekit.gen.TokFit
 import org.junit.Assert.assertEquals
@@ -27,19 +28,19 @@ class TokFitTest {
                 if (cls == "x") continue
                 val want: Any = r[1].toFloatOrNull() ?: r[1]
                 assertEquals("$file ${r[0]}", want, read(literal, r[0]))
-                if (cls != "budget") assertEquals("$file ${r[0]} at", want, read(at, r[0]))
+                assertEquals("$file ${r[0]} at", want, read(at, r[0]))
                 seen++
             }
-            assertEquals(311, seen)
+            assertEquals(438, seen)
         }
     }
 
     @Test
-    fun budgetTokensTakeTheV1Value() {
-        val at = TokFit.at(TokBoard.a105.canvasH, TokBoard.a105.u)
-        assertEquals(17.19f, at.motion_volumeTiltAngle)
-        assertEquals(12.5f, at.motion_volumeTiltDepth)
-        assertEquals("zoom", at.motion_contentHubRows)
+    fun theContentFormsAreOneValueOnEveryBoard() {
+        for (n in listOf("motion_contentHubRows", "motion_contentPageRows")) {
+            assertEquals(n, "zoom", Tok::class.java.getField(n).get(null))
+            assertEquals(n, emptyList<Any>(), TokBoard.Board::class.java.methods.filter { it.name == "get" + n.replaceFirstChar { c -> c.uppercase() } })
+        }
     }
 
     @Test
@@ -48,7 +49,7 @@ class TokFitTest {
         assertEquals(480f, at.canvasH, 0.001f)
         assertEquals(451.8f, at.npRingY, 0.001f)
         assertEquals(386.03f, at.npTitleY, 0.005f)
-        assertEquals(348.02f, at.vol_minusY, 0.005f)
+        assertEquals(395.4375f, at.vol_minusY, 0.005f)
         assertEquals(486f, at.saverFourthBaseline, 0.005f)
         assertEquals(120f, at.page_contentTop)
         assertEquals(159.3f, at.npArt, 0.001f)
@@ -70,8 +71,11 @@ class TokFitTest {
         val free = fit.filterValues { it == "free" }.keys.toList()
         assertEquals(
             listOf(
-                "npArtistY", "npAlbumY", "npFromBaseline", "npArtTop", "npArt", "lockBtGlyph", "kb.keyH", "overlayAnchorScale",
-                "vol.ringY", "npSeekBandX1", "npSeekBandBottom", "large.npLyricPitch", "large.npNextPitch", "large.npAlbumPitch",
+                "page.listClipDrop", "npArtistY", "npAlbumY", "npFromBaseline", "npArtTop", "npArt", "lockBtGlyph", "kb.keyH",
+                "overlayAnchorScale", "vol.textY", "motion.t7EyeY", "motion.saverB3In", "motion.saverD3In", "motion.saverF5In",
+                "saverA6Across", "saverA7Across", "saverA8Across", "saverB6Across", "saverF4Across", "saverK3Across",
+                "saverR4Across", "saverJ6Across", "saverL5Across", "npSeekBandX1", "npSeekBandBottom", "large.npLyricPitch",
+                "large.npNextPitch", "large.npAlbumPitch",
             ),
             free,
         )
@@ -87,5 +91,26 @@ class TokFitTest {
         val snap = TokFit.at(TokBoard.a105.canvasH, TokBoard.a105.u, fitBoard)
         for (n in free) assertEquals("snap $n", read(fitBoard, n), read(snap, n))
         assertEquals(TokBoard.a105.pivotTop, snap.pivotTop)
+    }
+
+    @Test
+    fun theTextFloorIsEightPxPerUButOnTheV1BoardAtItsOwnPpu() {
+        assertEquals("ppuTop", fit["minTextPx"])
+        assertEquals(10f, TokFit.at(320f, 1f).minTextPx, 0.0001f)
+        assertEquals(26.2f, TokFit.at(320f, 3.275f).minTextPx, 0.0001f)
+        assertEquals(18f, TokFit.at(320f, 2.25f).minTextPx, 0.0001f)
+        assertEquals(20.125f, TokFit.at(320f, 2.515625f).minTextPx, 0.0001f)
+        assertEquals(16f, TokFit.at(TokBoard.r1.canvasH, TokBoard.r1.u).minTextPx, 0.0001f)
+        assertEquals(24f, TokFit.at(TokBoard.a105.canvasH, TokBoard.a105.u).minTextPx, 0.0001f)
+    }
+
+    @Test
+    fun aPhonePageBaseKeepsItsTextFloor() {
+        val dpi = Dpi(403.411f, 403.411f, 440, 1080, 2160, 1, 1080, 2160)
+        val w = Window(1080, 2160, 34, Insets(0, 66, 0, 0), Insets(0, 0, 0, 66), Insets(82, 0, 82, 0), Insets(0, 0, 0, 0), Insets(0, 0, 0, 0), dpi)
+        val page = scale(w, navMode(w), Surface.Page, false)
+        assertEquals(2.96669f, page.stdPpu, 0.00001f)
+        assertEquals(23.7335f, page.board.minTextPx, 0.001f)
+        assertEquals(36f, scale(w, navMode(w), Surface.Home, false).board.minTextPx, 0.0001f)
     }
 }

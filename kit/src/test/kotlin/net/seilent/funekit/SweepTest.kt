@@ -51,13 +51,18 @@ class SweepTest {
             "content top" to top,
             "tile bottom" to tile,
             "title baseline" to tile + drop,
-            "sub baseline" to tile + drop + if (large) Tok.tileCaptionPitchLarge else Tok.tileCaptionPitch,
-            "caption band bottom" to tile + if (large) Tok.tileCaptionBandLarge else Tok.tileCaptionBand,
-            "cell bottom" to top + if (large) Tok.tileCellHLarge else Tok.tileCellH,
+            "sub baseline" to tile + drop + if (large) Tok.tileCaptionPitchLarge else b.tileCaptionPitch,
+            "caption band bottom" to tile + if (large) Tok.tileCaptionBandLarge else b.tileCaptionBand,
             "next row top" to top + if (large) Tok.tileRowPitchLarge else Tok.tileRowPitch,
             "bottom" to if (navOn) h - Tok.navH else h,
         )
     }
+
+    private fun hubCell(b: TokBoard.Board, large: Boolean) = listOf(
+        "tile bottom" to b.page_contentTop + Tok.gridTile,
+        "cell bottom" to b.page_contentTop + if (large) Tok.tileCellHLarge else Tok.tileCellH,
+        "next row top" to b.page_contentTop + if (large) Tok.tileRowPitchLarge else Tok.tileRowPitch,
+    )
 
     private fun hubLine(b: TokBoard.Board, h: Float, navOn: Boolean) = listOf(
         "content top" to b.page_contentTop,
@@ -70,12 +75,13 @@ class SweepTest {
         order(h, "$stack nav $navOn", hub(b, h, navOn))
         order(h, "$stack line nav $navOn", hubLine(b, h, navOn))
         for (large in listOf(false, true)) order(h, "$stack grid nav $navOn large $large", hubGrid(b, h, navOn, large))
+        for (large in listOf(false, true)) order(h, "$stack cell large $large", hubCell(b, large))
     }
 
     private fun volume(b: TokBoard.Board, h: Float) = listOf(
         "exit" to b.vol_exitY,
-        "number" to b.vol_numberY,
         "plus" to b.vol_plusY,
+        "number" to b.vol_numberY,
         "ring row" to b.vol_ringY,
         "minus" to b.vol_minusY,
         "text" to b.vol_textY,

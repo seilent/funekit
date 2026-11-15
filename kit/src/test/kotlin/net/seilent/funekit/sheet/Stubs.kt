@@ -140,7 +140,7 @@ object Stubs {
             ink.box(sx - Tok.vol_skip / HALF, v.vol_ringY - Tok.vol_skip / HALF, Tok.vol_skip, Tok.vol_skip)
         ink.box(cx - Tok.vol_minus / HALF, v.vol_minusY - Tok.vol_minus / HALF, Tok.vol_minus, Tok.vol_minus)
         ink.text(Roles.volLabel, "title", Tok.vol_textX, v.vol_textY)
-        ink.text(Roles.volLabel, "artist", Tok.vol_textX, v.vol_textY + Tok.vol_textGap)
+        ink.text(Roles.volLabel, "artist", Tok.vol_textX, v.vol_textY + v.vol_textGap)
     }
 
     fun keyboard(ink: Ink, bottom: Float) {

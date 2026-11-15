@@ -76,7 +76,6 @@ object Roles {
     val npViewArtist = role(Tok.type_npViewArtist_size, Tok.type_npViewArtist_style, Tok.type_npViewArtist_case, Tok.type_npViewArtist_alpha)
     val npViewAlbum = role(Tok.type_npViewAlbum_size, Tok.type_npViewAlbum_style, Tok.type_npViewAlbum_case, Tok.type_npViewAlbum_alpha)
     val npViewTitle = role(Tok.type_npViewTitle_size, Tok.type_npViewTitle_style, Tok.type_npViewTitle_case, Tok.type_npViewTitle_alpha)
-    val npViewNext = role(Tok.type_npViewNext_size, Tok.type_npViewNext_style, Tok.type_npViewNext_case, Tok.type_npViewNext_alpha)
     val npViewTime = role(Tok.type_npViewTime_size, Tok.type_npViewTime_style, Tok.type_npViewTime_case, Tok.type_npViewTime_alpha)
     val time = role(Tok.type_time_size, Tok.type_time_style, Tok.type_time_case, Tok.type_time_alpha)
     val toastArtist = role(Tok.type_toastArtist_size, Tok.type_toastArtist_style, Tok.type_toastArtist_case, Tok.type_toastArtist_alpha)
@@ -89,6 +88,9 @@ object Roles {
     val volNumber = Role(Tok.vol_number, overlayNumber.weight, overlayNumber.case, overlayNumber.alpha, overlayNumber.tracking)
     val volLabel = Role(Tok.vol_label, overlayLabel.weight, overlayLabel.case, overlayLabel.alpha, overlayLabel.tracking)
     val volExit = Role(Tok.vol_exit, overlayLabel.weight, overlayLabel.case, overlayLabel.alpha, overlayLabel.tracking)
+
+    fun npViewNext(b: TokBoard.Board) =
+        role(b.type_npViewNext_size, Tok.type_npViewNext_style, Tok.type_npViewNext_case, Tok.type_npViewNext_alpha)
 
     fun saverFourth(b: TokBoard.Board) =
         role(b.type_saverFourth_size, Tok.type_saverFourth_style, Tok.type_saverFourth_case, Tok.type_saverFourth_alpha)

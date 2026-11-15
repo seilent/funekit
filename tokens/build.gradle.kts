@@ -22,3 +22,17 @@ kotlin {
 tasks.named<KotlinCompile>("compileKotlin") { compilerOptions.moduleName.set("funekit-tokens") }
 
 tasks.named("check") { dependsOn(gradle.includedBuild("funekit-logic").task(":test")) }
+
+val syncTest = tasks.register<Exec>("syncTest") {
+    group = "verification"
+    val scratch = layout.buildDirectory.dir("tmp/syncTest").get().asFile
+    doFirst { scratch.mkdirs() }
+    environment("TMPDIR", scratch.path)
+    commandLine("bash", rootProject.file("tools/funeos-sync-test.sh").path)
+}
+
+tasks.named("check") { dependsOn(syncTest) }
+
+dependencies {
+    testImplementation("junit:junit:4.13.2")
+}

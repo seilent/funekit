@@ -23,6 +23,7 @@ class GenTokensTest {
         listOf("prop", "32", "40", "42.66667", "u"),
         listOf("anch", "280", "360", "386.66667", "u"),
         listOf("px", "8", "16", "24", "px"),
+        listOf("minTextPx", "10", "16", "24", "px"),
         listOf("cons", "58", "63", "63", "u"),
         listOf("lift", "210.5", "266.6", "293.2", "u"),
         listOf("n", "1", "3", "3", "count"),
@@ -55,7 +56,8 @@ class GenTokensTest {
         assertEquals(
             mapOf(
                 "u" to "ppu", "canvasH" to "h", "prop" to "hr", "anch" to "h", "px" to "ppu", "cons" to "v1c",
-                "lift" to "v1h", "n" to "step", "motion.npPace" to "budget", "saver.aheadMs" to "x", "art" to "free",
+                "lift" to "v1h", "n" to "step", "motion.npPace" to "step", "saver.aheadMs" to "x", "art" to "free",
+                "minTextPx" to "ppuTop",
             ),
             c,
         )
@@ -106,7 +108,14 @@ class GenTokensTest {
         assertTrue(kt.contains("        if (snap != null) return At(snap, snap, 0f, snap, ppu, h, false, free)\n"))
         assertTrue(kt.contains("        override val px: Float = TokBoard.v1.px / TokBoard.v1.u * fitPpu\n"))
         assertTrue(kt.contains("        override val n: Float = fitStep.n\n"))
-        assertTrue(kt.contains("        override val motion_npPace: Float = TokBoard.v1.motion_npPace\n"))
+        assertTrue(kt.contains("        override val motion_npPace: Float = fitStep.motion_npPace\n"))
+        assertTrue(
+            kt.contains(
+                "        override val minTextPx: Float = if (fitLo === TokBoard.v1 && fitHi === TokBoard.v1 && fitPpu == TokBoard.v1.u) " +
+                    "TokBoard.v1.minTextPx else TokBoard.r1.minTextPx / TokBoard.r1.u * fitPpu\n",
+            ),
+        )
+        assertFalse(kt.contains("budget"))
         assertFalse(kt.contains("saver_aheadMs"))
         Gen.checkFit(d, fitFile(d))
     }
@@ -167,10 +176,12 @@ class GenTokensTest {
     }
 
     @Test
-    fun theOldSetIsTheVendoredSetUnderItsOwnPin() {
+    fun theOldSetKeepsItsOwnPinApartFromTheVendoredSet() {
         Gen.checkPin(old, File(old, "SET.sha256"), "checkOldPin")
-        assertEquals(Gen.setHash(vendored), Gen.setHash(old))
-        assertEquals(File(vendored, "SET.sha256").readText(), File(old, "SET.sha256").readText())
+        Gen.checkSource(vendored)
+        assertNotEquals(Gen.setHash(vendored), Gen.setHash(old))
+        assertEquals(Gen.source(vendored).set, Gen.setHash(vendored))
+        assertNotEquals(Gen.source(vendored).set, File(old, "SET.sha256").readText().trim())
         val e = assertThrows(GenException::class.java) { Gen.checkPin(dir(), File(old, "SET.sha256"), "checkOldPin") }
         assertTrue(e.message!!.startsWith("checkOldPin: "))
     }
@@ -266,22 +277,56 @@ class GenTokensTest {
 
     @Test
     fun theVendoredSetMatchesItsPinsAndFitFile() {
-        Gen.checkPin(vendored, File(vendored, "SET.sha256"))
+        Gen.checkSource(vendored)
         Gen.checkFit(vendored, File(vendored, "../fit.txt"))
         val counts = Gen.classes(vendored).values.groupingBy { it }.eachCount()
         assertEquals(
-            mapOf("hr" to 262, "h" to 9, "ppu" to 2, "v1c" to 11, "v1h" to 2, "step" to 5, "budget" to 6, "x" to 4, "free" to 14),
+            mapOf("hr" to 353, "v1c" to 37, "free" to 28, "h" to 9, "step" to 7, "x" to 4, "v1h" to 2, "ppu" to 1, "ppuTop" to 1),
             counts,
         )
         val free = setOf(
-            "npArtistY", "npAlbumY", "npFromBaseline", "npArtTop", "npArt", "npSeekBandX1", "npSeekBandBottom",
-            "lockBtGlyph", "kb.keyH", "overlayAnchorScale", "vol.ringY", "large.npLyricPitch", "large.npNextPitch",
-            "large.npAlbumPitch",
+            "page.listClipDrop", "npArtistY", "npAlbumY", "npFromBaseline", "npArtTop", "npArt", "lockBtGlyph", "kb.keyH",
+            "overlayAnchorScale", "vol.textY", "motion.t7EyeY", "motion.saverB3In", "motion.saverD3In", "motion.saverF5In",
+            "saverA6Across", "saverA7Across", "saverA8Across", "saverB6Across", "saverF4Across", "saverK3Across",
+            "saverR4Across", "saverJ6Across", "saverL5Across", "npSeekBandX1", "npSeekBandBottom", "large.npLyricPitch",
+            "large.npNextPitch", "large.npAlbumPitch",
         )
         assertEquals(free, Gen.classes(vendored).filterValues { it == "free" }.keys)
-        assertEquals(setOf("u", "minTextPx"), Gen.classes(vendored).filterValues { it == "ppu" }.keys)
-        assertEquals(1422, Gen.tokens(vendored).names.size)
-        assertEquals(315, Gen.tokens(vendored).board.size)
+        assertEquals(setOf("u"), Gen.classes(vendored).filterValues { it == "ppu" }.keys)
+        assertEquals(setOf("minTextPx"), Gen.classes(vendored).filterValues { it == "ppuTop" }.keys)
+        assertEquals(1659, Gen.tokens(vendored).names.size)
+        assertEquals(442, Gen.tokens(vendored).board.size)
         assertEquals(28, Gen.glyphs(vendored).list.size)
+        assertEquals("funeOS v0.4.2", Gen.source(vendored).from)
+        assertEquals(null, Gen.source(vendored).commit)
+    }
+
+    @Test
+    fun theReleaseTokensAreUniformAtTheVendoredContent() {
+        val kt = Gen.tokKt(vendored)
+        assertTrue(kt.contains("    const val motion_t2Peek = 200f\n"))
+        assertTrue(kt.contains("    const val motion_t4hPeekDelay = 50f\n"))
+    }
+
+    @Test
+    fun aSourceThatMissesAByteAFileOrTheSetFails() {
+        fun copy(): File = tmp.newFolder().also { vendored.copyRecursively(it, overwrite = true) }
+        Gen.checkSource(copy())
+        val edited = copy()
+        val glyph = File(edited, "player/gfx/glyph.cpp")
+        glyph.writeText(glyph.readText().replaceFirst("kBox", "kBoX"))
+        assertTrue(assertThrows(GenException::class.java) { Gen.checkSource(edited) }.message!!.contains("player/gfx/glyph.cpp hashes to"))
+        val loose = copy()
+        File(loose, "player/ui/extra.txt").writeText("x\n")
+        assertTrue(assertThrows(GenException::class.java) { Gen.checkSource(loose) }.message!!.contains("with no SOURCE line: [player/ui/extra.txt]"))
+        val set = copy()
+        val src = File(set, "SOURCE")
+        src.writeText(src.readText().replace(Regex("set [0-9a-f]{64}"), "set " + "0".repeat(64)))
+        assertTrue(assertThrows(GenException::class.java) { Gen.checkSource(set) }.message!!.contains("SOURCE pins " + "0".repeat(64)))
+        val committed = copy()
+        File(committed, "SOURCE").appendText("commit " + "a".repeat(40) + "\n")
+        Gen.checkSource(committed)
+        File(committed, "SOURCE").appendText("tree " + "b".repeat(40) + "\n")
+        assertTrue(assertThrows(GenException::class.java) { Gen.checkSource(committed) }.message!!.contains("is not a from, commit, set or file line"))
     }
 }

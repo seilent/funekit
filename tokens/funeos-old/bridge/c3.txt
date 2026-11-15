@@ -5,3 +5,4 @@ old rowCollectionTextX
 old rowThumb
 old rowThumbDrop
 old dividerTileCollection
+old rowThumbGap

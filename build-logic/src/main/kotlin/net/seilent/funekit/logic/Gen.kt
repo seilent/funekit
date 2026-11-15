@@ -14,11 +14,8 @@ object Gen {
     val scanRoots = listOf(
         "kit/src/main/kotlin",
     )
-    val budget = setOf(
-        "motion.volumeTiltAngle", "motion.volumeTiltDepth", "qpTiltAngle",
-        "motion.contentHubRows", "motion.contentPageRows", "motion.npPace",
-    )
-    val classNames = setOf("ppu", "h", "hr", "v1c", "v1h", "step", "budget", "x", "free")
+    val ppuTop = setOf("minTextPx")
+    val classNames = setOf("ppu", "ppuTop", "h", "hr", "v1c", "v1h", "step", "x", "free")
     private val linear = setOf("h", "hr", "v1c", "v1h", "free")
     private val keywords = setOf(
         "as", "break", "class", "continue", "do", "else", "false", "for", "fun", "if", "in", "interface", "is",
@@ -45,6 +42,52 @@ object Gen {
     }
 
     fun setHash(root: File): String = sha256(setList(root).toByteArray())
+
+    private val sha = Regex("^[0-9a-f]{64}$")
+    private val hex = Regex("^[0-9a-f]{40}$")
+
+    class Source(val from: String, val commit: String?, val files: Map<String, String>, val set: String)
+
+    fun source(root: File, task: String = "checkTokPin"): Source {
+        val f = File(root, "SOURCE")
+        if (!f.isFile) throw GenException("$task: ${root.name}/SOURCE is missing")
+        var from: String? = null
+        var commit: String? = null
+        var set: String? = null
+        val files = LinkedHashMap<String, String>()
+        for ((i, line) in f.readLines().withIndex()) {
+            if (line.isBlank()) continue
+            val p = line.trim().split(Regex("\\s+"))
+            val ok = when {
+                p[0] == "from" && p.size > 1 && from == null -> { from = p.drop(1).joinToString(" "); true }
+                p.size != 2 -> false
+                p[0] == "commit" && hex.matches(p[1]) && commit == null -> { commit = p[1]; true }
+                p[0] == "set" && sha.matches(p[1]) && set == null -> { set = p[1]; true }
+                sha.matches(p[0]) -> files.put(p[1], p[0]) == null
+                else -> false
+            }
+            if (!ok) throw GenException("$task: SOURCE:${i + 1} is not a from, commit, set or file line, or repeats one")
+        }
+        val name = from ?: throw GenException("$task: SOURCE has no from line")
+        val s = set ?: throw GenException("$task: SOURCE has no set line")
+        if (files.isEmpty()) throw GenException("$task: SOURCE lists no files")
+        return Source(name, commit, files, s)
+    }
+
+    fun checkSource(root: File, task: String = "checkTokPin") {
+        val s = source(root, task)
+        val found = File(root, "player").walkTopDown().filter { it.isFile }.map { it.relativeTo(root).invariantSeparatorsPath }.toSet()
+        val loose = found - s.files.keys
+        if (loose.isNotEmpty()) throw GenException("$task: files under ${root.name} with no SOURCE line: ${loose.sorted()}")
+        for ((path, want) in s.files) {
+            val f = File(root, path)
+            if (!f.isFile) throw GenException("$task: ${root.name}/$path is missing")
+            val got = sha256(f.readBytes())
+            if (got != want) throw GenException("$task: ${root.name}/$path hashes to $got, SOURCE pins $want")
+        }
+        val got = setHash(root)
+        if (got != s.set) throw GenException("$task: the vendored set hashes to $got, SOURCE pins ${s.set}")
+    }
 
     fun checkPin(root: File, pin: File, task: String = "checkTokPin") {
         if (!pin.isFile) throw GenException("$task: ${pin.name} is missing")
@@ -124,9 +167,9 @@ object Gen {
             val vs = t.each.map { it[i].value }
             val unit = t.each[0][i].unit
             out[n] = when {
-                n in budget -> "budget"
                 renderer(n) -> "x"
                 unit == "count" || unit == "mode" || vs.any { !number.matches(it) } -> "step"
+                n in ppuTop -> "ppuTop"
                 else -> numeric(vs, hs, ps)
             }
         }
@@ -267,12 +310,12 @@ object Gen {
         for (i in kept) {
             val id = tokId(t.names[i])
             val c = cls.getValue(t.names[i])
-            if ((c in linear || c == "ppu") && types[i] != "Float") throw GenException("tokens: ${t.names[i]} is class $c but not a number")
+            if ((c in linear || c == "ppu" || c == "ppuTop") && types[i] != "Float") throw GenException("tokens: ${t.names[i]} is class $c but not a number")
             val lin = "fitLo.$id + (fitHi.$id - fitLo.$id) * fitT"
             val e = when (c) {
                 "ppu" -> "TokBoard.v1.$id / TokBoard.v1.u * fitPpu"
                 "step" -> "fitStep.$id"
-                "budget" -> "TokBoard.v1.$id"
+                "ppuTop" -> "if (fitLo === TokBoard.v1 && fitHi === TokBoard.v1 && fitPpu == TokBoard.v1.u) TokBoard.v1.$id else TokBoard.r1.$id / TokBoard.r1.u * fitPpu"
                 "hr" -> "if (fitAbove) TokBoard.a105.$id * fitH / TokBoard.a105.canvasH else $lin"
                 "h", "v1h" -> "if (fitAbove) TokBoard.a105.$id + (fitH - TokBoard.a105.canvasH) else $lin"
                 "v1c" -> "if (fitAbove) TokBoard.a105.$id else $lin"

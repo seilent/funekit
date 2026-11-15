@@ -68,7 +68,7 @@ class LayoutTest {
         px("np status top", 5.9 * 3, st.top)
         px("np status height", 11.5 * 3, st.size)
         px("np status right", (240 - 13.7) * 3, st.right)
-        px("np status gap", 7.7 * 3, st.gap)
+        px("np status gap", 7.1 * 3, st.gap)
         px("np status text", 11.3 * 3, st.textPx)
     }
 

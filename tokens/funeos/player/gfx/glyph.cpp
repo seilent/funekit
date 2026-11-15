@@ -1,6 +1,7 @@
 #include "glyph.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
@@ -15,6 +16,9 @@ constexpr int kStroke = 4;
 constexpr int kSub = 4;
 constexpr int kQ = 16;
 constexpr double kMiterLimit = 2.0;
+constexpr int kBoxDivMax = 31;
+
+std::atomic<uint32_t> div_passes{0};
 
 const GlyphPath kGlyphs[] = {
     {"back", false, "M 28 16 L 5 16 M 14 7 L 5 16 L 14 25"},
@@ -26,8 +30,8 @@ const GlyphPath kGlyphs[] = {
     {"skipNext", true, "M 1.7 8 L 13.8 16 L 1.7 24 Z M 13.8 8 L 25.9 16 L 13.8 24 Z M 27.35 8 H 30.3 V 24 H 27.35 Z"},
     {"skipPrevious", true, "M 30.3 8 L 18.2 16 L 30.3 24 Z M 18.2 8 L 6.1 16 L 18.2 24 Z M 4.65 8 H 1.7 V 24 H 4.65 Z"},
     {"shuffle", false, "M 4 9 H 10 L 22 23 H 28 M 4 23 H 10 L 22 9 H 28 M 24 5 L 28 9 L 24 13 M 24 19 L 28 23 L 24 27"},
-    {"repeat", false, "M 23 9 A 10 10 0 1 0 26 16 M 18 4 L 23 9 L 18 14"},
-    {"one", false, "M 18.2 10.19 V 22.24 M 12.9 13.79 L 16.3 11.39"},
+    {"repeat", false, "M 13.92 4.18 A 12 12 0 1 0 22 5.61 M 5.41 2.45 L 13.92 4.18 L 11.76 10.58"},
+    {"one", false, "M 18.2 10.19 V 22.24 M 15.1 12.24 L 16.3 11.39 M 14.2 20.24 H 22.2"},
     {"heart", true, "M 16 28 L 5.5 17 A 7 7 0 0 1 16 9 A 7 7 0 0 1 26.5 17 Z"},
     {"plus", false, "M 16 4 V 28 M 4 16 H 28"},
     {"minus", false, "M 4 16 H 28"},
@@ -470,6 +474,18 @@ void arc_coverage(int px, int stroke_px, int start_deg, int sweep_deg, Coverage&
         }
 }
 
+BoxDiv box_div(int n)
+{
+    if (n < 1 || n > kBoxDivMax)
+        return {};
+    int s = 13;
+    while ((1 << (s - 13)) < n)
+        s++;
+    return {(uint32_t)(((1u << s) + (uint32_t)n - 1) / (uint32_t)n), s};
+}
+
+uint32_t box_div_passes() { return div_passes.load(std::memory_order_relaxed); }
+
 void glow_coverage(const Coverage& src, int grow, Coverage& out, int hole, int reach)
 {
     int w = src.w + 2 * grow, h = src.h + 2 * grow;
@@ -483,7 +499,7 @@ void glow_coverage(const Coverage& src, int grow, Coverage& out, int hole, int r
         for (int x = 0; x < src.w; x++)
             a[(size_t)(y + grow) * w + x + grow] = src.rot[src.index(x, y)];
     auto pass = [&](const std::vector<uint8_t>& in, std::vector<uint8_t>& to, int r, int len, int lines, size_t step,
-                    size_t line) {
+                    size_t line, auto quot) {
         int n = 2 * r + 1;
         for (int l = 0; l < lines; l++) {
             const uint8_t* sp = in.data() + (size_t)l * line;
@@ -496,7 +512,7 @@ void glow_coverage(const Coverage& src, int grow, Coverage& out, int hole, int r
                     sum += sp[(size_t)(i + r) * step];
                 if (i - r - 1 >= 0)
                     sum -= sp[(size_t)(i - r - 1) * step];
-                dp[(size_t)i * step] = (uint8_t)((sum + n / 2) / n);
+                dp[(size_t)i * step] = (uint8_t)quot((uint32_t)(sum + n / 2));
             }
         }
     };
@@ -504,8 +520,18 @@ void glow_coverage(const Coverage& src, int grow, Coverage& out, int hole, int r
         int r = reach > 0 ? (reach + 2 - k) / 3 : std::max(1, grow / 3);
         if (r <= 0)
             continue;
-        pass(a, b, r, w, h, 1, (size_t)w);
-        pass(b, a, r, h, w, (size_t)w, 1);
+        int n = 2 * r + 1;
+        BoxDiv q = box_div(n);
+        auto both = [&](auto quot) {
+            pass(a, b, r, w, h, 1, (size_t)w, quot);
+            pass(b, a, r, h, w, (size_t)w, 1, quot);
+        };
+        if (q.m) {
+            both([q](uint32_t v) { return v * q.m >> q.s; });
+            div_passes.fetch_add(2, std::memory_order_relaxed);
+        } else {
+            both([n](uint32_t v) { return v / (uint32_t)n; });
+        }
     }
     int64_t cut = (int64_t)4 * hole * hole;
     for (int y = 0; y < h; y++)
@@ -520,25 +546,59 @@ void dilate_coverage(const Coverage& src, int r, Coverage& out)
     out = src;
     if (src.w <= 0 || src.h <= 0 || r <= 0)
         return;
-    int w = src.w, h = src.h;
-    std::vector<uint8_t> a((size_t)w * h), b((size_t)w * h);
+    int w = src.w, h = src.h, k = 2 * r + 1, lw = w + 2 * r, lh = h + 2 * r;
+    std::vector<uint8_t> a((size_t)w * h), b((size_t)w * h), line((size_t)lw, 0);
+    uint8_t* p = line.data();
     for (int y = 0; y < h; y++)
         for (int x = 0; x < w; x++)
             a[(size_t)y * w + x] = src.rot[src.index(x, y)];
-    for (int y = 0; y < h; y++)
-        for (int x = 0; x < w; x++) {
+    for (int y = 0; y < h; y++) {
+        uint8_t* d = &b[(size_t)y * w];
+        std::copy_n(&a[(size_t)y * w], w, p + r);
+        for (int b0 = (w - 1) / k * k; b0 >= 0; b0 -= k) {
             uint8_t m = 0;
-            for (int i = std::max(0, x - r); i <= std::min(w - 1, x + r); i++)
-                m = std::max(m, a[(size_t)y * w + i]);
-            b[(size_t)y * w + x] = m;
+            for (int j = std::min(lw, b0 + k) - 1; j >= b0; j--) {
+                m = std::max(m, p[j]);
+                if (j < w)
+                    d[j] = m;
+            }
         }
-    for (int y = 0; y < h; y++)
-        for (int x = 0; x < w; x++) {
+        for (int b0 = 0; b0 < lw; b0 += k) {
             uint8_t m = 0;
-            for (int i = std::max(0, y - r); i <= std::min(h - 1, y + r); i++)
-                m = std::max(m, b[(size_t)i * w + x]);
-            store(out, x, y, m);
+            for (int j = b0; j < std::min(lw, b0 + k); j++) {
+                m = std::max(m, p[j]);
+                if (j >= 2 * r)
+                    d[j - 2 * r] = std::max(d[j - 2 * r], m);
+            }
         }
+    }
+    auto take = [&](int j) {
+        int y = j - r;
+        if (y < 0 || y >= h)
+            return;
+        const uint8_t* s = &b[(size_t)y * w];
+        for (int x = 0; x < w; x++)
+            p[x] = std::max(p[x], s[x]);
+    };
+    for (int b0 = (h - 1) / k * k; b0 >= 0; b0 -= k) {
+        std::fill_n(p, w, 0);
+        for (int j = std::min(lh, b0 + k) - 1; j >= b0; j--) {
+            take(j);
+            if (j < h)
+                std::copy_n(p, w, &a[(size_t)j * w]);
+        }
+    }
+    for (int b0 = 0; b0 < lh; b0 += k) {
+        std::fill_n(p, w, 0);
+        for (int j = b0; j < std::min(lh, b0 + k); j++) {
+            take(j);
+            if (j < 2 * r)
+                continue;
+            const uint8_t* s = &a[(size_t)(j - 2 * r) * w];
+            for (int x = 0; x < w; x++)
+                store(out, x, j - 2 * r, std::max(s[x], p[x]));
+        }
+    }
 }
 
 void scale_coverage(const Coverage& src, int px, Coverage& out)
@@ -573,6 +633,22 @@ void scale_coverage(const Coverage& src, int px, Coverage& out)
             int64_t bot = (int64_t)at(x0, y0 + 1) * (65536 - fx) + (int64_t)at(x0 + 1, y0 + 1) * fx;
             store(out, x, y, (int)((top * (65536 - fy) + bot * fy) >> 32));
         }
+    }
+}
+
+void expand_coverage(const Coverage& src, int w, int h, Coverage& out)
+{
+    out.w = w;
+    out.h = h;
+    out.rot.resize((size_t)w * h);
+    const uint8_t* s = src.rot.data();
+    uint8_t* d = out.rot.data();
+    int sw = src.w, sh = src.h, dx = w - sw, dy = h - sh;
+    auto from = [](int v, int n, int grow) { return v < n / 2 ? v : v < n / 2 + grow ? n / 2 : v - grow; };
+    for (int y = 0; y < h; y++) {
+        int sy = from(y, sh, dy);
+        for (int x = 0; x < w; x++)
+            d[LiveL::index(w, h, x, y)] = s[LiveL::index(sw, sh, from(x, sw, dx), sy)];
     }
 }
 
@@ -622,11 +698,54 @@ const Coverage& GlyphCache::ring(int px, int stroke_px, fx scale)
     return cv;
 }
 
+const Coverage& GlyphCache::halo(int px, int stroke_px, int grow, int spread)
+{
+    std::string k = "halo:" + std::to_string(px) + ":" + std::to_string(stroke_px) + ":" + std::to_string(grow);
+    if (spread > 0)
+        k += ":p" + std::to_string(spread);
+    auto it = map_.find(k);
+    if (it != map_.end())
+        return it->second;
+    const Coverage& src = ring(px + 2 * spread, stroke_px + 2 * spread);
+    Coverage& cv = map_[k];
+    glow_coverage(src, grow, cv, px / 2);
+    misses_++;
+    bytes_ += cv.rot.size();
+    return cv;
+}
+
+const Coverage& GlyphCache::glow(const char* name, int px, int dilate, int grow)
+{
+    std::string k = "glow:" + std::string(name) + ":" + std::to_string(px) + ":" + std::to_string(dilate) + ":" +
+                    std::to_string(grow);
+    auto it = map_.find(k);
+    if (it != map_.end())
+        return it->second;
+    const Coverage& src = glyph(name, px);
+    Coverage pad, d;
+    pad.w = src.w + 2 * dilate;
+    pad.h = src.h + 2 * dilate;
+    pad.rot.assign((size_t)std::max(0, pad.w) * std::max(0, pad.h), 0);
+    for (int y = 0; y < src.h; y++)
+        for (int x = 0; x < src.w; x++)
+            pad.rot[pad.index(x + dilate, y + dilate)] = src.rot[src.index(x, y)];
+    dilate_coverage(pad, dilate, d);
+    Coverage& cv = map_[k];
+    glow_coverage(d, grow, cv);
+    misses_++;
+    bytes_ += cv.rot.size();
+    return cv;
+}
+
 bool GlyphCache::warm(const Icon& i)
 {
     size_t m = misses_;
-    if (i.glyph)
+    if (i.glyph && i.halo)
+        glow(i.glyph, i.px, i.stroke, i.halo);
+    else if (i.glyph)
         glyph(i.glyph, i.px, i.scale);
+    else if (i.halo)
+        halo(i.px, i.stroke, i.halo, i.spread);
     else
         ring(i.px, i.stroke, i.scale);
     return misses_ != m;

@@ -110,7 +110,6 @@ class Syntax : AutoCloseable {
         text: String,
         allowed: Set<Pair<String, String>>,
         used: MutableSet<Pair<String, String>> = HashSet(),
-        shadowed: Set<String> = emptySet(),
         bridge: BridgeRule = BridgeRule.NONE,
         only: Boolean = false,
     ): List<Finding> {
@@ -140,6 +139,7 @@ class Syntax : AutoCloseable {
             when (s) {
                 Side.Old -> if (n !in bridge.old) flag(e, if (n in bridge.new) "Old.$n is ported: read Tok.$n" else "Old.$n has no old line in a bridge file")
                 Side.Tok -> if (n in bridge.old) flag(e, "Tok.$n is bridged: read Old.$n") else if (bridge.unlisted(n)) flag(e, "Tok.$n is changed and no bridge file lists it")
+                Side.Other -> if (n in bridge.old) flag(e, ".$n is bridged: read Old.$n") else if (bridge.unlisted(n)) flag(e, ".$n is changed and no bridge file lists it")
                 null -> {}
             }
         }
@@ -157,7 +157,6 @@ class Syntax : AutoCloseable {
                 val star = d.isAllUnder && segs.last() == "Color"
                 val alias = d.aliasName != null && segs.last() == "Color"
                 if (named || star || alias) allow(d, "import", fq, "Color import $fq")
-                if (segs.size >= 2 && segs[segs.size - 2] == "Tok" && segs.last() in shadowed) add(d, "Tok.${segs.last()} is shadowed by Rel")
                 if (segs.size >= 2) bridged(d, ownerSide(segs[segs.size - 2]), segs.last())
                 if (fq.startsWith("${Gen.pkg}.")) genImport(d, fq.removePrefix("${Gen.pkg}.").split('.'))
                 val tokAs = d.aliasName
@@ -197,8 +196,7 @@ class Syntax : AutoCloseable {
                     is KtNameReferenceExpression -> {
                         val n = sel.getReferencedName()
                         if (n == "dp" || n == "sp") add(e, ".$n")
-                        if (n in shadowed && last(e.receiverExpression) in toks) add(e, "Tok.$n is shadowed by Rel")
-                        bridged(e, side(e.receiverExpression), n)
+                        bridged(e, side(e.receiverExpression) ?: Side.Other, n)
                         if (colorReceiver(e.receiverExpression) && n.first().isUpperCase()) add(e, "Color.$n")
                         if (last(e.receiverExpression) == "Spring" && n.first().isUpperCase()) add(e, "Spring.$n")
                         if (last(e.receiverExpression) == "TextUnitType" && (n == "Sp" || n == "Em"))
@@ -215,7 +213,6 @@ class Syntax : AutoCloseable {
             override fun visitSimpleNameExpression(e: KtSimpleNameExpression) {
                 val n = e.getReferencedName()
                 if ((n in banned || easing.matches(n)) && !header(e)) add(e, n)
-                if (n in shadowed && e is KtNameReferenceExpression && !header(e)) bare(e, n)
                 if (e is KtNameReferenceExpression && !header(e)) bareBridged(e, n)
                 if (e is KtNameReferenceExpression && !header(e) && (n in olds || n in oldBoards)) oldRef(e, n)
                 super.visitSimpleNameExpression(e)
@@ -243,21 +240,10 @@ class Syntax : AutoCloseable {
                 val ref = e.parent as? KtCallableReferenceExpression
                 if (ref != null && ref.callableReference == e) {
                     val r = ref.receiverExpression
-                    if (r != null) bridged(e, side(r), n) else if (loose) flag(e, "::$n reads a bridged token unqualified")
+                    if (r != null) bridged(e, side(r) ?: Side.Other, n) else if (loose) flag(e, "::$n reads a bridged token unqualified")
                     return
                 }
                 if (loose) flag(e, "$n is a bridged token read unqualified")
-            }
-
-            private fun bare(e: KtNameReferenceExpression, n: String) {
-                if ((e.parent as? KtQualifiedExpression)?.selectorExpression == e) return
-                val ref = e.parent as? KtCallableReferenceExpression
-                if (ref != null && ref.callableReference == e) {
-                    val r = ref.receiverExpression
-                    if (r == null || last(r) in toks) add(e, "Tok::$n is shadowed by Rel")
-                    return
-                }
-                add(e, "$n is shadowed by Rel")
             }
 
             override fun visitCallExpression(e: KtCallExpression) {
@@ -334,7 +320,7 @@ class Syntax : AutoCloseable {
         private val colorTok = setOf("Tok", "TokBoard", "Old", "OldBoard")
         private val boardNames = Gen.boards.map { it.first }.toSet()
 
-        private enum class Side { Tok, Old }
+        private enum class Side { Tok, Old, Other }
 
         private fun ownerSide(owner: String) = when (owner) {
             "Tok" -> Side.Tok
@@ -379,7 +365,6 @@ class Syntax : AutoCloseable {
             root: File,
             files: List<File>,
             literals: Literals,
-            shadowed: Set<String> = emptySet(),
             bridge: BridgeRule = BridgeRule.NONE,
             tests: List<File> = emptyList(),
         ): List<Finding> {
@@ -390,7 +375,7 @@ class Syntax : AutoCloseable {
                 val main = files.sortedBy { it.path }.flatMap { f ->
                     val rel = f.relativeTo(root).invariantSeparatorsPath
                     val used = HashSet<Pair<String, String>>()
-                    val got = s.scan(rel, f.readText(), literals.allowed(rel), used, shadowed, bridge)
+                    val got = s.scan(rel, f.readText(), literals.allowed(rel), used, bridge)
                     val unused = literals.allowed(rel) - used
                     if (unused.isNotEmpty()) throw GenException("checkSyntax: kit/literals.txt entries for $rel match no site: $unused")
                     got

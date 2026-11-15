@@ -11,3 +11,4 @@ FB-lit-7 pending icons and software covers share 1/16 of the memory class, provi
 FB-lit-8 pending a low RAM device gives icons and covers 1/32 of the memory class, provisional
 FB-lit-9 pending the T7 pane scales about its vertical centre, cited at the funeOS seed set, the v0.4.2 T7 differs
 FB-lit-10 pending the T7 pane scale floor of one 16.16 step, cited at the funeOS seed set, the v0.4.2 T7 differs
+FB-lit-11 pending the platform letter spacing at the glyph ends is probed per typeface by the kit, not read from funeOS

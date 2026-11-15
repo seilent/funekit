@@ -41,12 +41,12 @@ kit/src/main/kotlin/net/seilent/funekit/kit/Status.kt HALF 2 fos player/ui/rows.
 kit/src/main/kotlin/net/seilent/funekit/kit/scrub/Scrub.kt HALF 2f FB FB-scrub the scrub zone is centered on the edge band height
 kit/src/main/kotlin/net/seilent/funekit/kit/Text.kt WHITE 0xFFFFFFFFL fos player/ui/roles.h:125 foreground white, funeOS ui/roles.h kWhite (text, glyphs, rings and the ACCENT OFF accent)
 kit/src/main/kotlin/net/seilent/funekit/kit/Accent.kt HALF 2 fos player/ui/accent.cpp:22 a hue rounds to the nearest grid step (funeOS ui/accent.cpp hue_on_grid kStep / 2)
-kit/src/main/kotlin/net/seilent/funekit/kit/Status.kt SKIN 9 fos player/ui/rows.cpp:1057 battery outline stroke 2/9 and nub 1/9 of its height (funeOS ui/rows.cpp draw_status)
+kit/src/main/kotlin/net/seilent/funekit/kit/Status.kt SKIN 9 fos player/ui/rows.cpp:1069 battery outline stroke 2/9 and nub 1/9 of its height (funeOS ui/rows.cpp draw_status)
 kit/src/main/kotlin/net/seilent/funekit/kit/Status.kt THIRD 3 FB FB-lit-3 battery nub height 1/3 of its height (funeOS ui/rows.cpp draw_status)
-kit/src/main/kotlin/net/seilent/funekit/kit/Status.kt LEVEL_X 18 fos player/ui/rows.cpp:1071 battery level inset (iw + 9) / 18 (funeOS ui/rows.cpp draw_status)
-kit/src/main/kotlin/net/seilent/funekit/kit/Status.kt LEVEL_Y 10 fos player/ui/rows.cpp:1071 battery level inset (ih + 5) / 10 (funeOS ui/rows.cpp draw_status)
-kit/src/main/kotlin/net/seilent/funekit/kit/Status.kt ROUND_X 9 fos player/ui/rows.cpp:1071 battery level inset (iw + 9) / 18 (funeOS ui/rows.cpp draw_status)
-kit/src/main/kotlin/net/seilent/funekit/kit/Status.kt ROUND_Y 5 fos player/ui/rows.cpp:1071 battery level inset (ih + 5) / 10 (funeOS ui/rows.cpp draw_status)
+kit/src/main/kotlin/net/seilent/funekit/kit/Status.kt LEVEL_X 18 fos player/ui/rows.cpp:1083 battery level inset (iw + 9) / 18 (funeOS ui/rows.cpp draw_status)
+kit/src/main/kotlin/net/seilent/funekit/kit/Status.kt LEVEL_Y 10 fos player/ui/rows.cpp:1083 battery level inset (ih + 5) / 10 (funeOS ui/rows.cpp draw_status)
+kit/src/main/kotlin/net/seilent/funekit/kit/Status.kt ROUND_X 9 fos player/ui/rows.cpp:1083 battery level inset (iw + 9) / 18 (funeOS ui/rows.cpp draw_status)
+kit/src/main/kotlin/net/seilent/funekit/kit/Status.kt ROUND_Y 5 fos player/ui/rows.cpp:1083 battery level inset (ih + 5) / 10 (funeOS ui/rows.cpp draw_status)
 kit/src/main/kotlin/net/seilent/funekit/kit/motion/Motion.kt LOG_STEPS 10f fos player/ui/app.cpp:14097 a dialog closed while opening hides over hide - round(-hide / 10 x log2(o)) ms (funeOS ui/app.cpp close_overlay)
 kit/src/main/kotlin/net/seilent/funekit/kit/motion/PageMove.kt TAIL 17 fos player/ui/pagemove.cpp:22 one frame: the leaving page holds one frame short of its end while the content is held, and a release lands it one frame after the shown time (funeOS ui/pagemove.cpp kTail)
 kit/src/main/kotlin/net/seilent/funekit/kit/motion/PageMove.kt SLIDE_OUT 300 FB FB-slide the T2w home half: home slides out and fades over 0:0:0.3, then the page comes in (Windows Phone toolkit Transitions/Storyboards/SlideLeftFadeOut.xaml:11-26 KeyTime 0:0:0.3)
@@ -72,7 +72,7 @@ kit/src/main/kotlin/net/seilent/funekit/kit/Ground.kt OPAQUE 0xFF000000L platfor
 kit/src/main/kotlin/net/seilent/funekit/kit/Menu.kt PAIR 2 fos player/ui/overlay.cpp:254 two edges around the sheet panel, an item centred in its row and at least two choices to wrap (funeOS ui/overlay.cpp,,)
 kit/src/main/kotlin/net/seilent/funekit/kit/Menu.kt GROW 2 fos player/ui/overlay.cpp:390 the focused swatch's border is drawn on the square grown by twice the border width (funeOS ui/overlay.cpp sq.grow(2 * b))
 kit/src/main/kotlin/net/seilent/funekit/kit/MenuLayer.kt HALF 2f FB FB-lit-4 a dialog scales about the screen centre (funeOS ui/app.cpp coverage_scaled at kPortraitW / 2, kPortraitH / 2)
-kit/src/main/kotlin/net/seilent/funekit/kit/Words.kt HALF 2f fos player/gfx/font.cpp:1256 a tracked glyph wider than its untracked self by at least half the spacing means the platform spaces at the glyph ends (older Minikin, half before the first glyph), else only between glyphs (sdk 35); funeOS gfx/font.cpp starts the first glyph at the pen
+kit/src/main/kotlin/net/seilent/funekit/kit/Words.kt HALF 2f FB FB-lit-11 a tracked glyph wider than its untracked self by at least half the spacing means the platform spaces at the glyph ends (older Minikin, half before the first glyph), else only between glyphs (sdk 35), probed by the kit on the host
 kit/src/main/kotlin/net/seilent/funekit/kit/Words.kt ALM 0x061C fos player/gfx/bidi.cpp:49-54 U+061C ARABIC LETTER MARK (funeOS gfx/bidi.cpp bidi_ignorable, the code points gfx/font.cpp width64 skips with no advance and no tracking)
 kit/src/main/kotlin/net/seilent/funekit/kit/Words.kt CGJ 0x034F fos player/gfx/bidi.cpp:49-54 U+034F COMBINING GRAPHEME JOINER (funeOS gfx/bidi.cpp bidi_ignorable, the code points gfx/font.cpp width64 skips with no advance and no tracking)
 kit/src/main/kotlin/net/seilent/funekit/kit/Words.kt BOM 0xFEFF fos player/gfx/bidi.cpp:49-54 U+FEFF ZERO WIDTH NO-BREAK SPACE (funeOS gfx/bidi.cpp bidi_ignorable, the code points gfx/font.cpp width64 skips with no advance and no tracking)

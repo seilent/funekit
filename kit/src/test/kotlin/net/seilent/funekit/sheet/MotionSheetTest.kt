@@ -587,7 +587,7 @@ class MotionSheetTest {
         private const val WATERMARK = "fune"
         private const val POWER = "power"
         private val POWER_ITEMS = listOf("screen off", "power off")
-        private const val T2_HYBRID = "the rows zoom in as one layer as the funeOS release head draws them, at the A105 board's step alpha, a form neither funeOS build draws"
+        private const val T2_HYBRID = "the rows zoom in as one layer as funeOS v0.4.2 draws them, at the step alpha of the seed set's A105 board (the bridge until the page move port)"
         private const val T4_LEAVE = "funeOS t4 leaves the artist page of the first artist; the kit has no artist page, so this case leaves the bluetooth page"
         private const val T5_GRID = "funeOS t5 leaves the ALBUMS grid; the kit has no grid page, so the songs rows stand in"
         private const val MOVE_QUIET = "page moves and pivot switches draw funeOS content the kit has no page or part for (the ALBUMS grid, the artist page, the artist row thumb strips)"

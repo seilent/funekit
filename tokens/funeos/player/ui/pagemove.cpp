@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstring>
 
+#include "glroles.h"
 #include "tokens.h"
 
 namespace fd {
@@ -34,6 +35,15 @@ constexpr Key kT2Base[] = {{0, 0},           {17, F(0.158)},  {33, F(0.172)},  {
                            {167, F(0.553)},  {183, F(0.597)}, {200, F(0.640)}, {233, F(0.726)}, {267, F(0.800)},
                            {300, F(0.868)},  {333, F(0.922)}, {367, F(0.963)}, {383, F(0.978)}, {400, F(0.989)},
                            {417, F(0.997)},  {434, F(1.0)}};
+constexpr Key kT2Face[] = {{0, F(1.0)}, {17, 0}};
+constexpr Key kT2PivS[] = {{233, F(0.48)},  {250, F(0.556)}, {267, F(0.627)}, {283, F(0.69)},  {300, F(0.754)},
+                           {317, F(0.805)}, {333, F(0.849)}, {367, F(0.891)}, {383, F(0.93)},  {400, F(0.955)},
+                           {417, F(0.98)},  {434, F(0.994)}, {450, F(1.0)}};
+constexpr Key kT2PivA[] = {{233, F(0.10)},  {250, F(0.18)},  {267, F(0.29)},  {283, F(0.40)}, {300, F(0.54)},
+                           {317, F(0.61)},  {333, F(0.68)},  {367, F(0.76)},  {383, F(0.79)}, {400, F(0.85)},
+                           {434, F(0.87)},  {450, F(0.96)},  {467, F(0.99)},  {483, F(1.0)}};
+constexpr Key kT2PivX[] = {{233, F(-33.5)}, {250, F(-22.6)}, {267, F(-14.4)}, {283, F(-8.6)},
+                           {300, F(-3.9)},  {317, F(-1.3)},  {333, F(-0.3)},  {367, 0}};
 
 constexpr Key kT4hScale[] = {{17, F(0.93)},   {50, F(0.87)},   {67, F(0.84)},  {83, F(0.79)},
                              {117, F(0.62)},  {150, F(0.53)},  {167, F(0.47)}, {183, F(0.43)},
@@ -42,12 +52,13 @@ constexpr int kT4hScaleEnd = 300;
 constexpr Key kT4hBase[] = {{0, 0},          {67, F(0.46)},  {100, F(0.58)}, {133, F(0.73)},
                             {167, F(0.85)},  {183, F(0.87)}, {200, F(0.90)}, {217, F(0.93)},
                             {233, F(0.96)},  {250, F(0.98)}, {300, F(1.0)}};
-constexpr Key kT4hPitch[] = {{0, F(0.975)}, {17, F(0.94)}, {50, F(0.928)}, {67, F(0.912)}, {83, F(0.90)},
-                             {100, F(0.885)}};
 constexpr Key kT4hDx[] = {{0, F(2.6)},  {17, F(5.3)}, {33, F(6.0)},  {50, F(6.6)},
                           {67, F(8.6)}, {83, F(9.9)}, {100, F(11.2)}};
+constexpr Key kT4hFace[] = {{200, 0}, {283, F(1.0)}};
 
 constexpr int kT3RowWordIn = 100, kT3RowWordEnd = 434;
+constexpr Key kT3RowWordA[] = {{0, F(0.72)},   {17, F(0.87)},  {67, F(0.93)},  {133, F(0.93)},
+                               {167, F(0.99)}, {200, F(1.03)}, {267, F(1.04)}, {283, F(1.0)}};
 constexpr fx kT3RowWordDrop = F(46.4);
 constexpr Key kT3RowScale[] = {{17, F(0.235)},  {33, F(0.28)},   {50, F(0.325)},  {67, F(0.36)},   {83, F(0.405)},
                                {100, F(0.445)}, {117, F(0.49)},  {133, F(0.535)}, {150, F(0.575)}, {167, F(0.615)},
@@ -57,6 +68,12 @@ constexpr Key kT3RowScale[] = {{17, F(0.235)},  {33, F(0.28)},   {50, F(0.325)},
 constexpr Key kT3RowBase[] = {{100, 0},          {117, F(0.117)}, {133, F(0.213)}, {150, F(0.311)}, {167, F(0.391)},
                               {183, F(0.471)},   {200, F(0.542)}, {233, F(0.668)}, {267, F(0.775)}, {300, F(0.853)},
                               {333, F(0.919)},   {350, F(0.944)}, {367, F(0.966)}, {400, F(0.989)}, {434, F(1.0)}};
+constexpr Key kT3Rows[] = {{0, F(0.79)},    {17, F(0.796)},  {33, F(0.805)},  {50, F(0.817)},  {67, F(0.827)},
+                           {83, F(0.834)},  {100, F(0.855)}, {117, F(0.869)}, {133, F(0.88)},  {150, F(0.889)},
+                           {167, F(0.903)}, {183, F(0.914)}, {200, F(0.924)}, {217, F(0.932)}, {233, F(0.939)},
+                           {250, F(0.948)}, {267, F(0.959)}, {283, F(0.967)}, {300, F(0.972)}, {317, F(0.98)},
+                           {333, F(0.986)}, {350, F(0.99)},  {367, F(0.992)}, {383, F(0.996)}, {400, F(0.998)},
+                           {417, F(1.0)}};
 constexpr Key kT3OldHeader[] = {{0, F(1.0)}, {17, F(1.10)}, {33, F(1.13)}, {50, F(1.215)}, {67, F(1.31)}};
 constexpr fx kT3OldHeaderX = F(0.4), kT3OldRise = F(-55.8);
 constexpr int kT3OldOut = 83;
@@ -74,11 +91,19 @@ constexpr Key kT3PivRow[] = {{267, F(0.63)},  {283, F(0.68)},  {300, F(0.75)},  
 constexpr int kT3PivRowIn = 267, kT3PivRowLand = 400, kT3PivContent = 400;
 constexpr fx kT3PivRowA0 = F(0.20), kT3PivRowX = F(0.59), kT3PivRowY = F(0.46);
 
-constexpr Key kT4RowDy[] = {{0, F(7.9)},   {33, F(21.8)}, {50, F(27.8)}, {67, F(33.7)},
-                            {83, F(39.0)}, {100, F(43.7)}, {117, F(47.6)}};
-constexpr Key kT4RowPitch[] = {{0, F(0.961)},  {33, F(0.942)}, {50, F(0.930)}, {67, F(0.914)},
-                               {83, F(0.903)}, {100, F(0.891)}, {117, F(0.883)}};
 constexpr Key kT4RowDx[] = {{0, F(3.3)}, {33, F(7.9)}, {67, F(11.2)}, {100, F(13.9)}};
+
+template <int N> constexpr bool same_times(const Key (&p)[N], const Key (&d)[N])
+{
+    for (int i = 0; i < N; i++)
+        if (p[i].t != d[i].t)
+            return false;
+    return true;
+}
+
+static_assert(kT4RowPitch[0].v == kPopPitch0 && kT4RowDy[0].v == kPopDrop0 && same_times(kT4RowPitch, kT4RowDy),
+              "the row pop's first keys are kPopPitch0 and kPopDrop0, and its pitch and drop keys share their times");
+
 constexpr Key kT4RowA[] = {{0, F(1.0)},   {33, F(0.91)},  {50, F(0.75)},  {67, F(0.61)},
                            {83, F(0.50)},  {100, F(0.39)}, {117, F(0.27)}, {133, F(0.15)},
                            {150, F(0.09)}, {167, F(0.03)}, {183, 0}};
@@ -86,6 +111,8 @@ constexpr Key kT4RowWord[] = {{67, F(6.3)},   {83, F(5.5)},   {100, F(4.7)},  {1
                               {150, F(2.8)},  {167, F(2.36)}, {183, F(2.03)}, {200, F(1.73)}, {217, F(1.50)},
                               {233, F(1.31)}, {250, F(1.19)}, {267, F(1.09)}, {283, F(1.03)}, {300, F(1.0)}};
 constexpr int kT4RowWordOut = 316;
+constexpr Key kT4RowWordA[] = {{0, F(0.51)},  {17, F(0.42)},  {33, F(0.40)}, {50, F(0.36)},
+                               {200, F(0.33)}, {233, F(0.26)}, {300, F(0.25)}};
 constexpr Key kT4RowZoom[] = {{200, F(1.18)},  {217, F(1.115)}, {233, F(1.088)},
                               {250, F(1.04)},  {267, F(1.007)}, {283, F(1.0)}};
 constexpr Key kT4RowZoomA[] = {{200, 0},         {217, F(0.04)}, {233, F(0.19)},
@@ -115,11 +142,6 @@ constexpr Key kT4PivRows[] = {{333, F(0.16)}, {350, F(0.30)}, {367, F(0.41)}, {3
 
 constexpr int kT3aIn = 83, kT3aLand = 450;
 constexpr fx kT3aRide = F(0.85);
-constexpr Key kT4aZoom[] = {{150, F(1.35)}, {200, F(1.16)}, {233, F(1.07)}, {267, F(1.01)}, {283, F(1.0)}};
-constexpr Key kT4aZoomA[] = {{133, F(0.22)}, {150, F(0.53)}, {167, F(0.68)}, {183, F(0.77)},
-                             {200, F(0.82)}, {217, F(0.91)}, {233, F(1.0)}};
-constexpr fx kT4aZoomX = F(0.33);
-constexpr int kT4aHeader = 283;
 constexpr Key kT4aCut[] = {{267, 0}, {283, F(0.5)}, {300, F(1.0)}};
 
 constexpr Key kT3zScale[] = {{50, F(0.45)},   {100, F(0.53)},  {150, F(0.632)}, {200, F(0.729)},
@@ -137,7 +159,9 @@ constexpr Key kT4zCut[] = {{283, 0}, {300, F(0.5)}, {317, F(1.0)}};
 constexpr Key kT7PaneR[] = {{0, F(-2.96)}, {250, F(-68.29)}, {335, F(-85.93)}};
 constexpr Key kT7PaneX[] = {{0, 0}, {250, F(68.51)}, {326, F(84.7)}};
 constexpr Key kT7PanePX[] = {{0, F(-1.61)}, {250, F(-25.21)}, {293, F(-27.66)}};
-constexpr int kT7PaneFade = 245, kT7PaneGone = 336;
+constexpr int kT7PaneFade = 245, kT7PaneGone = 336, kT7InkLead = 17;
+constexpr Key kT7DetailHeadA[] = {{0, F(0.97)},  {17, F(0.95)}, {33, F(0.88)}, {50, F(0.85)},
+                                  {67, F(0.78)}, {83, F(0.54)}, {100, 0}};
 constexpr Key kT7PeekX[] = {{0, 0},          {17, F(7.2)},   {33, F(19.8)},  {50, F(25.0)},  {67, F(29.6)},
                             {83, F(33.6)},   {100, F(35.6)}, {117, F(37.0)}, {150, F(34.3)}, {167, F(33.0)},
                             {183, F(29.6)},  {200, F(23.7)}, {217, F(15.8)}, {234, F(6.6)},  {284, F(-4.6)}};
@@ -147,13 +171,10 @@ constexpr Key kT7PeekY[] = {{0, 0},           {17, F(-0.7)},   {33, F(-2.6)},   
 constexpr Key kT7PeekR[] = {{167, 0},        {183, F(25.84)}, {200, F(25.84)},
                             {217, F(36.87)}, {234, F(45.57)}, {284, F(53.13)}};
 constexpr Key kT7PeekA[] = {{0, F(1.0)}, {17, F(0.5)}, {284, F(0.5)}, {317, 0}};
-constexpr Key kT7Music[] = {{0, 0},          {17, F(-2.0)},   {33, F(-2.9)},   {50, F(-5.3)},   {67, F(-9.3)},
-                            {83, F(-14.8)},  {100, F(-21.1)}, {117, F(-33.3)}, {133, F(-39.3)}, {150, F(-46.6)},
-                            {167, F(-59.4)}, {183, F(-68.5)}, {200, F(-77.4)}};
 constexpr Key kT7RingX[] = {{0, F(-15)},    {67, F(17.4)},  {100, F(23.2)}, {117, F(26.1)}, {134, F(28.0)},
                             {150, F(28.2)}, {167, F(27.7)}, {184, F(26.4)}, {200, F(23.5)}, {217, F(20.1)},
                             {234, F(17.6)}, {250, F(14.1)}, {267, F(11.2)}, {284, F(8.4)},  {300, F(6.2)},
-                            {317, F(4.3)},  {334, F(2.8)},  {351, F(1.4)},  {367, F(0.6)}};
+                            {317, F(4.3)},  {334, F(2.8)},  {351, F(1.4)},  {367, F(0.6)},  {400, 0}};
 constexpr Key kT7RingY[] = {{0, F(21.5)},   {67, F(16.8)},  {100, F(14.9)}, {117, F(13.1)}, {134, F(11.3)},
                             {150, F(9.6)},  {167, F(7.8)},  {184, F(6.3)},  {200, F(5.0)},  {217, F(3.7)},
                             {234, F(2.8)},  {250, F(1.9)},  {267, F(1.3)},  {284, F(0.7)},  {317, F(0.4)},
@@ -199,6 +220,9 @@ constexpr Key kT8PeekR[] = {{0, F(60.0)}, {17, F(53.13)}, {33, F(45.57)}, {50, F
 constexpr Key kT8PeekA[] = {{0, F(0.26)}, {384, F(1.0)}};
 constexpr fx kT8HomeR = F(-65.6), kT8HomeX = F(-3.46), kT8HomeHinge = F(5.9);
 constexpr int kT8HomeTurn = 349, kT8HomeSlide = 138, kT8HomeFade = 50;
+
+constexpr fx kT4nInR = F(-67.2), kT4nInX = F(-4.3), kT4nInHinge = F(7.9), kT4nPeekX = F(45.9);
+constexpr int kT4nIn = 418, kT4nInSlide = 203, kT4nSubDelay = 60, kT4nSub = 75, kT4nPeek = 380;
 
 }
 
@@ -289,7 +313,7 @@ fx PageMove::value(Part p, Prop q, int64_t e) const
         e = std::min<int64_t>(e, (int64_t)f->delay - 1);
     } else if ((tied_ & part_bit(p)) && (held_ & kWordGroup)) {
         e = std::min<int64_t>(e, (int64_t)f->delay - 1);
-    } else if (p == Part::Leave && held(Part::Content)) {
+    } else if (p == Part::Leave && held(Part::Content) && !cut_) {
         const Leg* z = last(p, q);
         e = std::min<int64_t>(e, z->dur > kTail ? z->end() - kTail : (int64_t)z->delay - 1);
     }
@@ -340,6 +364,14 @@ void PageMove::erase(Part p, Prop q)
 void PageMove::clear(Part p)
 {
     legs_.erase(std::remove_if(legs_.begin(), legs_.end(), [&](const Leg& l) { return l.part == p; }), legs_.end());
+}
+
+void PageMove::land(Part p)
+{
+    for (int q = 0; q < (int)Prop::Count; q++)
+        if (const Leg* z = last(p, (Prop)q))
+            base_[(int)p][q] = z->to;
+    clear(p);
 }
 
 void PageMove::add(const Leg& l)
@@ -422,6 +454,7 @@ int PageMove::word_legs(WordLeg k, const MoveEnds& e, int delay)
             chain(Prop::S, e.word_s0, e.word_s1, kT2Scale, nkeys(kT2Scale), false, 0);
             ramp(Part::Word, Prop::X, e.word_x0, e.word_x1, delay + bd, bl, Curve::EaseOut);
             chain(Prop::Y, e.word_y0, e.word_y1, kT2Base, nkeys(kT2Base), true, -1);
+            keys(Part::Face, Prop::A, kT2Face, nkeys(kT2Face), Curve::Linear, delay);
         }
         step(Part::Word, Prop::A, kOne, 0, delay + end);
         return delay + end;
@@ -436,8 +469,9 @@ int PageMove::word_legs(WordLeg k, const MoveEnds& e, int delay)
             keys(Part::Word, Prop::S, ks.data(), (int)ks.size(), Curve::Linear, delay);
             ramp(Part::Word, Prop::X, e.word_x0, e.word_x1, delay, bl, Curve::PowOut15);
             chain(Prop::Y, e.word_y0, e.word_y1, kT4hBase, nkeys(kT4hBase), true, -1);
+            keys(Part::Face, Prop::A, kT4hFace, nkeys(kT4hFace), Curve::Linear, delay);
         }
-        step(Part::Word, Prop::A, kOne, 0, delay + ms(tok::motion_t4hSwap) + ms(tok::motion_t4hItems));
+        step(Part::Word, Prop::A, kOne, 0, delay + ms(tok::motion_t4hSwap));
         return delay + std::max(kT4hScaleEnd, bl);
     }
     case WordLeg::Push:
@@ -452,8 +486,8 @@ int PageMove::word_legs(WordLeg k, const MoveEnds& e, int delay)
                                lerp(mid, e.morph_y1, kT3RowBase[i + 1].v), delay + kT3RowBase[i].t,
                                kT3RowBase[i + 1].t - kT3RowBase[i].t, Curve::Linear});
             }
-            set(Part::Word, Prop::A, kOne);
-            step(Part::Word, Prop::A, kOne, 0, delay + kT3RowWordEnd);
+            keys(Part::Word, Prop::A, kT3RowWordA, nkeys(kT3RowWordA), Curve::Linear, delay);
+            append(Leg{Part::Word, Prop::A, kOne, 0, delay + kT3RowWordEnd, 0, Curve::Linear});
             return delay + kT3RowWordEnd;
         } else {
             int l = ms(tok::motion_morphPush);
@@ -490,8 +524,9 @@ int PageMove::word_legs(WordLeg k, const MoveEnds& e, int delay)
                     if (l)
                         l->curve = Curve::EaseOut;
             }
-            set(Part::Word, Prop::A, kOne);
-            step(Part::Word, Prop::A, kOne, 0, delay + kT4RowWordOut);
+            keys(Part::Word, Prop::A, kT4RowWordA, nkeys(kT4RowWordA), Curve::Linear, delay);
+            append(Leg{Part::Word, Prop::A, kT4RowWordA[nkeys(kT4RowWordA) - 1].v, 0, delay + kT4RowWordOut, 0,
+                       Curve::Linear});
             return delay + kT4RowWordOut;
         } else {
             int l = ms(tok::motion_morphPop);
@@ -515,16 +550,6 @@ int PageMove::word_legs(WordLeg k, const MoveEnds& e, int delay)
         word(t4md, l, t4md, l, t4md, l, Curve::CubicOut, Curve::CubicOut, Curve::CubicOut, t4md + l);
         return delay + t4md + l;
     }
-    case WordLeg::Hold: {
-        set(Part::Word, Prop::S, e.word_s0);
-        set(Part::Word, Prop::X, e.word_x0);
-        set(Part::Word, Prop::Y, e.word_y0);
-        set(Part::Word, Prop::A, kOne);
-        int end = std::max(end_, swap_);
-        for (const Leg& l : legs_)
-            end = std::max(end, (int)l.end());
-        return end;
-    }
     }
     return delay;
 }
@@ -538,7 +563,7 @@ void PageMove::rows_in(const MoveEnds& e, const MoveForms& f)
         step(Part::Content, Prop::A, 0, kOne, 0);
         step(Part::Leave, Prop::A, kOne, 0, 0);
     } else {
-        int rl = ms(tok::motion_rows);
+        int rl = ms(t2 ? tok::motion_rowsT2 : tok::motion_rows);
         ramp(Part::Content, Prop::S, tok::motion_rowsDy, kOne, 0, rl, Curve::PowOut15);
         ramp(Part::Content, Prop::X, e.rows_dx, 0, 0, rl, Curve::PowOut15);
         if (f.content == ContentForm::Step) {
@@ -549,7 +574,8 @@ void PageMove::rows_in(const MoveEnds& e, const MoveForms& f)
             append(Leg{Part::Content, Prop::A, tok::motion_rowsT2Alpha, kOne, ink, ms(tok::motion_rowsT2Fade),
                        Curve::Linear});
         } else {
-            ramp(Part::Content, Prop::A, 0, kOne, 0, ms(tok::motion_rowsT3Fade), Curve::SmoothStep);
+            ramp(Part::Content, Prop::A, 0, kOne, ms(tok::motion_rowsT3FadeDelay), ms(tok::motion_rowsT3Fade),
+                 Curve::SmoothStep);
         }
     }
     if (t2) {
@@ -592,17 +618,65 @@ void PageMove::pop_in(const MoveEnds& e, const MoveForms& f)
         set(Part::Content, Prop::S, kOne);
 }
 
-int PageMove::np_ink(NpForm form, const MoveForms& f)
+int PageMove::np_ink(NpLeave l)
 {
-    switch (form) {
-    case NpForm::Front:
+    switch (l) {
+    case NpLeave::Album:
+        return ms(tok::motion_t7AlbEnd) + ms(tok::motion_npDark);
+    case NpLeave::Detail:
+        return ms(tok::motion_t7DetailEnd) + ms(tok::motion_npDark);
+    default:
         return ms(tok::motion_t7PaneInk);
-    case NpForm::Ring:
-        return f.leave_fade ? ms(tok::motion_t7RingLeave) - ms(tok::motion_t7RingOverlap) : 0;
-    case NpForm::Page:
-        break;
     }
-    return ms(tok::motion_t7LeaveHeader) + ms(tok::motion_npDark);
+}
+
+void PageMove::album_leave(const MoveEnds& e)
+{
+    int in = ms(tok::motion_t7AlbSlideIn), end = ms(tok::motion_t7AlbSlide), fade = ms(tok::motion_t7AlbFade);
+    fx x0 = -fx_mul(tok::motion_t7AlbSlideInX, e.px_u), x1 = -fx_mul(tok::motion_t7AlbSlideX, e.px_u);
+    struct Band {
+        Part p;
+        int32_t gone;
+    };
+    const Band bands[] = {{Part::NpLArtist, tok::motion_t7AlbEnd},
+                          {Part::NpLRow1, tok::motion_t7AlbRow1Gone},
+                          {Part::NpLRows, tok::motion_t7AlbRowsGone}};
+    for (const Band& b : bands) {
+        ramp(b.p, Prop::X, 0, x0, 0, in, Curve::EaseIn);
+        append(Leg{b.p, Prop::X, x0, x1, in, end - in, Curve::Linear});
+        ramp(b.p, Prop::A, kOne, tok::motion_t7AlbFadeA, 0, fade, Curve::Linear);
+        append(Leg{b.p, Prop::A, tok::motion_t7AlbFadeA, 0, fade, ms(b.gone) - fade, Curve::Linear});
+    }
+}
+
+void PageMove::detail_leave(const MoveEnds& e)
+{
+    int dim = ms(tok::motion_t7DetailDim), half = (dim + 1) / 2;
+    fx step_x = -fx_mul(tok::motion_t7DetailStep, e.px_u);
+    struct Dim {
+        Part p;
+        fx a;
+    };
+    const Dim dims[] = {{Part::NpLPivot, tok::motion_t7Detail17Pivot}, {Part::NpLName, tok::motion_t7Detail17Name},
+                        {Part::NpLRing0, tok::motion_t7Detail17Ring0}, {Part::NpLRing1, tok::motion_t7Detail17Ring1},
+                        {Part::NpLRing2, tok::motion_t7Detail17Ring2}, {Part::NpLLabel, tok::motion_t7Detail17Label}};
+    for (const Dim& d : dims) {
+        ramp(d.p, Prop::A, kOne, d.a, 0, half, Curve::Linear);
+        append(Leg{d.p, Prop::A, d.a, 0, half, dim - half, Curve::Linear});
+    }
+    step(Part::NpLPress, Prop::A, kOne, 0, dim);
+    step(Part::NpLPivot, Prop::X, 0, step_x, 0);
+    step(Part::NpLName, Prop::X, 0, step_x, 0);
+    keys(Part::NpLHead, Prop::A, kT7DetailHeadA, nkeys(kT7DetailHeadA));
+    int last = kT7DetailHeadA[nkeys(kT7DetailHeadA) - 1].t;
+    fx v = fx_mul(tok::motion_t7DetailHeadV, e.px_u) / 1000;
+    ramp(Part::NpLHead, Prop::X, step_x, step_x - v * last, 0, last, Curve::Linear);
+    ramp(Part::NpLHead, Prop::Y, 0, -v * (last - half), half, last - half, Curve::Linear);
+}
+
+int PageMove::pop_anchor(MoveKind k, int top, int h)
+{
+    return k == MoveKind::T4 ? top : h - std_px(tok::motion_t4hRowsYa);
 }
 
 void PageMove::np_group(int ink, const MoveEnds& e)
@@ -624,7 +698,12 @@ void PageMove::np_group(int ink, const MoveEnds& e)
          Curve::ExpOut6);
     hold(Prop::PX, fx_mul(tok::motion_t7HingeFrom, e.px_u), 0, tok::motion_t7HingeHold,
          fx_mul(tok::motion_t7HingeTo, e.px_u), tok::motion_t7HingeLand, Curve::EaseIn);
-    ramp(Part::NpIn, Prop::A, 0, kOne, ink, fade, Curve::EaseOut);
+    fx lead = fd::curve(Curve::EaseOut, (fx)((int64_t)kT7InkLead * kOne / fade));
+    auto first = [&](Part p) {
+        step(p, Prop::A, 0, lead, ink);
+        append(Leg{p, Prop::A, lead, kOne, ink, fade - kT7InkLead, Curve::EaseOut});
+    };
+    first(Part::NpIn);
     struct Ramp {
         Part p;
         int32_t start, land;
@@ -648,7 +727,7 @@ void PageMove::np_group(int ink, const MoveEnds& e)
     keys(Part::NpRing, Prop::Y, k.data(), (int)k.size(), Curve::Linear, ink);
     keys(Part::NpRing, Prop::S, kT7RingS, nkeys(kT7RingS), Curve::Linear, ink);
     keys(Part::NpRing, Prop::R, kT7RingR, nkeys(kT7RingR), Curve::Linear, ink);
-    ramp(Part::NpRing, Prop::A, 0, kOne, ink, fade, Curve::EaseOut);
+    first(Part::NpRing);
     step(Part::NpPhoto, Prop::A, 0, kOne, ink + ms(tok::motion_t7Rest));
 }
 
@@ -709,7 +788,24 @@ void PageMove::t8_legs(const MoveEnds& e)
     }
 }
 
-void PageMove::np_legs(MoveKind k, const MoveEnds& e, const MoveForms& f)
+void PageMove::turn_legs(const MoveEnds& e)
+{
+    int in = kT4nOut + ms(tok::motion_npDark);
+    swap_ = kT4nOut;
+    ramp(Part::Leave, Prop::R, 0, tok::motion_t8OutAngle, ms(tok::motion_t8OutDelay), ms(tok::motion_t8Out),
+         Curve::PowIn15);
+    step(Part::Leave, Prop::A, kOne, 0, kT4nOut);
+    step(Part::LeaveGround, Prop::A, kOne, 0, 0);
+    ramp(Part::HomeTurn, Prop::R, kT4nInR, 0, in, kT4nIn, Curve::CubicOut);
+    ramp(Part::HomeTurn, Prop::X, fx_mul(kT4nInX, e.home_u), 0, in, kT4nInSlide, Curve::Linear);
+    set(Part::HomeTurn, Prop::PX, fx_mul(kT4nInHinge, e.home_u));
+    step(Part::HomeTurn, Prop::A, 0, kOne, in);
+    ramp(Part::Sub, Prop::A, 0, kOne, in + kT4nSubDelay, kT4nSub, Curve::Linear);
+    step(Part::Peek, Prop::A, 0, e.peek1, in);
+    ramp(Part::Peek, Prop::X, fx_mul(kT4nPeekX, e.home_u), 0, in, kT4nPeek, Curve::EaseOut);
+}
+
+void PageMove::np_legs(MoveKind k, const MoveEnds& e)
 {
     if (k == MoveKind::T8) {
         t8_legs(e);
@@ -721,49 +817,26 @@ void PageMove::np_legs(MoveKind k, const MoveEnds& e, const MoveForms& f)
             out.push_back({ks[i].t, fx_mul(ks[i].v, e.px_u)});
     };
     std::vector<Key> ks;
-    switch (e.np_form) {
-    case NpForm::Page:
-        if (f.leave_fade) {
-            ramp(Part::NpLeave, Prop::A, kOne, 0, 0, ms(tok::motion_t7Leave), Curve::Linear);
-            step(Part::NpLeaveHeader, Prop::A, kOne, 0, ms(tok::motion_t7LeaveHeader));
-        } else {
-            step(Part::NpLeave, Prop::A, kOne, 0, 0);
-            step(Part::NpLeaveHeader, Prop::A, kOne, 0, 0);
-        }
-        break;
-    case NpForm::Front:
-        keys(Part::NpLeave, Prop::R, kT7PaneR, nkeys(kT7PaneR));
-        px(kT7PaneX, nkeys(kT7PaneX), ks);
-        keys(Part::NpLeave, Prop::X, ks.data(), (int)ks.size());
-        px(kT7PanePX, nkeys(kT7PanePX), ks);
-        keys(Part::NpLeave, Prop::PX, ks.data(), (int)ks.size());
-        ramp(Part::NpLeave, Prop::A, kOne, 0, kT7PaneFade, kT7PaneGone - kT7PaneFade, Curve::EaseIn);
-        append(Leg{Part::NpLeave, Prop::A, 0, 0, ms(tok::motion_t7PaneEnd), 0, Curve::Linear});
+    if (e.np_leave == NpLeave::Album)
+        album_leave(e);
+    else if (e.np_leave == NpLeave::Detail)
+        detail_leave(e);
+    keys(Part::NpLeave, Prop::R, kT7PaneR, nkeys(kT7PaneR));
+    px(kT7PaneX, nkeys(kT7PaneX), ks);
+    keys(Part::NpLeave, Prop::X, ks.data(), (int)ks.size());
+    px(kT7PanePX, nkeys(kT7PanePX), ks);
+    keys(Part::NpLeave, Prop::PX, ks.data(), (int)ks.size());
+    ramp(Part::NpLeave, Prop::A, kOne, 0, kT7PaneFade, kT7PaneGone - kT7PaneFade, Curve::EaseIn);
+    append(Leg{Part::NpLeave, Prop::A, 0, 0, ms(tok::motion_t7PaneEnd), 0, Curve::Linear});
+    if (e.np_form == NpForm::Front) {
         px(kT7PeekX, nkeys(kT7PeekX), ks);
         keys(Part::NpPeek, Prop::X, ks.data(), (int)ks.size());
         px(kT7PeekY, nkeys(kT7PeekY), ks);
         keys(Part::NpPeek, Prop::Y, ks.data(), (int)ks.size());
         keys(Part::NpPeek, Prop::R, kT7PeekR, nkeys(kT7PeekR));
         keys(Part::NpPeek, Prop::A, kT7PeekA, nkeys(kT7PeekA));
-        break;
-    case NpForm::Ring:
-        if (f.leave_fade) {
-            int rl = ms(tok::motion_t7RingLeave);
-            px(kT7Music, nkeys(kT7Music), ks);
-            for (Part p : {Part::NpLeave, Part::NpMusic}) {
-                keys(p, Prop::X, ks.data(), (int)ks.size());
-                ramp(p, Prop::R, 0, kOne, 0, rl, Curve::EaseIn);
-                ramp(p, Prop::A, kOne, 0, 0, rl, Curve::Linear);
-            }
-            ramp(Part::NpPeek, Prop::A, kOne, 0, 0, rl, Curve::Linear);
-        } else {
-            step(Part::NpLeave, Prop::A, kOne, 0, 0);
-            step(Part::NpPeek, Prop::A, kOne, 0, 0);
-            step(Part::NpMusic, Prop::A, kOne, 0, 0);
-        }
-        break;
     }
-    int ink = np_ink(e.np_form, f);
+    int ink = np_ink(e.np_leave);
     if (e.np_cut) {
         for (Part p : {Part::NpIn, Part::NpRing, Part::NpArtist, Part::NpAlbum, Part::NpTitle, Part::NpRings,
                        Part::NpTimeR, Part::NpTimeL, Part::NpBar, Part::NpShuffle, Part::NpNext, Part::NpStatus,
@@ -790,7 +863,9 @@ void PageMove::page_in(const MoveEnds& e, const MoveForms& f)
     set(Part::Zoom, Prop::PY, e.zoom_y);
     if (e.pivots) {
         int pd = ms(tok::motion_pivotDelay), pl = ms(tok::motion_pivotIn), pf = ms(tok::motion_pivotFade);
-        if (f.chrome_slide) {
+        if (kind_ == MoveKind::T4m) {
+            keys(Part::Pivots, Prop::A, kT4PivPivots, nkeys(kT4PivPivots));
+        } else if (f.chrome_slide) {
             ramp(Part::Pivots, Prop::X, e.pivot_x, 0, pd, pl, Curve::EaseOut);
             ramp(Part::Pivots, Prop::Y, e.pivot_y, 0, pd, pl, Curve::EaseOut);
             ramp(Part::Pivots, Prop::A, 0, kOne, pd, pf, Curve::Linear);
@@ -833,6 +908,7 @@ void PageMove::tile_back(const MoveEnds& e)
 void PageMove::col_legs(const MoveEnds& e, const MoveForms& f)
 {
     swap_ = ms(tok::motion_swap);
+    cut_ = true;
     step(Part::Leave, Prop::A, kOne, 0, 0);
     if (f.leave_fade)
         ramp(Part::LeaveHeader, Prop::A, kOne, 0, 0, ms(tok::motion_leave), Curve::Linear);
@@ -892,9 +968,13 @@ void PageMove::art_legs(const MoveEnds& e, const MoveForms& f)
     }
     ride.push_back({kT3aLand, 0});
     keys(Part::Content, Prop::Y, ride.data(), (int)ride.size());
+    if (e.col_hold) {
+        step(Part::Header, Prop::A, 0, kOne, 0);
+        return;
+    }
     int word_end = kT3aLand;
     if (e.word)
-        word_end = word_end_ = word_legs(e.col_hold ? WordLeg::Hold : WordLeg::Grow, e);
+        word_end = word_end_ = word_legs(WordLeg::Grow, e);
     step(Part::Header, Prop::A, 0, kOne, word_end);
     tie(Part::Header);
 }
@@ -928,10 +1008,8 @@ void PageMove::art_back_legs(const MoveEnds& e, const MoveForms& f)
         set(Part::Content, Prop::S, kOne);
         set(Part::Pivots, Prop::A, kOne);
         set(Part::Ground, Prop::A, kOne);
-        if (e.zoom)
-            zoom_legs(e, kT4aZoom, nkeys(kT4aZoom), kT4aZoomA, nkeys(kT4aZoomA), kT4aZoomX, kT4aHeader);
-        else
-            step(Part::Header, Prop::A, 0, kOne, kT4aHeader);
+        step(Part::LeaveHeader, Prop::A, kOne, 0, 0);
+        step(Part::Header, Prop::A, 0, kOne, 0);
         return;
     }
     swap_ = ms(tok::motion_swap);
@@ -1004,6 +1082,7 @@ void PageMove::rows_out(const MoveEnds& e, bool home)
 
 void PageMove::row_push(const MoveEnds& e, const MoveForms& f)
 {
+    cut_ = true;
     step(Part::Leave, Prop::A, kOne, 0, 0);
     step(Part::LeavePivots, Prop::A, kOne, 0, 0);
     if (e.lhead) {
@@ -1023,6 +1102,13 @@ void PageMove::row_push(const MoveEnds& e, const MoveForms& f)
         set(Part::LeaveGround, Prop::A, kOne);
     word_end_ = word_legs(WordLeg::Push, e);
     page_in(e, f);
+    if (e.rows && f.content != ContentForm::Rest) {
+        std::vector<Key> k;
+        for (const Key& r : kT3Rows)
+            k.push_back({r.t, fx_mul(e.rows_dx, fx_div(kOne - r.v, kOne - tok::motion_rowsDy))});
+        keys(Part::Content, Prop::S, kT3Rows, nkeys(kT3Rows));
+        keys(Part::Content, Prop::X, k.data(), (int)k.size());
+    }
     step(Part::Header, Prop::A, 0, kOne, word_end_);
     tie(Part::Header);
 }
@@ -1085,7 +1171,11 @@ void PageMove::row_pop(const MoveEnds& e, const MoveForms& f)
     rows_out(e, false);
     if (f.leave_fade) {
         keys(Part::Leave, Prop::A, kT4RowA, nkeys(kT4RowA));
-        keys(Part::LeavePivots, Prop::A, kT4RowA, nkeys(kT4RowA));
+        if (f.chrome_slide) {
+            ramp(Part::LeavePivots, Prop::X, 0, fx_mul(kT4PivPivotsDx, e.px_u), 0, kT4PivPivotsMove, Curve::EaseOut);
+            ramp(Part::LeavePivots, Prop::Y, 0, fx_mul(kT4PivPivotsDy, e.px_u), 0, kT4PivPivotsMove, Curve::EaseOut);
+        }
+        keys(Part::LeavePivots, Prop::A, kT4PivPivotsA, nkeys(kT4PivPivotsA));
     } else {
         step(Part::Leave, Prop::A, kOne, 0, 0);
         step(Part::LeavePivots, Prop::A, kOne, 0, 0);
@@ -1152,6 +1242,7 @@ void PageMove::start(MoveKind k, int64_t t0, const MoveEnds& e, const MoveForms&
     serial_++;
     clock_ = false;
     first_ = INT64_MIN;
+    shift_ = 0;
     morph_ = f.word_morph;
     legs_.clear();
     offs_.clear();
@@ -1160,6 +1251,7 @@ void PageMove::start(MoveKind k, int64_t t0, const MoveEnds& e, const MoveForms&
             row[q] = q == (int)Prop::S ? kOne : 0;
     swap_ = end_ = word_end_ = 0;
     held_ = tied_ = 0;
+    cut_ = false;
     int leave = ms(tok::motion_leave);
     auto leave_page = [&](int dur, bool header) {
         if (f.leave_fade) {
@@ -1198,11 +1290,21 @@ void PageMove::start(MoveKind k, int64_t t0, const MoveEnds& e, const MoveForms&
             pivot_pop(e, f);
             break;
         }
-        leave_page(leave, true);
-        if (f.leave_fade)
-            ramp(Part::LeavePivots, Prop::A, kOne, 0, 0, leave, Curve::Linear);
-        else
-            step(Part::LeavePivots, Prop::A, kOne, 0, 0);
+        if (k == MoveKind::T3 && e.np_queue) {
+            cut_ = true;
+            for (Part p : {Part::Leave, Part::LeaveHeader, Part::LeavePivots})
+                step(p, Prop::A, kOne, 0, 0);
+            if (e.grounds)
+                ramp(Part::LeaveGround, Prop::A, kOne, 0, 0, f.leave_fade ? leave : 0, Curve::Linear);
+            else
+                set(Part::LeaveGround, Prop::A, kOne);
+        } else {
+            leave_page(leave, true);
+            if (f.leave_fade)
+                ramp(Part::LeavePivots, Prop::A, kOne, 0, 0, leave, Curve::Linear);
+            else
+                step(Part::LeavePivots, Prop::A, kOne, 0, 0);
+        }
         if (k == MoveKind::T4m && e.word)
             word_end_ = word_legs(WordLeg::Shrink, e);
         page_in(e, f);
@@ -1270,15 +1372,21 @@ void PageMove::start(MoveKind k, int64_t t0, const MoveEnds& e, const MoveForms&
         word_end_ = word_legs(WordLeg::HomeOpen, e);
         step(Part::Header, Prop::A, 0, kOne, word_end_);
         tie(Part::Header);
-        if (e.pivots) {
-            int pd = ms(tok::motion_t2PivotDelay), pl = ms(tok::motion_pivotIn), pf = ms(tok::motion_pivotFade);
-            if (f.chrome_slide) {
-                ramp(Part::Pivots, Prop::X, e.pivot_x, 0, pd, pl, Curve::EaseOut);
-                ramp(Part::Pivots, Prop::Y, e.pivot_y, 0, pd, pl, Curve::EaseOut);
-                ramp(Part::Pivots, Prop::A, 0, kOne, pd, pf, Curve::Linear);
-            } else {
-                step(Part::Pivots, Prop::A, 0, kOne, pd + pl);
-            }
+        tie(Part::Face);
+        if (e.pivots && f.chrome_slide) {
+            std::vector<Key> x;
+            for (const Key& key : kT2PivX)
+                x.push_back({key.t, fx_mul(key.v, e.px_u)});
+            keys(Part::Pivots, Prop::S, kT2PivS, nkeys(kT2PivS));
+            keys(Part::Pivots, Prop::X, x.data(), (int)x.size());
+            step(Part::Pivots, Prop::A, 0, kT2PivA[0].v, kT2PivA[0].t);
+            for (int i = 0; i + 1 < nkeys(kT2PivA); i++)
+                append(Leg{Part::Pivots, Prop::A, kT2PivA[i].v, kT2PivA[i + 1].v, kT2PivA[i].t,
+                           kT2PivA[i + 1].t - kT2PivA[i].t, Curve::Linear});
+            set(Part::Pivots, Prop::PX, fx_mul(tok::motion_t2PivotX, e.px_u));
+            set(Part::Pivots, Prop::PY, fx_mul(tok::motion_t2PivotY, e.px_u));
+        } else if (e.pivots) {
+            step(Part::Pivots, Prop::A, 0, kOne, kT2PivA[nkeys(kT2PivA) - 1].t);
         }
         if (e.rows) {
             rows_in(e, f);
@@ -1300,9 +1408,13 @@ void PageMove::start(MoveKind k, int64_t t0, const MoveEnds& e, const MoveForms&
     }
     case MoveKind::T4h:
     case MoveKind::T4n: {
+        if (k == MoveKind::T4n && e.turn) {
+            turn_legs(e);
+            break;
+        }
         bool word = k == MoveKind::T4h && e.word;
-        swap_ = ms(tok::motion_t4hSwap);
         int pl = ms(tok::motion_t4hPivot), cl = ms(tok::motion_t4hContent);
+        swap_ = word ? ms(tok::motion_t4hSwap) : cl;
         leave_page(cl, !word);
         rows_out(e, true);
         if (f.leave_fade && f.chrome_slide) {
@@ -1314,13 +1426,15 @@ void PageMove::start(MoveKind k, int64_t t0, const MoveEnds& e, const MoveForms&
         } else {
             step(Part::LeavePivots, Prop::A, kOne, 0, 0);
         }
-        int hd = swap_, hl = ms(tok::motion_t4hItems);
+        int hd = swap_, hl = word ? ms(tok::motion_t4hItems) : kT4nItems;
         ramp(Part::Home, Prop::A, 0, kOne, hd, hl, Curve::Linear);
         ramp(Part::Peek, Prop::A, 0, e.peek1, ms(tok::motion_t4hPeekDelay), ms(tok::motion_t4hPeek), Curve::Linear);
         if (word) {
             word_end_ = word_legs(WordLeg::HomeBack, e);
-            ramp(Part::Look, Prop::A, 0, kOne, hd, hl, Curve::Linear);
+            step(Part::Look, Prop::A, 0, e.look, hd);
+            append(Leg{Part::Look, Prop::A, e.look, kOne, hd, hl, Curve::Linear});
             tie(Part::Look);
+            tie(Part::Face);
             ramp(Part::Sub, Prop::A, 0, e.sub, ms(tok::motion_t4hSubDelay), ms(tok::motion_t4hSub), Curve::EaseOut);
         } else {
             ramp(Part::Sub, Prop::A, 0, e.sub, hd, hl, Curve::Linear);
@@ -1329,7 +1443,7 @@ void PageMove::start(MoveKind k, int64_t t0, const MoveEnds& e, const MoveForms&
     }
     case MoveKind::T7:
     case MoveKind::T8:
-        np_legs(k, e, f);
+        np_legs(k, e);
         break;
     case MoveKind::None:
         break;
@@ -1393,6 +1507,7 @@ int64_t PageMove::shown(int64_t at)
     clock_ = true;
     int64_t d = first_ == INT64_MIN ? 0 : std::max<int64_t>(0, at - first_);
     t0_ += d;
+    shift_ = d;
     return d;
 }
 
@@ -1411,10 +1526,15 @@ int PageMove::release(Part p, int64_t at)
     if (!held(p))
         return 0;
     held_ &= ~part_bit(p);
-    int64_t shown = at - t0_, r = std::max<int64_t>(shown - kTail, 0), first = INT64_MAX;
+    int64_t shown = at - t0_, r = std::max<int64_t>(shown - kTail, 0), first = INT64_MAX, first_a = INT64_MAX;
     for (const Leg& l : legs_)
-        if (l.part == p && !l.pin)
+        if (l.part == p && !l.pin) {
             first = std::min<int64_t>(first, l.delay);
+            if (l.prop == Prop::A)
+                first_a = std::min<int64_t>(first_a, l.delay);
+        }
+    if (cut_ && first_a != INT64_MAX)
+        first = first_a;
     int d = first == INT64_MAX ? 0 : (int)std::max<int64_t>(0, r - first);
     for (Leg& l : legs_) {
         if (l.part != p)
@@ -1427,7 +1547,7 @@ int PageMove::release(Part p, int64_t at)
             l.delay += d;
         }
     }
-    if (p == Part::Content)
+    if (p == Part::Content && !cut_)
         for (int q = 0; q < (int)Prop::Count; q++) {
             Leg* z = nullptr;
             for (Leg& l : legs_)
@@ -1490,6 +1610,20 @@ void PageMove::np_shift(int ms)
         if (kNpInGroup & part_bit(l.part))
             l.delay += ms;
     finish();
+}
+
+int PageMove::np_release(int64_t at)
+{
+    if (!(held_ & kNpInGroup))
+        return 0;
+    held_ &= ~kNpInGroup;
+    int64_t first = INT64_MAX;
+    for (const Leg& l : legs_)
+        if ((kNpInGroup & part_bit(l.part)) && l.prop == Prop::A)
+            first = std::min<int64_t>(first, l.delay);
+    int d = first == INT64_MAX ? 0 : (int)std::max<int64_t>(0, at - t0_ - kTail - first);
+    np_shift(d);
+    return d;
 }
 
 }

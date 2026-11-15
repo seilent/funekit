@@ -43,7 +43,7 @@ class SyntaxTest {
     )
 
     private fun bridgeScan(body: String, imports: String = "", path: String = "kit/src/main/kotlin/A.kt", only: Boolean = false, bridge: BridgeRule = rule) =
-        syntax.scan(path, "package a\n$imports\nfun f() {\n$body\n}\n", emptySet(), HashSet(), emptySet(), bridge, only).map { it.what }
+        syntax.scan(path, "package a\n$imports\nfun f() {\n$body\n}\n", emptySet(), HashSet(), bridge, only).map { it.what }
 
     @Test
     fun numericLiteralsOtherThanZeroAndOneFail() {
@@ -226,26 +226,6 @@ class SyntaxTest {
     }
 
     @Test
-    fun aTokNameTheReleaseShadowsFailsAndItsRelNamePasses() {
-        val shadowed = setOf("motion_t2Peek")
-        fun scan(body: String, imports: String = "") =
-            syntax.scan("kit/src/main/kotlin/A.kt", "package a\n$imports\nfun f() {\n$body\n}\n", emptySet(), HashSet(), shadowed).map { it.what }
-        assertEquals(listOf("Tok.motion_t2Peek is shadowed by Rel"), scan("val a = Tok.motion_t2Peek"))
-        assertEquals(listOf("Tok.motion_t2Peek is shadowed by Rel"), scan("val a = net.seilent.funekit.gen.Tok.motion_t2Peek"))
-        assertEquals(listOf("Tok.motion_t2Peek is shadowed by Rel"), scan("", "import net.seilent.funekit.gen.Tok.motion_t2Peek"))
-        assertEquals(emptyList<String>(), scan("val a = Rel.motion_t2Peek\nval b = Tok.motion_t2Word"))
-        assertEquals(listOf("Tok.motion_t2Peek is shadowed by Rel"), scan("val a = T.motion_t2Peek", "import net.seilent.funekit.gen.Tok as T"))
-        assertEquals(listOf("motion_t2Peek is shadowed by Rel"), scan("val a = with(Tok) { motion_t2Peek }"))
-        assertEquals(listOf("Tok::motion_t2Peek is shadowed by Rel"), scan("val a = Tok::motion_t2Peek"))
-        assertEquals(emptyList<String>(), scan("val a = Rel::motion_t2Peek\nval b = with(Tok) { motion_t2Word }"))
-        assertEquals(emptyList<String>(), found("val a = Tok.motion_t2Peek"))
-        val both = setOf("motion_t2Peek", "motion_t4hPeekDelay")
-        fun kit(body: String) = syntax.scan("kit/src/main/kotlin/net/seilent/funekit/kit/motion/A.kt", "package a\nfun f() {\n$body\n}\n", emptySet(), HashSet(), both).map { it.what }
-        assertEquals(listOf("Tok.motion_t4hPeekDelay is shadowed by Rel"), kit("val a = Tok.motion_t4hPeekDelay"))
-        assertEquals(emptyList<String>(), kit("val a = Rel.motion_t4hPeekDelay\nval b = Tok.motion_t4hPeek"))
-    }
-
-    @Test
     fun anOldNameReadsThroughOldAndFailsThroughTokInEveryForm() {
         assertEquals(emptyList<String>(), bridgeScan("val a = Old.motion_sheet\nval b = OldBoard.r1.motion_sheet\nval c = Old::motion_sheet"))
         val tok = listOf("Tok.motion_sheet is bridged: read Old.motion_sheet")
@@ -310,6 +290,38 @@ class SyntaxTest {
     }
 
     @Test
+    fun aChangedNameReadThroughAnyReceiverNeedsItsLine() {
+        val wide = BridgeRule(
+            setOf("motion_sheet"),
+            setOf("minTextPx", "vol_textGap"),
+            setOf("motion_sheet", "minTextPx", "vol_textGap", "npStatusGap"),
+        )
+        fun scan(body: String, path: String = "kit/src/main/kotlin/A.kt", only: Boolean = false) = bridgeScan(body, path = path, only = only, bridge = wide)
+        assertEquals(listOf("Tok.npStatusGap is changed and no bridge file lists it"), scan("val a = Tok.npStatusGap"))
+        assertEquals(listOf("Tok.npStatusGap is changed and no bridge file lists it"), scan("val a = TokBoard.r1.npStatusGap"))
+        assertEquals(listOf(".npStatusGap is changed and no bridge file lists it"), scan("val a = s.board.npStatusGap"))
+        assertEquals(listOf(".npStatusGap is changed and no bridge file lists it"), scan("val a = s?.board?.npStatusGap"))
+        assertEquals(listOf(".npStatusGap is changed and no bridge file lists it"), scan("val a = TokFit.at(h, p).npStatusGap"))
+        assertEquals(listOf(".npStatusGap is changed and no bridge file lists it"), scan("val a = b::npStatusGap"))
+        assertEquals(
+            emptyList<String>(),
+            scan("val a = Tok.minTextPx\nval b = TokBoard.v1.minTextPx\nval c = s.board.minTextPx\nval d = TokFit.at(h, p).minTextPx\nval e = b::minTextPx"),
+        )
+        assertEquals(listOf(".motion_sheet is bridged: read Old.motion_sheet"), scan("val a = s.board.motion_sheet"))
+        assertEquals(listOf(".motion_sheet is bridged: read Old.motion_sheet"), scan("val a = TokFit.at(h, p).motion_sheet"))
+        val stubs = "kit/src/test/kotlin/net/seilent/funekit/sheet/Stubs.kt"
+        assertEquals(
+            emptyList<String>(),
+            scan("ink.text(Roles.volLabel, \"artist\", Tok.vol_textX, v.vol_textY + v.vol_textGap)\nval x = 16f", path = stubs, only = true),
+        )
+        assertEquals(
+            listOf(".npStatusGap is changed and no bridge file lists it"),
+            scan("val g = s.board.npStatusGap + 6.4f", path = stubs, only = true),
+        )
+        assertEquals(emptyList<String>(), bridgeScan("val a = s.board.npStatusGap"))
+    }
+
+    @Test
     fun theTestRootPassRunsTheBridgeChecksAlone() {
         val path = "kit/src/test/kotlin/A.kt"
         assertEquals(
@@ -331,7 +343,10 @@ class SyntaxTest {
             "val u = spring(dampingRatio = Old.motion_d, stiffness = Old.motion_s)",
         ).joinToString("\n")
         assertEquals(emptyList<String>(), bridgeScan(body, bridge = listed))
-        assertEquals(listOf("Color( without Tok"), bridgeScan("val c = Color(Older.color_bg)", bridge = listed))
+        assertEquals(
+            listOf("Color( without Tok", ".color_bg is bridged: read Old.color_bg"),
+            bridgeScan("val c = Color(Older.color_bg)", bridge = listed),
+        )
     }
 
     @Test
@@ -376,28 +391,28 @@ class SyntaxTest {
         val tree = Gen.scanRoots
             .flatMap { File(repo, it).walkTopDown().filter { f -> f.isFile && f.name.endsWith(".kt") }.toList() }
         val literals = Literals.read(File(repo, "kit/literals.txt"))
-        val shadowed = Release.source(File(repo, "tokens/funeos-rel")).shadows.map(Gen::tokId).toSet()
-        assertEquals(setOf("motion_t2Peek", "motion_t4hPeekDelay"), shadowed)
         val bridge = Bridge.rule(File(repo, "tokens/funeos"), File(repo, "tokens/funeos-old"))
         val counts = Bridge.lines(File(repo, "tokens/funeos-old/bridge")).groupingBy { it.file to it.kind }.eachCount()
         assertEquals(
             mapOf(
-                ("c2.txt" to "old") to 1, ("c3.txt" to "old") to 7, ("c4.txt" to "old") to 2, ("c5.txt" to "old") to 7,
-                ("c6.txt" to "old") to 8, ("c7.txt" to "old") to 15, ("c8.txt" to "old") to 1, ("c9.txt" to "old") to 43,
+                ("c1.txt" to "new") to 20, ("c2.txt" to "old") to 1, ("c3.txt" to "old") to 8, ("c4.txt" to "old") to 2,
+                ("c5.txt" to "old") to 7, ("c6.txt" to "old") to 8, ("c7.txt" to "old") to 15, ("c8.txt" to "old") to 1,
+                ("c9.txt" to "old") to 43,
             ),
             counts,
         )
-        assertEquals(84, bridge.old.size)
-        assertEquals(emptySet<String>(), bridge.new)
-        assertEquals(emptySet<String>(), bridge.changed)
-        val back = syntax.scan("kit/src/main/kotlin/A.kt", "package a\nval a = Tok.motion_sheet\n", emptySet(), HashSet(), emptySet(), bridge)
+        assertEquals(85, bridge.old.size)
+        assertEquals(20, bridge.new.size)
+        assertEquals(178, bridge.changed.size)
+        assertTrue(bridge.changed.containsAll(bridge.new))
+        val back = syntax.scan("kit/src/main/kotlin/A.kt", "package a\nval a = Tok.motion_sheet\n", emptySet(), HashSet(), bridge)
         assertEquals(listOf("Tok.motion_sheet is bridged: read Old.motion_sheet"), back.map { it.what })
         val tests = listOf("kit/src").flatMap { src ->
             File(repo, src).listFiles().orEmpty().filter { it.isDirectory && it.name.startsWith("test") }
                 .flatMap { File(it, "kotlin").walkTopDown().filter { f -> f.isFile && f.name.endsWith(".kt") }.toList() }
         } + File(repo, "sheet/src").walkTopDown().filter { it.isFile && it.name.endsWith(".kt") }
         assertTrue(listOf("MovePaintTest.kt", "ArbiterTest.kt", "Regions.kt").all { n -> tests.any { it.name == n } })
-        assertEquals(emptyList<String>(), Syntax.scanFiles(repo, tree, literals, shadowed, bridge, tests).map { it.toString() })
+        assertEquals(emptyList<String>(), Syntax.scanFiles(repo, tree, literals, bridge, tests).map { it.toString() })
         for (a in literals.entries) {
             val text = File(repo, a.path).readText()
             val bare = syntax.scan(a.path, text, literals.allowed(a.path) - (a.site to a.text))

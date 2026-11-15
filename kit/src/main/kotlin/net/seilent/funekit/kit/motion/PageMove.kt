@@ -2,7 +2,7 @@ package net.seilent.funekit.kit.motion
 
 import net.seilent.funekit.gen.Old
 import net.seilent.funekit.gen.OldBoard
-import net.seilent.funekit.gen.Rel
+import net.seilent.funekit.gen.Moves
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.gen.TokBoard
 import kotlin.math.max
@@ -316,10 +316,10 @@ class PageMove {
                 val bl = ms(Tok.motion_t2Base)
                 val out = max(wl, bd + bl)
                 if (morph) {
-                    val sk = Rel.T2_SCALE
+                    val sk = Moves.kT2Scale
                     keys(Part.Word, Prop.S, intArrayOf(0) + sk.t, floatArrayOf(e.wordS0) + sk.v, Curves.linear, delay)
                     ramp(Part.Word, Prop.X, e.wordX0, e.wordX1, delay + bd, bl, Curves.easeOut)
-                    val yk = Rel.T2_BASE
+                    val yk = Moves.kT2Base
                     keys(Part.Word, Prop.Y, yk.t, FloatArray(yk.v.size) { lerp(e.wordY0, e.wordY1, yk.v[it]) }, Curves.linear, delay)
                 }
                 step(Part.Word, Prop.A, 1f, 0f, delay + out)
@@ -328,14 +328,14 @@ class PageMove {
             WordLeg.HomeBack -> {
                 val bl = ms(Tok.motion_t4hBox)
                 if (morph) {
-                    val sk = Rel.T4H_SCALE
-                    keys(Part.Word, Prop.S, intArrayOf(0) + sk.t + Rel.T4H_SCALE_END, floatArrayOf(e.wordS0) + sk.v + e.wordS1, Curves.linear, delay)
+                    val sk = Moves.kT4hScale
+                    keys(Part.Word, Prop.S, intArrayOf(0) + sk.t + Moves.kT4hScaleEnd, floatArrayOf(e.wordS0) + sk.v + e.wordS1, Curves.linear, delay)
                     ramp(Part.Word, Prop.X, e.wordX0, e.wordX1, delay, bl, Curves.powOut15)
-                    val yk = Rel.T4H_BASE
+                    val yk = Moves.kT4hBase
                     keys(Part.Word, Prop.Y, yk.t, FloatArray(yk.v.size) { lerp(e.wordY0, e.wordY1, yk.v[it]) }, Curves.linear, delay)
                 }
                 step(Part.Word, Prop.A, 1f, 0f, delay + ms(Tok.motion_t4hSwap) + ms(Tok.motion_t4hItems))
-                delay + max(Rel.T4H_SCALE_END, bl)
+                delay + max(Moves.kT4hScaleEnd, bl)
             }
             WordLeg.Push -> if (e.morphKind == MorphKind.Row) {
                 val sl = ms(Old.motion_morphScale)
@@ -394,7 +394,7 @@ class PageMove {
             when {
                 f.content == ContentForm.Step -> step(Part.Content, Prop.A, 0f, 1f, 0)
                 t2 -> {
-                    val ink = Rel.T2_ROWS_INK
+                    val ink = Moves.kT2RowsInk
                     step(Part.Content, Prop.A, 0f, Tok.motion_rowsT2Alpha, ink)
                     append(MoveLeg(Part.Content, Prop.A, Tok.motion_rowsT2Alpha, 1f, ink, ms(Tok.motion_rowsT2Fade), Curves.linear))
                 }
@@ -623,9 +623,9 @@ class PageMove {
 
     private fun rowsOut(e: MoveEnds) {
         if (!e.leaveRows) return
-        val s = Rel.T4H_PITCH
+        val s = Moves.kT4hPitch
         keys(Part.Leave, Prop.S, s.t, s.v, Curves.linear, 0)
-        val x = Rel.T4H_DX
+        val x = Moves.kT4hDx
         keys(Part.Leave, Prop.X, x.t, FloatArray(x.v.size) { x.v[it] * e.pxU }, Curves.linear, 0)
     }
 
@@ -695,7 +695,7 @@ class PageMove {
         val word = k == MoveKind.T2 && e.word
         swap = ms(if (word) Tok.motion_t2Swap else Tok.motion_swap)
         step(Part.Home, Prop.A, 1f, 0f, 0)
-        ramp(Part.Peek, Prop.A, e.peek0, 0f, 0, ms(Rel.motion_t2Peek), Curves.linear)
+        ramp(Part.Peek, Prop.A, e.peek0, 0f, 0, ms(Tok.motion_t2Peek), Curves.linear)
         if (!word) {
             pageIn(e, f)
             return
@@ -748,7 +748,7 @@ class PageMove {
         val hd = swap
         val hl = ms(Tok.motion_t4hItems)
         ramp(Part.Home, Prop.A, 0f, 1f, hd, hl, Curves.linear)
-        ramp(Part.Peek, Prop.A, 0f, e.peek1, ms(Rel.motion_t4hPeekDelay), ms(Tok.motion_t4hPeek), Curves.linear)
+        ramp(Part.Peek, Prop.A, 0f, e.peek1, ms(Tok.motion_t4hPeekDelay), ms(Tok.motion_t4hPeek), Curves.linear)
         if (word) {
             wordEnd = wordLegs(WordLeg.HomeBack, e)
             ramp(Part.Look, Prop.A, 0f, 1f, hd, hl, Curves.linear)

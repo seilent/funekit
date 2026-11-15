@@ -52,10 +52,6 @@ abstract class GenTask : DefaultTask() {
 
     @get:InputDirectory
     @get:PathSensitive(PathSensitivity.RELATIVE)
-    abstract val rel: DirectoryProperty
-
-    @get:InputDirectory
-    @get:PathSensitive(PathSensitivity.RELATIVE)
     abstract val old: DirectoryProperty
 
     @get:OutputDirectory
@@ -73,7 +69,7 @@ abstract class GenTask : DefaultTask() {
                 "TokBoard.kt" to Gen.tokBoardKt(dir, f),
                 "TokFit.kt" to Gen.tokFitKt(dir, f),
                 "Glyphs.kt" to Gen.glyphsKt(dir),
-                "Rel.kt" to Release.relKt(rel.get().asFile),
+                "Moves.kt" to Moves.movesKt(dir),
                 "Old.kt" to Gen.tokKt(was, "Old"),
                 "OldBoard.kt" to Gen.oldBoardKt(was),
             )
@@ -106,22 +102,18 @@ abstract class CheckTokPinTask : DefaultTask() {
 }
 
 @CacheableTask
-abstract class CheckRelPinTask : DefaultTask() {
+abstract class CheckSourceTask : DefaultTask() {
     @get:InputDirectory
     @get:PathSensitive(PathSensitivity.RELATIVE)
-    abstract val rel: DirectoryProperty
-
-    @get:InputFile
-    @get:PathSensitive(PathSensitivity.RELATIVE)
-    abstract val pin: RegularFileProperty
+    abstract val root: DirectoryProperty
 
     @get:OutputFile
     abstract val stamp: RegularFileProperty
 
     @TaskAction
     fun run() {
-        gen { Release.checkPin(rel.get().asFile, pin.get().asFile) }
-        stamp.get().asFile.writeText("ok\n")
+        gen { Gen.checkSource(root.get().asFile, name) }
+        stamp.get().asFile.writeText(Gen.setHash(root.get().asFile) + "\n")
     }
 }
 
@@ -172,7 +164,6 @@ interface SyntaxParams : WorkParameters {
     val files: ConfigurableFileCollection
     val literals: RegularFileProperty
     val fallbacks: RegularFileProperty
-    val rel: DirectoryProperty
     val tok: DirectoryProperty
     val old: DirectoryProperty
     val tests: ConfigurableFileCollection
@@ -182,10 +173,9 @@ abstract class SyntaxWork : WorkAction<SyntaxParams> {
     override fun execute() {
         val root = parameters.root.get().asFile
         val found = gen {
-            val shadows = Release.source(parameters.rel.get().asFile).shadows.map(Gen::tokId).toSet()
             val bridge = Bridge.rule(parameters.tok.get().asFile, parameters.old.get().asFile)
             val literals = Literals.read(parameters.literals.get().asFile, parameters.fallbacks.get().asFile)
-            Syntax.scanFiles(root, parameters.files.files.toList(), literals, shadows, bridge, parameters.tests.files.toList())
+            Syntax.scanFiles(root, parameters.files.files.toList(), literals, bridge, parameters.tests.files.toList())
         }
         if (found.isNotEmpty()) throw GradleException("checkSyntax:\n" + found.joinToString("\n"))
     }
@@ -210,10 +200,6 @@ abstract class CheckSyntaxTask : DefaultTask() {
     @get:InputFile
     @get:PathSensitive(PathSensitivity.RELATIVE)
     abstract val fallbacks: RegularFileProperty
-
-    @get:InputDirectory
-    @get:PathSensitive(PathSensitivity.RELATIVE)
-    abstract val rel: DirectoryProperty
 
     @get:InputDirectory
     @get:PathSensitive(PathSensitivity.RELATIVE)
@@ -247,7 +233,6 @@ abstract class CheckSyntaxTask : DefaultTask() {
             files.from(sources.asFileTree.matching { include("**/*.kt") })
             literals.set(this@CheckSyntaxTask.literals)
             fallbacks.set(this@CheckSyntaxTask.fallbacks)
-            rel.set(this@CheckSyntaxTask.rel)
             tok.set(this@CheckSyntaxTask.tok)
             old.set(this@CheckSyntaxTask.old)
             tests.from(this@CheckSyntaxTask.tests.asFileTree.matching { include("**/*.kt") })
@@ -324,7 +309,6 @@ abstract class FunekitSyntax {
     abstract val literals: RegularFileProperty
     abstract val fallbacks: RegularFileProperty
     abstract val tokens: DirectoryProperty
-    abstract val rel: DirectoryProperty
     abstract val old: DirectoryProperty
     abstract val repo: DirectoryProperty
 }
@@ -338,21 +322,18 @@ class GenPlugin : Plugin<Project> {
     override fun apply(project: Project) {
         val root = project.layout.projectDirectory.dir("funeos")
         val fit = project.layout.projectDirectory.file("fit.txt")
-        val rel = project.layout.projectDirectory.dir("funeos-rel")
         val old = project.layout.projectDirectory.dir("funeos-old")
         val checks = project.layout.buildDirectory.dir("checks")
         val gen = project.tasks.register("gen", GenTask::class.java) {
             group = "funekit"
             this.root.set(root)
             this.fit.set(fit)
-            this.rel.set(rel)
             this.old.set(old)
             out.set(project.layout.buildDirectory.dir("generated/funeos/kotlin"))
         }
-        val checkTokPin = project.tasks.register("checkTokPin", CheckTokPinTask::class.java) {
+        val checkTokPin = project.tasks.register("checkTokPin", CheckSourceTask::class.java) {
             group = "verification"
             this.root.set(root)
-            pin.set(root.file("SET.sha256"))
             stamp.set(checks.map { it.file("checkTokPin") })
         }
         val checkOldPin = project.tasks.register("checkOldPin", CheckTokPinTask::class.java) {
@@ -360,12 +341,6 @@ class GenPlugin : Plugin<Project> {
             this.root.set(old)
             pin.set(old.file("SET.sha256"))
             stamp.set(checks.map { it.file("checkOldPin") })
-        }
-        val checkRelPin = project.tasks.register("checkRelPin", CheckRelPinTask::class.java) {
-            group = "verification"
-            this.rel.set(rel)
-            pin.set(root.file("SET.sha256"))
-            stamp.set(checks.map { it.file("checkRelPin") })
         }
         val checkTokTok = project.tasks.register("checkTokTok", CheckTokTokTask::class.java) {
             group = "verification"
@@ -380,7 +355,7 @@ class GenPlugin : Plugin<Project> {
             stamp.set(checks.map { it.file("checkTokFit") })
         }
         project.tasks.matching { it.name == "check" }.configureEach {
-            dependsOn(checkTokPin, checkOldPin, checkRelPin, checkTokTok, checkTokFit)
+            dependsOn(checkTokPin, checkOldPin, checkTokTok, checkTokFit)
         }
     }
 }
@@ -408,7 +383,6 @@ class SyntaxPlugin : Plugin<Project> {
             sources.from(ext.repo.zip(ext.roots.zip(ext.optional) { a, b -> a + b }) { r, paths -> paths.map { r.file(it).asFile } })
             literals.set(ext.literals)
             fallbacks.set(ext.fallbacks)
-            this.rel.set(ext.rel)
             this.tok.set(ext.tokens)
             this.old.set(ext.old)
             tests.from(ext.tests)
