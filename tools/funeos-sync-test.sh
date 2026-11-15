@@ -75,10 +75,10 @@ git -C "$tmp/origin.git" update-ref -d refs/heads/main
 if run ui HEAD --audit "$tmp/audit" --name "funeOS test" --origin; then fail "--origin passes from a stale remote tracking ref"; else rc=$?; fi
 [ "$rc" -eq 2 ] || fail "--origin from a stale remote tracking ref exits $rc, not 2"
 
-run lrc HEAD || fail "equal lrc sources exit $?: $(cat "$tmp/out")"
+run lrc HEAD --source core/src/test/resources/lrc/SOURCE || fail "equal lrc sources exit $?: $(cat "$tmp/out")"
 printf 'lrc two\n' > "$src/player/lib/lrc.cpp"
 git -C "$src" -c user.name=t -c user.email=t@t commit -qam three
-if run lrc HEAD; then fail "a changed lrc source exits 0"; else rc=$?; fi
+if run lrc HEAD --source core/src/test/resources/lrc/SOURCE; then fail "a changed lrc source exits 0"; else rc=$?; fi
 [ "$rc" -eq 1 ] || fail "a changed lrc source exits $rc, not 1"
 grep -q "player/lib/lrc.cpp at .* pins" "$tmp/out" || fail "a changed lrc source is not named"
 

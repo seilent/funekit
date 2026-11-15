@@ -6,7 +6,7 @@ cd "$root"
 
 usage() {
     echo "usage: tools/funeos-sync.sh ui <funeos-sha> --audit <file> --name <release name> [--origin] [--accept]" >&2
-    echo "       tools/funeos-sync.sh lrc <funeos-sha> [--source <file>]" >&2
+    echo "       tools/funeos-sync.sh lrc <funeos-sha> --source <file>" >&2
     exit 2
 }
 
@@ -23,8 +23,8 @@ trap 'rm -rf "${tmp:?}"' EXIT
 sha() { sha256sum "$1" | cut -d' ' -f1; }
 
 if [ "$mode" = lrc ]; then
-    source=core/src/test/resources/lrc/SOURCE
-    if [ $# -eq 2 ] && [ "$1" = --source ]; then source=$2; elif [ $# -ne 0 ]; then usage; fi
+    [ $# -eq 2 ] && [ "$1" = --source ] || usage
+    source=$2
     [ -f "$source" ] || { echo "funeos-sync: no lrc source $source" >&2; exit 2; }
     lrc=(player/lib/lrc.cpp player/lib/lrc.h player/lib/util.cpp)
     git -C "$funeos" archive "$full" "${lrc[@]}" | tar -x -C "$tmp"
