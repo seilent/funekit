@@ -1,5 +1,6 @@
 package net.seilent.funekit.kit.touch
 
+import net.seilent.funekit.kit.motion.Curves
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -116,7 +117,7 @@ class ScrollTest {
         s.release(16, 0f)
         assertTrue(s.returning)
         s.step(136)
-        assertEquals(-7f * exp(-120f / 120f), s.over, 0.01f)
+        assertEquals(-7f * exp(-120f / 95f), s.over, 0.01f)
         var t = 136L
         while (s.returning) {
             t += 16
@@ -139,6 +140,45 @@ class ScrollTest {
         assertFalse(s.flinging)
         assertTrue(s.returning)
         assertEquals(7f, s.over, 0.0001f)
+    }
+
+    @Test
+    fun aSlowFlingIntoAnEndOvershootsBySpeedTimes7ms() {
+        val line = Line(995f, 1000f)
+        val s = Scroll(Kind.List, 1f, 1f, 1f, line)
+        s.release(20, -500f)
+        assertTrue(s.flinging)
+        s.step(36)
+        assertTrue(s.returning)
+        assertEquals(3.5f, s.over, 0.0001f)
+    }
+
+    @Test
+    fun aQuickplayReleasePastAnEndEasesBackOnTheSine() {
+        val s = Scroll(Kind.Quickplay, 1f, 1f, 1f, Line(0f, 1000f))
+        s.begin(100f)
+        s.drag(107f)
+        assertEquals(-7f, s.over, 0.0001f)
+        s.release(16, 0f)
+        assertTrue(s.returning)
+        s.step(16 + 190)
+        assertEquals(-7f * (1 - Curves.sine.at(0.5f)), s.over, 0.0001f)
+        s.step(16 + 380)
+        assertEquals(0f, s.over, 0f)
+        assertFalse(s.returning)
+    }
+
+    @Test
+    fun aLeadEdgeDragPastAnEndJumpsToTheLeadAndHoldsIt() {
+        val s = Scroll(Kind.List, 1f, 1f, 1f, Line(0f, 1000f), edge = Edge.Lead)
+        s.begin(100f)
+        s.drag(104f, 600f)
+        assertEquals(-4.2f, s.over, 0.0001f)
+        assertTrue(s.returning)
+        s.drag(130f, 5000f)
+        assertEquals(-4.2f, s.over, 0.0001f)
+        s.release(16, 0f)
+        assertTrue(s.returning)
     }
 
     @Test

@@ -55,6 +55,7 @@ class ListTouch(
     internal val rows: RowTrack? = null,
     internal val pitch: Int = rows?.pitch ?: 0,
     coast: FloatDecayAnimationSpec? = null,
+    edge: Edge = Edge.Follow,
 ) {
     private val track: Track = rows?.let { r ->
         object : Track {
@@ -76,7 +77,7 @@ class ListTouch(
 
         override fun atEnd(forward: Boolean): Boolean = if (forward) !state.canScrollForward else !state.canScrollBackward
     }
-    val scroll = Scroll(kind, scale.touchPpu, scale.stdPpu, scale.ppu, track, coast)
+    val scroll = Scroll(kind, scale.touchPpu, scale.stdPpu, scale.ppu, track, coast, edge)
     var over by mutableFloatStateOf(0f)
         private set
     var moving by mutableStateOf(false)
@@ -191,8 +192,8 @@ fun rememberCoast(kind: Kind, scale: Scale): FloatDecayAnimationSpec? {
 }
 
 @Composable
-fun rememberListTouch(kind: Kind, scale: Scale, onRescale: () -> Unit = {}, rows: RowSpec? = null): ListTouch {
-    if (rows != null) return rememberRowTouch(kind, scale, onRescale, rows)
+fun rememberListTouch(kind: Kind, scale: Scale, onRescale: () -> Unit = {}, rows: RowSpec? = null, edge: Edge = Edge.Follow): ListTouch {
+    if (rows != null) return rememberRowTouch(kind, scale, onRescale, rows, edge)
     val ppu by rememberUpdatedState(scale.ppu)
     val state = rememberSaveable(saver = listSaver(
         save = { listOf(it.firstVisibleItemIndex.toFloat(), it.firstVisibleItemScrollOffset / ppu) },
@@ -208,13 +209,13 @@ fun rememberListTouch(kind: Kind, scale: Scale, onRescale: () -> Unit = {}, rows
     }
     val scope = rememberCoroutineScope()
     val coast = rememberCoast(kind, scale)
-    val touch = remember(kind, state, scale.touchPpu, scale.stdPpu, scale.ppu, coast) { ListTouch(kind, state, scale, scope, coast = coast) }
+    val touch = remember(kind, state, scale.touchPpu, scale.stdPpu, scale.ppu, coast, edge) { ListTouch(kind, state, scale, scope, coast = coast, edge = edge) }
     DisposableEffect(touch) { onDispose { touch.stop() } }
     return touch
 }
 
 @Composable
-private fun rememberRowTouch(kind: Kind, scale: Scale, onRescale: () -> Unit, rows: RowSpec): ListTouch {
+private fun rememberRowTouch(kind: Kind, scale: Scale, onRescale: () -> Unit, rows: RowSpec, edge: Edge): ListTouch {
     val ppu by rememberUpdatedState(scale.ppu)
     val spec by rememberUpdatedState(rows)
     val track = rememberSaveable(saver = listSaver(
@@ -235,7 +236,7 @@ private fun rememberRowTouch(kind: Kind, scale: Scale, onRescale: () -> Unit, ro
     }
     val scope = rememberCoroutineScope()
     val coast = rememberCoast(kind, scale)
-    val touch = remember(kind, state, scale.touchPpu, scale.stdPpu, scale.ppu, coast) { ListTouch(kind, state, scale, scope, track, rows.pitch, coast) }
+    val touch = remember(kind, state, scale.touchPpu, scale.stdPpu, scale.ppu, coast, edge) { ListTouch(kind, state, scale, scope, track, rows.pitch, coast, edge) }
     DisposableEffect(touch) { onDispose { touch.stop() } }
     return touch
 }
@@ -427,7 +428,7 @@ fun Modifier.arbiter(a: Arbiter, swipes: Swipes): Modifier {
                 if (list != null) vel.add(t, y)
                 if (dragging) {
                     list?.let {
-                        it.scroll.drag(y)
+                        it.scroll.drag(y, vel.perS())
                         it.onScroll(t)
                         it.sync()
                     }

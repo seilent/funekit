@@ -10,6 +10,7 @@ import net.seilent.funekit.Scale
 import net.seilent.funekit.Surface
 import net.seilent.funekit.Window
 import net.seilent.funekit.fx
+import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.fxU
 import net.seilent.funekit.kit.lookOf
 import net.seilent.funekit.kit.proj.qpProjection
@@ -357,5 +358,24 @@ class QuickplayTest {
         val f = st.focus
         st.focus = f
         assertEquals(still, look.value)
+    }
+
+    @Test
+    fun theT6MenuKeepsTheHomeRingAtTheQuickplayAlphaAndFadesTheWatermark() {
+        for (t in listOf(0f, 0.5f, 1f)) {
+            val l = qpMenuLook(t)
+            val am = 1 + t * (Tok.motion_quickplayAlpha - 1)
+            assertEquals(am, l.ring, 0.0001f)
+            assertEquals((1 - t) * am, l.mark, 0.0001f)
+        }
+    }
+
+    @Test
+    fun aPausedPlayingTileTakesThePausedHeader() {
+        val playing = QpItem(QpKind.Song, 7L, "Slow Comet", null)
+        assertFalse(qpTiles(QpData(playing, emptyList(), emptyList(), emptyList())).paused)
+        assertTrue(qpTiles(QpData(playing, emptyList(), emptyList(), emptyList(), paused = true)).paused)
+        assertFalse(qpTiles(QpData(null, emptyList(), emptyList(), emptyList(), paused = true)).paused)
+        assertEquals("Paused", QP_PAUSED)
     }
 }

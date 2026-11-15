@@ -1,7 +1,7 @@
 package net.seilent.funekit.kit.touch
 
 import androidx.compose.animation.core.FloatDecayAnimationSpec
-import net.seilent.funekit.gen.Old
+import net.seilent.funekit.kit.motion.Curves
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.px
 import java.util.concurrent.TimeUnit
@@ -18,6 +18,8 @@ private const val SAMPLES = 32
 private const val NO_TIME = Long.MIN_VALUE
 
 enum class Kind { List, Quickplay, Grid }
+
+enum class Edge { Follow, Lead }
 
 interface Track {
     val canMove: Boolean
@@ -70,6 +72,7 @@ class Scroll(
     ppu: Float,
     private val track: Track,
     private val coast: FloatDecayAnimationSpec? = null,
+    private val edge: Edge = Edge.Follow,
 ) {
     private val retention = when (kind) {
         Kind.List -> Tok.motion_listFlingRetention
@@ -77,7 +80,7 @@ class Scroll(
         Kind.Grid -> Tok.motion_flingRetention
     }
     private val backMs = when (kind) {
-        Kind.List -> Old.motion_overscrollBackList
+        Kind.List -> Tok.motion_overscrollBackList
         Kind.Quickplay -> Tok.motion_overscrollBackQp
         Kind.Grid -> 0f
     }
@@ -107,8 +110,13 @@ class Scroll(
     private var clock = 0L
     private var pos = 0f
     private var end = 0L
+    private var past = false
+    private var easeFrom = 0f
+    private var easeAt = NO_TIME
 
     val moving: Boolean get() = flinging || returning
+
+    private fun lead(v: Float): Float = min(abs(v) * Tok.motion_overscrollLead / MS_PER_S, room)
 
     fun keep(dt: Float): Float = retention.pow(dt / Tok.motion_flingTick)
 
@@ -139,6 +147,8 @@ class Scroll(
     fun halt() {
         if (returning) over = 0f
         returning = false
+        past = false
+        easeAt = NO_TIME
         dragging = false
         flinging = false
         v = 0f
@@ -151,7 +161,11 @@ class Scroll(
         dragging = true
     }
 
-    fun drag(y: Float) {
+    fun drag(y: Float, fingerV: Float = 0f) {
+        if (past) {
+            finger = y
+            return
+        }
         var rest = finger - y
         finger = y
         if (raw != 0f && rest != 0f && rest.sign != raw.sign) {
@@ -164,23 +178,41 @@ class Scroll(
             if (track.atEnd(rest > 0f)) raw += rest - used
         }
         val r = if (ends()) room else 0f
+        if (edge == Edge.Lead && r > 0f && raw != 0f) {
+            past = true
+            over = lead(fingerV) * raw.sign
+            raw = over
+            returning = over != 0f
+            last = NO_TIME
+            return
+        }
         over = raw.coerceIn(-r, r)
     }
 
     fun endDrag() {
         if (!dragging) return
         dragging = false
-        if (over != 0f) {
+        past = false
+        if (over != 0f && !returning) {
             returning = true
             last = NO_TIME
         }
     }
 
     fun release(now: Long, fingerV: Float) {
+        if (past) {
+            past = false
+            dragging = false
+            return
+        }
         halt()
         if (over != 0f) {
             returning = true
             last = now
+            if (kind == Kind.Quickplay) {
+                easeFrom = over
+                easeAt = now
+            }
             return
         }
         val pv = flingVelocity(fingerV)
@@ -199,7 +231,7 @@ class Scroll(
         val used = track.by(delta)
         if (abs(used) >= abs(delta) || !track.atEnd(delta > 0f)) return false
         if (ends()) {
-            over = min(abs(v) * Old.motion_overscrollLead / MS_PER_S, room) * delta.sign
+            over = lead(v) * delta.sign
             flinging = false
             v = 0f
             returning = over != 0f
@@ -210,6 +242,13 @@ class Scroll(
     }
 
     fun step(now: Long): Boolean {
+        if (returning && easeAt != NO_TIME) {
+            val e = (now - easeAt).toFloat() / Tok.motion_overscrollReleaseQp
+            over = if (e >= 1f) 0f else easeFrom * (1 - Curves.sine.at(e.coerceAtLeast(0f)))
+            returning = over != 0f
+            if (!returning) easeAt = NO_TIME
+            return true
+        }
         if (returning) {
             var dt = if (last == NO_TIME) 0L else max(0L, now - last)
             last = now

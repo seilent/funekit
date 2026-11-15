@@ -76,6 +76,7 @@ import kotlin.math.roundToLong
 const val QP_PINS = 0
 const val QP_PLAYING = 3
 const val QP_NOW = "Playing"
+const val QP_PAUSED = "Paused"
 const val QP_HINT = "press and hold a media item to pin it to quickplay."
 val QP_HEADERS = listOf("Pins", "History", "New")
 
@@ -88,7 +89,7 @@ private const val HIDDEN = -1
 
 class QpTile(val section: Int, val item: QpItem)
 
-class QpTiles(val tiles: List<QpTile>, val counts: IntArray)
+class QpTiles(val tiles: List<QpTile>, val counts: IntArray, val paused: Boolean = false)
 
 fun qpTiles(d: QpData): QpTiles {
     val max = Tok.quickplay_tiles.toInt()
@@ -105,10 +106,10 @@ fun qpTiles(d: QpData): QpTiles {
     add(d.pins, 0, Int.MAX_VALUE)
     add(d.history, 1, max)
     add(d.newest, NEW, max)
-    return QpTiles(out, counts)
+    return QpTiles(out, counts, d.paused && d.playing != null)
 }
 
-class QpInk(val headers: List<Word>, val now: Word, val hint: List<Word>)
+class QpInk(val headers: List<Word>, val now: Word, val hint: List<Word>, val paused: Word = now)
 
 fun qpHintLines(text: String, max64: Int, width64: (String) -> Int): List<String> {
     val out = mutableListOf<String>()
@@ -137,6 +138,7 @@ fun qpInk(m: TextMeasurer, fonts: FontFamily.Resolver, s: Scale, density: Densit
         QP_HEADERS.map { m.word(it, Roles.quickplayHeader, hs, fonts, density, null) },
         m.word(QP_NOW, Roles.quickplayHeader, hs, fonts, density, null),
         lines.map { m.word(it, hint, ts, fonts, density, null) },
+        m.word(QP_PAUSED, Roles.quickplayHeader, hs, fonts, density, null),
     )
 }
 
@@ -165,6 +167,7 @@ class QpLayout(val s: Scale, val q: QpTiles, private val hintLines: Int) {
     val tiles: List<QpTile> get() = q.tiles
     val count: Int get() = q.tiles.size
     val playing: Boolean = q.tiles.firstOrNull()?.section == QP_PLAYING
+    val paused: Boolean = playing && q.paused
     private val playArt = COLUMNS * QpU.tile + QpU.gutter
     val playSpan = QpU.playTop + playArt + QpU.playGap
     private val border = fxDiv(fxInt(px64(QpU.border, ppu)), ppu)
@@ -519,7 +522,7 @@ fun DrawScope.quickplay(l: QpLayout, ink: QpInk, st: QuickplayState, boxes: QpBo
     val x = penPx(pen64(Tok.qpTextX, sp))
     val ha = Roles.quickplayHeader.alpha
     clipRect(0f, 0f, size.width, s.heightPx.toFloat()) {
-        if (l.playing) word(ink.now, x, l.pxOf(l.sectionTop(QP_PLAYING) - off).toFloat(), Ink.white, ha)
+        if (l.playing) word(if (l.paused) ink.paused else ink.now, x, l.pxOf(l.sectionTop(QP_PLAYING) - off).toFloat(), Ink.white, ha)
         for (k in 0 until SECTIONS) word(ink.headers[k], x, l.pxOf(l.sectionTop(k) - off).toFloat(), Ink.white, ha)
         if (l.q.counts[0] == 0 && !st.waiting) {
             ink.hint.forEachIndexed { i, w -> word(w, x, l.pxOf(l.hintTop(i) - off).toFloat(), Ink.white, Roles.qpHint.alpha) }
@@ -571,7 +574,7 @@ fun DrawScope.qpPanel(l: QpLayout, ink: QpInk, st: QuickplayState, boxes: QpBoxe
 fun qpWordRecords(rec: DrawRecord, l: QpLayout, ink: QpInk, off: Long, waiting: Boolean = false) {
     val x = penPx(pen64(Tok.qpTextX, l.s.stdPpu))
     val ha = Roles.quickplayHeader.alpha
-    if (l.playing) rec.word("qp.header.playing", ink.now, x, l.pxOf(l.sectionTop(QP_PLAYING) - off).toFloat(), ha)
+    if (l.playing) rec.word("qp.header.playing", if (l.paused) ink.paused else ink.now, x, l.pxOf(l.sectionTop(QP_PLAYING) - off).toFloat(), ha)
     QP_HEADERS.forEachIndexed { i, h -> rec.word("qp.header.${h.lowercase()}", ink.headers[i], x, l.pxOf(l.sectionTop(i) - off).toFloat(), ha) }
     if (l.q.counts[0] == 0 && !waiting) ink.hint.forEachIndexed { i, w -> rec.word("qp.hint$i", w, x, l.pxOf(l.hintTop(i) - off).toFloat(), Roles.qpHint.alpha) }
 }
@@ -588,13 +591,16 @@ fun qpPeekWords(rec: DrawRecord, l: QpLayout, ink: QpInk, off: Long, alpha: Floa
     }
 }
 
-fun DrawScope.qpMenu(ink: HomeInk, menu: HomeMenu, geo: HomeGeo, t: Float, ringLit: Boolean, now: Long, homeOff: Float) {
+fun qpMenuLook(t: Float): HomeLook {
     val am = 1 + t * (Tok.motion_quickplayAlpha - 1)
-    val fade = am * (1 - t)
+    return HomeLook(am, -1, 0f, Roles.homeSubtitle.alpha * am, ring = am, mark = (1 - t) * am)
+}
+
+fun DrawScope.qpMenu(ink: HomeInk, menu: HomeMenu, geo: HomeGeo, t: Float, ringLit: Boolean, now: Long, homeOff: Float) {
     val m = t6(t, geo.s.stdPpu, geo.s.widthPx).compose()
     withTransform({ transform(m) }) {
         clipRect(0f, 0f, geo.s.widthPx.toFloat(), geo.s.heightPx.toFloat()) {
-            homeMenu(ink, menu, geo, menu.restAt(now, ringLit), HomeLook(am, -1, 0f, Roles.homeSubtitle.alpha * am, ring = fade, mark = (1 - t) * am), homeOff)
+            homeMenu(ink, menu, geo, menu.restAt(now, ringLit), qpMenuLook(t), homeOff)
         }
     }
 }

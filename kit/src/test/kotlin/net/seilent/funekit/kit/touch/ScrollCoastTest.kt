@@ -142,14 +142,14 @@ class ScrollCoastTest {
         assertEquals(500f, line.pos, 0f)
         assertFalse(s.flinging)
         assertTrue(s.returning)
-        assertEquals(21f, s.over, 0f)
+        assertEquals(1649.2f * 7 / 1000, s.over, 0.01f)
         t = 208
-        while (t < 704L) {
+        while (t < 544L) {
             t += 16
             s.step(t)
             assertTrue("$t", s.over > 0f)
         }
-        s.step(720)
+        s.step(560)
         assertEquals(0f, s.over, 0f)
         assertFalse(s.moving)
     }
@@ -175,9 +175,10 @@ class ScrollCoastTest {
         val s = coast(line, Kind.Quickplay, PAGE)
         s.release(0, -3369f)
         for (t in 16L..208L step 16L) s.step(t)
-        assertEquals(21f, s.over, 0f)
+        assertEquals(1649.2f * 7 / 1000, s.over, 0.01f)
+        val o = s.over
         s.step(224)
-        assertEquals(21f * exp(-16f / 100f), s.over, 0.001f)
+        assertEquals(o * exp(-16f / 100f), s.over, 0.001f)
     }
 
     companion object {
