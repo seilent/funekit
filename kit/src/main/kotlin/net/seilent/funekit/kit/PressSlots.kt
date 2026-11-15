@@ -146,6 +146,11 @@ class PressSlots {
 
     fun look(item: Int, now: Long): Float = of(item)?.look(now.toFloat()) ?: 0f
 
+    fun look(now: Long) {
+        if (on.item >= 0) on.p.look(now.toFloat())
+        if (back.item >= 0) back.p.look(now.toFloat())
+    }
+
     fun lit(item: Int, now: Long): Float = of(item)?.lit(now.toFloat()) ?: 0f
 
     fun ring(item: Int, now: Long): Float = of(item)?.ring(now.toFloat()) ?: 0f

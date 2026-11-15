@@ -125,4 +125,25 @@ class PressSlotsTest {
         assertEquals(Tok.motion_pressScale, p.scale(2, 20), 0f)
         assertEquals(1f, p.lit(2, 20), 0f)
     }
+
+    @Test
+    fun lookAtATimeMarksBothSlotsDrawn() {
+        val p = PressSlots()
+        p.down(1, 0L)
+        p.look(SHOWN)
+        p.down(2, SHOWN + 100L)
+        assertEquals(1, p.back.item)
+        assertEquals(2, p.on.item)
+        assertTrue(p.stale(1, SETTLED))
+        assertTrue(p.stale(2, SETTLED))
+        p.look(SETTLED)
+        assertFalse(p.stale(1, SETTLED))
+        assertFalse(p.stale(2, SETTLED))
+        assertFalse(p.stale(SETTLED))
+    }
+
+    private companion object {
+        const val SHOWN = 300L
+        const val SETTLED = 10000L
+    }
 }
