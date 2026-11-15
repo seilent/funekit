@@ -314,6 +314,33 @@ class QuickplayTest {
     }
 
     @Test
+    fun aKeyMoveOrSelectSetsTheKeyFocusAndATouchDownOrADropClearsIt() {
+        val l = QpLayout(v1, qpTiles(QpData(null, items(4), emptyList(), emptyList())), 3)
+        val st = QuickplayState()
+        assertFalse(st.keyFocus)
+        val start = st.look(l, 0L)
+        assertFalse(start.key)
+        st.keyMove(1, l)
+        assertTrue(st.keyFocus)
+        assertEquals(1, st.focus)
+        assertTrue(st.look(l, 0L).key)
+        assertNotEquals(start, st.look(l, 0L))
+        st.keyMove(-5, l)
+        assertEquals(0, st.focus)
+        st.keyMove(10, l)
+        assertEquals(3, st.focus)
+        st.down(2, 0L)
+        assertFalse(st.keyFocus)
+        assertEquals(2, st.focus)
+        assertFalse(st.look(l, 0L).key)
+        st.keySelect()
+        assertTrue(st.keyFocus)
+        assertEquals(2, st.focus)
+        st.dropKeyFocus()
+        assertFalse(st.keyFocus)
+    }
+
+    @Test
     fun aHiddenFocusKeepsTheFocusIndexAndMarksTheLookHidden() {
         val l = QpLayout(v1, qpTiles(QpData(null, items(4), emptyList(), emptyList())), 3)
         val st = QuickplayState()

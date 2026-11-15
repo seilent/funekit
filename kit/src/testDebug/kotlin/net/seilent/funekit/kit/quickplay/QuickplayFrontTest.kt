@@ -223,6 +223,7 @@ class QuickplayFrontTest {
         val boxes = qpBoxes(m, fonts, l, unit, null)
         val q = QuickplayState()
         q.focus = 0
+        q.keySelect()
         val r = l.rect(0, 0L)
         fun left(hide: Boolean): Int {
             val img = ImageBitmap(s.widthPx, s.heightPx)
@@ -235,6 +236,37 @@ class QuickplayFrontTest {
         }
         assertEquals(0xFFFFFF, left(false))
         assertEquals(0x111111, left(true))
+    }
+
+    @Test
+    fun theFocusBorderDrawsOnlyWithKeyFocus() {
+        val unit = Density(1f)
+        val fonts = createFontFamilyResolver(RuntimeEnvironment.getApplication())
+        val m = TextMeasurer(fonts, unit, LayoutDirection.Ltr)
+        val l = QpLayout(s, qpTiles(QpData(null, items(3, QpKind.Album), emptyList(), emptyList())), 3)
+        val ink = qpInk(m, fonts, s, unit)
+        val boxes = qpBoxes(m, fonts, l, unit, null)
+        val q = QuickplayState()
+        fun left(i: Int): Int {
+            val r = l.rect(i, 0L)
+            val img = ImageBitmap(s.widthPx, s.heightPx)
+            CanvasDrawScope().draw(unit, LayoutDirection.Ltr, Canvas(img), Size(s.widthPx.toFloat(), s.heightPx.toFloat())) {
+                drawRect(Ink.bg)
+                quickplay(l, ink, q, boxes, 0L, q.look(l, 0L), true)
+            }
+            val px = IntArray(s.widthPx * s.heightPx).also { img.readPixels(it) }
+            return px[(r.y0 + r.h / 2) * s.widthPx + r.x0 - 1] and RGB
+        }
+        assertEquals(0, q.focus)
+        assertEquals("no border before a key moves", BG, left(0))
+        q.keySelect()
+        assertEquals(RGB, left(0))
+        q.dropKeyFocus()
+        assertEquals("a dropped key focus draws no border", BG, left(0))
+        q.keyMove(1, l)
+        assertEquals(1, q.focus)
+        assertEquals(RGB, left(1))
+        assertEquals(BG, left(0))
     }
 
     private companion object {

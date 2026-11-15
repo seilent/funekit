@@ -123,4 +123,13 @@ class QuickplayPanTest {
         rule.runOnUiThread { qpPanStart(false, geo, menu, home, qp, qpTouch, l, toast) }
         assertFalse(toast.visible(0L))
     }
+
+    @Test
+    fun aPanStartDropsTheKeyFocus() {
+        layers()
+        qp.keySelect()
+        assertTrue(qp.keyFocus)
+        rule.runOnUiThread { qpPanStart(true, geo, menu, home, qp, qpTouch, l, toast) }
+        assertFalse(qp.keyFocus)
+    }
 }

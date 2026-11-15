@@ -21,6 +21,7 @@ fun homeLandAim(menu: HomeMenu, touch: ListTouch, geo: HomeGeo) {
 }
 
 fun qpPanStart(front: Boolean, geo: HomeGeo, menu: HomeMenu, homeTouch: ListTouch, qp: QuickplayState, qpTouch: ListTouch, l: QpLayout, toast: Toast) {
+    qp.dropKeyFocus()
     toast.hide()
     homeTouch.halt()
     homeLandAim(menu, homeTouch, geo)
