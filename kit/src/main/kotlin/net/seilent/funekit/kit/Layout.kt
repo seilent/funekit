@@ -48,6 +48,10 @@ class RowLines(val pitch: Int, val title: Int, val sub: Int, val titleX64: Int) 
 }
 
 object Layout {
+    fun clipTop(s: Scale): Float = s.board.page_pivotBaseline + s.board.page_listClipDrop
+
+    fun above(s: Scale): Int = max(0, px(s.board.page_contentTop, s.ppu) - px(clipTop(s), s.ppu))
+
     fun npArt(s: Scale): Edges = edges(Tok.npArtX, s.board.npArtTop, s.board.npArt, s.board.npArt, s.ppu)
 
     fun npRingCy(s: Scale): Float = if (s.navOn) s.board.npRingNavY else s.board.npRingY

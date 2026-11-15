@@ -2,7 +2,6 @@ package net.seilent.funekit.kit.touch
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.runtime.Composable
@@ -28,7 +27,11 @@ fun FuneList(a: Arbiter, touch: ListTouch, modifier: Modifier = Modifier, layer:
     val d = LocalDensity.current
     Box(modifier.listTarget(a, touch, layer)) {
         Box(
-            Modifier.fillMaxSize().graphicsLayer {
+            Modifier.layout { m, c ->
+                val up = touch.above
+                val p = m.measure(Constraints.fixed(c.maxWidth, c.maxHeight + up))
+                layout(c.maxWidth, c.maxHeight) { p.place(0, -up) }
+            }.graphicsLayer {
                 translationY = -touch.over
                 clip = true
             },
@@ -37,7 +40,7 @@ fun FuneList(a: Arbiter, touch: ListTouch, modifier: Modifier = Modifier, layer:
                 Modifier.layout { m, c ->
                     val p = m.measure(Constraints.fixed(c.maxWidth, c.maxHeight + touch.pitch))
                     layout(c.maxWidth, c.maxHeight) { p.place(0, 0) }
-                }.graphicsLayer { translationY = -touch.sub.toFloat() },
+                }.graphicsLayer { translationY = -touch.drawSub.toFloat() },
                 state = touch.state,
                 contentPadding = PaddingValues(bottom = with(d) { touch.pitch.toDp() }),
                 userScrollEnabled = false,

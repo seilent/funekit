@@ -173,4 +173,25 @@ class RowTrackTest {
         assertEquals(-0.6f, e.by(-0.6f), 0f)
         assertEquals(4029, e.q)
     }
+
+    @Test
+    fun rowsDrawFromTheClipTopAboveTheListTop() {
+        val t = RowTrack(106, 523, 20, above = 37).also { it.count(30, 0) }
+        assertEquals(20, t.q)
+        assertEquals(0, t.first)
+        assertEquals(0, t.drawFirst)
+        assertEquals(-17, t.drawSub)
+        t.at(100)
+        assertEquals(0, t.first)
+        assertEquals(0, t.drawFirst)
+        assertEquals(63, t.drawSub)
+        t.at(200)
+        assertEquals(1, t.first)
+        assertEquals(94, t.sub)
+        assertEquals(1, t.drawFirst)
+        assertEquals(57, t.drawSub)
+        val flat = RowTrack(106, 523, 200).also { it.count(30, 0) }
+        assertEquals(flat.first, flat.drawFirst)
+        assertEquals(flat.sub, flat.drawSub)
+    }
 }

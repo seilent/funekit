@@ -9,12 +9,14 @@ import kotlin.math.max
 
 private const val HALF_PX = 0.5f
 
-data class RowSpec(val pitch: Int, val view: Int)
+data class RowSpec(val pitch: Int, val view: Int, val above: Int = 0)
 
-class RowTrack(pitch: Int, view: Int, q: Int = 0) : Track {
+class RowTrack(pitch: Int, view: Int, q: Int = 0, above: Int = 0) : Track {
     var pitch = pitch
         private set
     var view = view
+        private set
+    var above by mutableIntStateOf(above)
         private set
     var count = 0
         private set
@@ -26,6 +28,8 @@ class RowTrack(pitch: Int, view: Int, q: Int = 0) : Track {
     val max: Int get() = max(0, count * pitch - view)
     val first: Int get() = q / pitch
     val sub: Int get() = q - first * pitch
+    val drawFirst: Int get() = max(0, q - above) / pitch
+    val drawSub: Int get() = q - above - drawFirst * pitch
 
     override val canMove: Boolean get() = max > 0
 
@@ -61,9 +65,10 @@ class RowTrack(pitch: Int, view: Int, q: Int = 0) : Track {
         q = (anchor * pitch + s).coerceIn(0, max)
     }
 
-    fun resize(pitch: Int, view: Int) {
+    fun resize(pitch: Int, view: Int, above: Int = this.above) {
         this.pitch = pitch
         this.view = view
+        this.above = above
         if (counted) q = q.coerceIn(0, max)
     }
 
@@ -76,6 +81,6 @@ class RowTrack(pitch: Int, view: Int, q: Int = 0) : Track {
 
     companion object {
         fun restore(saved: List<Float>, spec: RowSpec, ppu: Float): RowTrack =
-            RowTrack(spec.pitch, spec.view, saved[0].toInt() * spec.pitch + px(saved[1], ppu))
+            RowTrack(spec.pitch, spec.view, saved[0].toInt() * spec.pitch + px(saved[1], ppu), spec.above)
     }
 }

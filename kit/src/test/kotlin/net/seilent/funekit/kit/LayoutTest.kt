@@ -25,6 +25,18 @@ class LayoutTest {
     private val p2160Page = scale(p2160, Nav.None, Surface.Page, false)
     private val p2160Np = scale(p2160, Nav.None, Surface.NowPlaying, false)
 
+    private val v1Page = scale(window(240, 320), Nav.None, Surface.Page, false)
+
+    @Test
+    fun theHubListClipTopIsThePivotBaselinePlusTheListClipDrop() {
+        assertEquals(360, net.seilent.funekit.px(Layout.clipTop(a105Page), a105Page.ppu))
+        assertEquals(203, net.seilent.funekit.px(Layout.clipTop(r1), r1.ppu))
+        assertEquals(95, net.seilent.funekit.px(Layout.clipTop(v1Page), v1Page.ppu))
+        assertEquals(0, Layout.above(a105Page))
+        assertEquals(37, Layout.above(r1))
+        assertEquals(3, Layout.above(v1Page))
+    }
+
     private fun px(what: String, want: Double, got: Int) = assertTrue("$what: want $want px got $got", abs(want - got) <= 1)
 
     @Test

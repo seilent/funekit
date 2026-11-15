@@ -106,6 +106,7 @@ interface PagePaint {
     val bottom: Int
     val count: Int
     val scroll: Int get() = 0
+    val above: Int get() = 0
 
     fun rowY(i: Int): Int
 
@@ -154,12 +155,15 @@ interface PagePaint {
 
 fun PagePaint.rowTop(i: Int): Int = rowY(i) - scroll
 
+fun PagePaint.clipTopPx(): Int = top - above
+
 fun PagePaint.first(): Int {
+    val t = clipTopPx()
     var lo = 0
     var hi = count
     while (lo < hi) {
         val m = (lo + hi) ushr 1
-        if (rowTop(m + 1) > top) hi = m else lo = m + 1
+        if (rowTop(m + 1) > t) hi = m else lo = m + 1
     }
     return if (lo < count) lo else -1
 }
@@ -177,7 +181,7 @@ fun PagePaint.last(): Int {
 }
 
 fun DrawScope.restRows(p: PagePaint, now: Long, rec: DrawRecord?, name: String) {
-    clipped(rec, 0f, p.top.toFloat(), size.width, p.bottom.toFloat()) {
+    clipped(rec, 0f, p.clipTopPx().toFloat(), size.width, p.bottom.toFloat()) {
         val f = p.first()
         if (f >= 0) for (i in f..p.last()) with(p) { row(i, rowTop(i), now, rec, name) }
     }
@@ -269,7 +273,7 @@ fun PagePaint.bandTops(): IntArray? {
     val l = last()
     if (f < 0 || l < f) return null
     val y = ArrayList<Int>()
-    y += top
+    y += clipTopPx()
     for (r in f + 1..l) {
         val t = rowTop(r)
         if (t > y.last()) y += t
@@ -288,7 +292,7 @@ fun PagePaint.bandsAt(): Bands? {
     return Bands(first(), y, IntArray(y.size - 1), 0f)
 }
 
-private fun PagePaint.restBand(): IntArray = intArrayOf(top, max(bottom, top + 1))
+private fun PagePaint.restBand(): IntArray = intArrayOf(clipTopPx(), max(bottom, clipTopPx() + 1))
 
 internal fun foldWord(s: String): String = String(CharArray(s.length) { val c = s[it]; if (c in 'A'..'Z') c + ('a' - 'A') else c })
 
@@ -936,7 +940,7 @@ class MovePaint(private val move: PageMove) {
             val ts = to.scale
             val top = px(ts.board.page_contentTop, ts.ppu).toFloat()
             CarryAt(
-                k, false, m.rows, bar, top, to.paint.bandsAt()?.y?.first()?.toFloat() ?: top,
+                k, false, m.rows, bar, top, if (to.paint.bandsAt() == null) top else to.paint.top.toFloat(),
                 px(ts.board.pivotTop, ts.ppu).toFloat(), px(ts.board.pivotBottom, ts.ppu).toFloat(),
                 m.xa, m.ya, Tok.motion_contentX * ts.widthPx, Tok.motion_contentY * ts.heightPx,
                 v.at(Part.Content, Prop.A, now), v.at(Part.Content, Prop.S, now), v.at(Part.Content, Prop.X, now),

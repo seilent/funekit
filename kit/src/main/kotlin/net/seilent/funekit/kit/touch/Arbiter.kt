@@ -63,9 +63,9 @@ class ListTouch(
             override val canMove: Boolean get() = r.canMove
 
             override fun by(delta: Float): Float {
-                val f = r.first
+                val f = r.drawFirst
                 val used = r.by(delta)
-                if (r.first != f) cross(r)
+                if (r.drawFirst != f) cross(r)
                 return used
             }
 
@@ -97,28 +97,30 @@ class ListTouch(
     val px: Int get() = checkNotNull(rows).q
     val first: Int get() = checkNotNull(rows).first
     val sub: Int get() = checkNotNull(rows).sub
+    val above: Int get() = rows?.above ?: 0
+    val drawSub: Int get() = checkNotNull(rows).drawSub
 
     fun toRow(i: Int) {
         val r = checkNotNull(rows)
         r.toRow(i)
-        state.requestScrollToItem(r.first)
+        state.requestScrollToItem(r.drawFirst)
     }
 
     fun toPx(px: Int) {
         val r = checkNotNull(rows)
         r.at(px)
-        state.requestScrollToItem(r.first)
+        state.requestScrollToItem(r.drawFirst)
     }
 
     fun count(n: Int, anchor: Int) {
         val r = checkNotNull(rows)
         r.count(n, anchor)
-        state.requestScrollToItem(r.first)
+        state.requestScrollToItem(r.drawFirst)
     }
 
     private fun cross(r: RowTrack) {
-        val d = (r.first * r.pitch - (state.firstVisibleItemIndex * r.pitch + state.firstVisibleItemScrollOffset)).toFloat()
-        if (state.dispatchRawDelta(d) != d) state.requestScrollToItem(r.first)
+        val d = (r.drawFirst * r.pitch - (state.firstVisibleItemIndex * r.pitch + state.firstVisibleItemScrollOffset)).toFloat()
+        if (state.dispatchRawDelta(d) != d) state.requestScrollToItem(r.drawFirst)
     }
 
     internal fun sync() {
@@ -222,18 +224,18 @@ private fun rememberRowTouch(kind: Kind, scale: Scale, onRescale: () -> Unit, ro
     val track = rememberSaveable(saver = listSaver(
         save = { it.save(ppu) },
         restore = { RowTrack.restore(it, spec, ppu) },
-    )) { RowTrack(rows.pitch, rows.view) }
-    val state = remember(track) { LazyListState(track.first, 0) }
+    )) { RowTrack(rows.pitch, rows.view, above = rows.above) }
+    val state = remember(track) { LazyListState(track.drawFirst, 0) }
     val last = remember { floatArrayOf(scale.ppu) }
     SideEffect {
-        val f = track.first
+        val f = track.drawFirst
         if (last[0] != scale.ppu) {
             track.rescale(last[0], scale.ppu, rows.pitch)
             last[0] = scale.ppu
             onRescale()
         }
-        track.resize(rows.pitch, rows.view)
-        if (track.first != f) state.requestScrollToItem(track.first)
+        track.resize(rows.pitch, rows.view, rows.above)
+        if (track.drawFirst != f) state.requestScrollToItem(track.drawFirst)
     }
     val scope = rememberCoroutineScope()
     val coast = rememberCoast(kind, scale)
