@@ -195,8 +195,9 @@ fun DrawScope.contentRows(p: PagePaint, c: Content, now: Long, rec: DrawRecord?,
         is Content.Lift -> cut(rec, c.cut) {
             val b = c.bands
             if (b == null) {
+                val y = p.restBand()
                 placed(rec, c.at) {
-                    clipped(rec, 0f, p.top.toFloat(), size.width, max(p.bottom, p.top + 1).toFloat()) {
+                    clipped(rec, 0f, y[0].toFloat(), size.width, y[1].toFloat()) {
                         with(p) { rest(now, rec, name) }
                         bar()
                     }
@@ -205,7 +206,15 @@ fun DrawScope.contentRows(p: PagePaint, c: Content, now: Long, rec: DrawRecord?,
                 val y0 = b.y.first().toFloat()
                 val y1 = b.y.last().toFloat()
                 val bx = min(c.barX, size.width)
-                placed(rec, c.at) { clipped(rec, 0f, y0, bx, y1) { with(p) { bands(b, now, rec, name) } } }
+                placed(rec, c.at) {
+                    clipped(rec, 0f, y0, bx, y1) {
+                        if (b.first < 0) {
+                            with(p) { rest(now, rec, name) }
+                        } else {
+                            with(p) { bands(b, now, rec, name) }
+                        }
+                    }
+                }
                 if (c.tail > 0 && c.at.s != 1f) {
                     clipped(rec, 0f, 0f, size.width, y1) { placed(rec, c.at) { clipped(rec, 0f, y1, bx, y1 + c.tail) { tailRows(p, y1, c.tail, now, rec, name) } } }
                 }
@@ -272,6 +281,10 @@ fun PagePaint.bandsAt(): Bands? {
     val y = bandTops() ?: return null
     return Bands(first(), y, IntArray(y.size - 1), 0f)
 }
+
+private fun PagePaint.restBand(): IntArray = intArrayOf(top, max(bottom, top + 1))
+
+fun PagePaint.bandsOrRest(): Bands = bandsAt() ?: Bands(-1, restBand(), IntArray(1), 0f)
 
 class HomeSide(val scale: Scale, val paint: HomePaint, val off: Float)
 
@@ -342,7 +355,7 @@ class MoveCtx(
         val cx = Math.round(cur(Part.Content, Prop.X)).toFloat()
         val slid = old.kind == MoveKind.T2w && oldTo != null && ca > 0f
         val on = old.rows && oldTo != null && ca > 0f
-        val bands = if (slid) leaveBands else if (!on || oldTo == null) null else oldTo.bandsAt()
+        val bands = if (slid) leaveBands else if (!on || oldTo == null) null else oldTo.bandsOrRest()
         val at0 = leaveAt
         val held = if (slid && at0 != null) Place(1f, cx, 0f, at0.xa, at0.ya) else if (on) Place(cs, cx, 0f, old.xa, old.ya) else null
         val sc = scale
@@ -408,7 +421,7 @@ private fun underBands(to: PageSide, p: Float): List<Pair<Edges, Part>> {
     val h = s.heightPx
     val hy = min(px(s.board.pivotTop, p), h)
     val pp = to.paint
-    val y = if (pp.kind == PageKind.Grid) null else pp.bandTops() ?: intArrayOf(pp.top, max(pp.bottom, pp.top + 1))
+    val y = if (pp.kind == PageKind.Grid) null else pp.bandsOrRest().y
     val n = (y?.size ?: 1) - 1
     val top = if (n > 0) y!![0].coerceIn(hy, h) else h
     val out = ArrayList<Pair<Edges, Part>>()
@@ -652,11 +665,11 @@ fun moveCtx(t: Turn<*>, home: HomeSide?, from: PageSide?, to: PageSide?, forms: 
     val cut = if (rows && ts != null && ts.navOn) px(ts.stdContentBottom, ts.stdPpu).toFloat() else null
     val zoom = if (e.zoom && toChrome != null) toChrome.header else null
     val leaving = if ((k == MoveKind.T4h || k == MoveKind.T4n) && to == null && from != null && from.paint.kind != PageKind.Grid) from else null
-    val leaveBands = leaving?.paint?.bandsAt()
-    val anchor = if (leaving == null || leaveBands == null) 0f else PageMove.popAnchor(k, leaving.paint.top, leaving.scale.heightPx, leaving.scale.stdPpu).toFloat()
+    val leaveBands = leaving?.paint?.bandsOrRest()
+    val anchor = if (leaving == null) 0f else PageMove.popAnchor(k, leaving.paint.top, leaving.scale.heightPx, leaving.scale.stdPpu).toFloat()
     val leaveAt = if (leaving != null) Place(1f, 0f, 0f, xa, anchor) else null
     val leaveCut = if (leaving != null && leaving.scale.navOn) px(leaving.scale.stdContentBottom, leaving.scale.stdPpu).toFloat() else null
-    if (leaving != null) e = e.copy(leaveRows = leaveBands != null)
+    if (leaving != null) e = e.copy(leaveRows = true)
     if (album < 0) album = -1L
     val hides = if (tileSide != null) listOfNotNull(from, to) else emptyList()
     return MoveCtx(
@@ -1030,7 +1043,7 @@ class MovePaint(private val move: PageMove) {
             val cx = Math.round(v.at(Part.Content, Prop.X, now)).toFloat()
             val image = k == MoveKind.T3z
             val c = if (m.rows) {
-                Content.Lift(to.paint.bandsAt(), Place(cs, cx + (1 - cs) * m.xa, (1 - cs) * m.ya, 0f, 0f), m.cut, m.tail, m.barX)
+                Content.Lift(to.paint.bandsOrRest(), Place(cs, cx + (1 - cs) * m.xa, (1 - cs) * m.ya, 0f, 0f), m.cut, m.tail, m.barX)
             } else {
                 val px = if (image) v.at(Part.Content, Prop.PX, now) else ox
                 val py = if (image) v.at(Part.Content, Prop.PY, now) else oy

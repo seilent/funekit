@@ -780,7 +780,7 @@ class MovePaintTest {
     }
 
     @Test
-    fun aT2IntoAListWithNoVisibleRowRetargetedKeepsItsZoomOnTheWholeLeaveLayer() {
+    fun aT2IntoAListWithNoVisibleRowRetargetedLeavesItsZoomedRestAsOneBandAboutThePopAnchor() {
         val r = Run(rows = mapOf("drawer" to 0), forms = zoomForms)
         r.stack.push("drawer", MoveKind.T2)
         r.stack.frame(0L)
@@ -793,27 +793,77 @@ class MovePaintTest {
         r.stack.back { MoveKind.T4h }
         r.stack.frame(at)
         val c = r.paint.ctx
-        assertNull(c.leaveBands)
-        assertFalse(c.ends.leaveRows)
-        assertEquals(0f, c.leaveAnchor, 0f)
+        assertEquals(MoveKind.T4h, c.kind)
+        assertTrue(c.ends.leaveRows)
+        assertEquals(listOf(360, 1280), requireNotNull(c.leaveBands).y.toList())
+        assertEquals(1444f, c.leaveAnchor, 0f)
         val held = requireNotNull(c.leaveAt)
         assertEquals(sy, held.s, 0f)
+        assertEquals(dx, held.dx, 0f)
         val t = at + 1
         val ls = r.move.at(Part.Leave, Prop.S, t)
         val lx = Math.round(r.move.at(Part.Leave, Prop.X, t)).toFloat()
-        assertEquals(1f, ls, 0f)
-        assertEquals(0f, lx, 0f)
+        assertEquals(0.97294f, ls, 1e-4f)
+        assertEquals(8f, lx, 0f)
+        assertTrue(r.move.at(Part.Leave, Prop.A, t) > 0f)
         r.draw(t)
         val leave = r.pages.values.flatMap { it.restAt }.filter { it.name == "leave" }
         assertEquals(1, leave.size)
         val k = sy * ls
         val ox = dx + (1 - sy) * xa + sy * (lx + (1 - ls) * xa)
-        val oy = (1 - sy) * ya
+        val oy = (1 - sy) * ya + sy * (1 - ls) * 1444f
         assertEquals(k, leave[0].k, 1e-5f)
         assertEquals(ox, leave[0].dx, 0.01f)
         assertEquals(oy, leave[0].dy, 0.01f)
-        assertEquals(oy + k * top, leave[0].clip[1], 0.01f)
-        assertEquals(oy + k * maxOf(bottom, top + 1), leave[0].clip[3], 0.01f)
+        assertEquals(ox, leave[0].clip[0], 0.01f)
+        assertEquals(oy + k * 360, leave[0].clip[1], 0.01f)
+        assertEquals(ox + k * 708, leave[0].clip[2], 0.01f)
+        assertEquals(oy + k * 1280, leave[0].clip[3], 0.01f)
+        assertTrue(leaveOf(r).isEmpty())
+    }
+
+    @Test
+    fun aT3IntoAListWithNoVisibleRowRetargetedIntoT4LeavesItsRestAsOneBandUnderTheHeldPlace() {
+        val r = Run(rows = mapOf("b" to 0), forms = zoomForms)
+        r.stack.pages.add("a")
+        r.stack.push("b", MoveKind.T3)
+        r.stack.frame(0L)
+        assertTrue(r.paint.ctx.rows)
+        r.stack.frame(r.move.swapAt)
+        val at = r.move.swapAt + ENTER
+        val sy = r.move.at(Part.Content, Prop.S, at)
+        val dx = Math.round(r.move.at(Part.Content, Prop.X, at)).toFloat()
+        assertTrue("the T3 content is drawn at the retarget", r.move.at(Part.Content, Prop.A, at) > 0f)
+        r.stack.back { MoveKind.T4 }
+        r.stack.frame(at)
+        val c = r.paint.ctx
+        assertEquals(MoveKind.T4, c.kind)
+        assertEquals(listOf(360, 1280), requireNotNull(c.leaveBands).y.toList())
+        assertEquals(360f, c.leaveAnchor, 0f)
+        val held = requireNotNull(c.leaveAt)
+        assertEquals(sy, held.s, 0f)
+        assertEquals(dx, held.dx, 0f)
+        assertEquals(60f, held.xa, 0f)
+        val t = at + 1
+        val ls = r.move.at(Part.Leave, Prop.S, t)
+        val lx = Math.round(r.move.at(Part.Leave, Prop.X, t)).toFloat()
+        val ly = r.move.at(Part.Leave, Prop.Y, t)
+        assertEquals("a T4 with no row morph has no leave scale of its own", 1f, ls, 0f)
+        assertTrue(r.move.at(Part.Leave, Prop.A, t) > 0f)
+        r.draw(t)
+        val leave = r.pages.getValue("b").restAt.filter { it.name == "leave" }
+        assertEquals(1, leave.size)
+        val k = sy * ls
+        val ox = dx + (1 - sy) * 60f + sy * (lx + (1 - ls) * 60f)
+        val oy = (1 - sy) * ya + sy * (ly + (1 - ls) * 360f)
+        assertEquals(k, leave[0].k, 1e-5f)
+        assertEquals(ox, leave[0].dx, 0.01f)
+        assertEquals(oy, leave[0].dy, 0.01f)
+        assertEquals(ox, leave[0].clip[0], 0.01f)
+        assertEquals(oy + k * 360, leave[0].clip[1], 0.01f)
+        assertEquals(ox + k * 708, leave[0].clip[2], 0.01f)
+        assertEquals(oy + k * 1280, leave[0].clip[3], 0.01f)
+        assertTrue(leaveOf(r).isEmpty())
     }
 
     @Test
@@ -1471,21 +1521,22 @@ class MovePaintTest {
     }
 
     @Test
-    fun aT4hFromAListWithNoVisibleRowLeavesItsRestWhole() {
+    fun aT4hFromAListWithNoVisibleRowLeavesItsRestAsOneBandAboutThePopAnchor() {
         val r = closing(rows = 0)
         val c = r.paint.ctx
-        assertFalse(c.ends.leaveRows)
-        assertNull(c.leaveBands)
-        assertEquals(0f, c.leaveAnchor, 0f)
-        assertFalse(r.move.has(Part.Leave, Prop.S))
-        assertFalse(r.move.has(Part.Leave, Prop.X))
+        assertTrue(c.ends.leaveRows)
+        assertEquals(listOf(360, 1280), requireNotNull(c.leaveBands).y.toList())
+        assertEquals(1444f, c.leaveAnchor, 0f)
+        assertEquals(0.885f, r.move.at(Part.Leave, Prop.S, 100L), 1e-4f)
+        assertEquals(34f, Math.round(r.move.at(Part.Leave, Prop.X, 100L)).toFloat(), 0f)
         r.draw(100L)
         val rest = r.pages.getValue(B).restAt.filter { it.name == "leave" }
         assertEquals(1, rest.size)
-        assertEquals(1f, rest[0].k, 0f)
-        assertEquals(0f, rest[0].dx, 0f)
-        assertEquals(0f, rest[0].dy, 0f)
-        assertEquals(listOf(0f, 360f, 720f, 1280f), rest[0].clip)
+        assertEquals(0.885f, rest[0].k, 1e-4f)
+        assertEquals(40.9f, rest[0].dx, 0.01f)
+        assertEquals(166.06f, rest[0].dy, 0.01f)
+        assertEquals(listOf(40.9f, 484.66f, 667.48f, 1298.86f), rest[0].clip.map { Math.round(it * 100) / 100f })
+        assertTrue(leaveOf(r).isEmpty())
     }
 
     @Test
