@@ -384,7 +384,7 @@ class MotionSheetTest {
             }
         }
 
-        private fun jumpCase(name: String, note: String, base: Page, close: Boolean, frames: Boolean, shots: Map<Long, String>, rules: List<Pair<String, String>>, avail: BooleanArray, under: String?): Case {
+        private fun jumpCase(name: String, note: String, base: Page, close: Boolean, frames: Boolean, shots: Map<Long, String>, rules: List<Pair<String, String>>, avail: BooleanArray, under: String?, press: Long = -1L): Case {
             val st = stack(base)
             val g = JumpGrid().also { it.open(avail, 0, s.stdH) }
             val ink = JumpInk(
@@ -393,7 +393,8 @@ class MotionSheetTest {
             )
             val cells = JumpCells(s)
             val o = Overlay(OverKind.Jump).also { it.lead = JUMP_LEAD }
-            val acts = listOf(Act(0L) { st.open(o) }) + if (close) listOf(Act(CLOSE_AT) { st.close() }) else emptyList()
+            val acts = listOf(Act(0L) { st.open(o) }) + (if (close) listOf(Act(CLOSE_AT) { st.close() }) else emptyList()) +
+                if (press < 0L) emptyList() else listOf(Act(press) { g.down(g.focus, press) })
             val from = if (close) CLOSE_AT else 0L
             val below = px(s.board.page_contentTop, s.ppu) + base.rows.sumOf { Rows.pitch(s, it) }
             return Case(name, note, st, acts, from, { from + o.dur() }, shots, rules, frames, FADE_QUIET) { t, rec ->
@@ -508,6 +509,7 @@ class MotionSheetTest {
                 jumpCase("t14-songs", "the jump grid open over the songs hub, as main.cpp t14:500:songs", songsRest, false, false, mapOf(500L to "t14-500-songs"), emptyList(), KitPages.jumpAvail, null),
                 jumpCase("t14-fade-songs", "the jump grid cross fade over the songs hub with its # divider focused as main.cpp enter_hub leaves it, as main.cpp t14:150:songs", songsEnter, false, false, mapOf(150L to "t14-150-songs"), T14_SONGS, KitPages.jumpAvail, null),
                 jumpCase("t14-fade-songs-off", "the same cross fade under ACCENT OFF at the series times", songsEnter, false, false, series("t14", T14_OFF, "-songs"), T14_SONGS, KitPages.jumpAvail, null),
+                jumpCase("jump-held", "the focused cell of the jump grid over the songs hub held, as main.cpp rowpress jump held: the down 1000 ms after the open on the focused cell, shot 150 ms later", songsEnter, false, false, mapOf(JUMP_PRESS + HELD_SHOT to JUMP_HELD), T14_SONGS, KitPages.jumpAvail, null, JUMP_PRESS),
                 jumpCase("t14-close-songs", "the jump grid closing 600 ms after the open over the songs hub with its # divider focused, as main.cpp t14x:120:songs", songsEnter, true, false, mapOf(CLOSE_AT + T14X to "t14x-120-songs"), T14_SONGS, KitPages.jumpAvail, null),
                 pressCase("f3-tap", "a tap on the first song row: down at 0, up at 50 (main.cpp rowpress tap); the tap plays the song and opens now playing with T7, as funeOS v0.4.2 hub_play goes through play_open; a plain T7 push stands in for the play open, its hold not modelled, since the T7 quads record no region", TAP_UP, true, mapOf(TAP_SHOT to "rowpress-0-hubsongs-tap")),
                 pressCase("f3-down", "the first song row down with no up (main.cpp rowpress down), shot at 50", -1L, false, mapOf(DOWN_SHOT to "rowpress-0-hubsongs-down")),
@@ -606,6 +608,8 @@ class MotionSheetTest {
         private val V1 = Dev("240x320", "funeOS V1 board", 240, 320, listOf(Nav.None))
         private const val ACCENT_OFF = "-accentoff"
         private const val HELD = "rowpress-0-hubsongs-held"
+        private const val JUMP_HELD = "rowpress-0-jump-held"
+        private const val JUMP_PRESS = 1000L
         private const val SERIES = "rowpress-100-hubsongs-down-series-accentoff"
         private val T5_OFF = listOf(0L, 17L, 33L, 50L, 67L, 83L, 100L, 117L, 133L, 150L, 167L, 175L, 183L, 200L, 217L, 233L, 236L, 250L, 267L, 283L, 300L, 317L, 333L, 350L)
         private val T5_STATIC = listOf(175L, 236L)
@@ -628,9 +632,9 @@ class MotionSheetTest {
             "rowpress-0-hubsongs-down", "rowpress-0-hubsongs-tap", "rowpress-0-hubsongs-up", HELD, SERIES,
             "t5-100", "t5-250", "t5-450", "t5-700", "t5-1500", "t5-300-songs",
             "t13-120", "t13-400", "t13x-80", "t14-500-songs", "t14-150-songs", "t14x-120-songs",
-            "t12-150", "t12-500",
+            "t12-150", "t12-500", JUMP_HELD,
         ) + names(series("t5", T5_OFF)) + names(series("t12", T12_OFF)) + names(series("t12", T12_CLOSE, "-close")) + names(series("t14", T14_OFF, "-songs"))
-        private val R1_KINDS = setOf(HELD, SERIES, "t12-150", "t12-500") + names(series("t5", T5_STATIC)) + names(series("t12", T12_STATIC)) + names(series("t12", T12_CLOSE_R1, "-close")) + names(series("t14", T14_STATIC, "-songs"))
+        private val R1_KINDS = setOf(HELD, SERIES, "t12-150", "t12-500", JUMP_HELD) + names(series("t5", T5_STATIC)) + names(series("t12", T12_STATIC)) + names(series("t12", T12_CLOSE_R1, "-close")) + names(series("t14", T14_STATIC, "-songs"))
         private val V1_KINDS = setOf(HELD, SERIES, "t12-150", "t12-500") + names(series("t5", T5_STATIC)) + names(series("t12", T12_STATIC)) + names(series("t12", T12_CLOSE, "-close")) + names(series("t14", T14_STATIC, "-songs"))
         private const val FOLDER = "motion"
         private const val FPS = 40
