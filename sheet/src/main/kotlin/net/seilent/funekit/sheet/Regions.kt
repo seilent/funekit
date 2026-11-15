@@ -214,17 +214,25 @@ class Regions(
         for (r in list) if (r.exclude == null && r.box.hits(d)) r.exclude = reason
     }
 
+    fun shade(b: Box, color: Color, alpha: Float, reason: String) {
+        val d = map(b)
+        val o = levels(color, alpha)
+        if (o == 0) return
+        for (r in list) if (r.exclude == null && r.kind != Kind.Glow && r.box.hits(d) && o * 2 + ROUNDING >= levels(r)) r.exclude = reason
+    }
+
     val count: Int get() = list.size
 
     val regions: List<Region> get() = list
 
-    private fun contrast(r: Region): Float {
-        val c = Color(r.color)
+    private fun contrast(c: Color, alpha: Float): Float {
         val bg = KitInk.bg
-        return r.alpha * maxOf(abs(c.red - bg.red), abs(c.green - bg.green), abs(c.blue - bg.blue))
+        return alpha * maxOf(abs(c.red - bg.red), abs(c.green - bg.green), abs(c.blue - bg.blue))
     }
 
-    private fun levels(r: Region): Int = Math.round(contrast(r) * LEVELS)
+    private fun levels(c: Color, alpha: Float): Int = Math.round(contrast(c, alpha) * LEVELS)
+
+    private fun levels(r: Region): Int = levels(Color(r.color), r.alpha)
 
     private fun reaches(o: Region, u: Region): Boolean = levels(o) * 2 + ROUNDING >= levels(u)
 

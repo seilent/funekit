@@ -416,6 +416,7 @@ class MotionSheetTest {
                         if (v < 1f) {
                             rec.overlap(pageRegions)
                             rec.shade(Box(0f, below.toFloat(), w.toFloat(), h.toFloat()), PRESS_QUIET)
+                            rec.shade(Box(0f, px(s.board.page_contentTop, s.ppu).toFloat(), w.toFloat(), h.toFloat()), KitInk.white, look.page * (1 - v), PAGE_TEXT)
                         }
                     }
                 }
@@ -506,6 +507,7 @@ class MotionSheetTest {
                 overlayCase("t13-close", "the power dialog closing 600 ms after the open, as main.cpp t13x", OverKind.Dlg, null, POWER, POWER_ITEMS, true, mapOf(CLOSE_AT + T13X to "t13x-80"), listOf("home.item" to HOME_TEXT, "home.watermark" to HOME_TEXT, "dialog.item" to POWER_TEXT)),
                 jumpCase("t14-songs", "the jump grid open over the songs hub, as main.cpp t14:500:songs", songsRest, false, false, mapOf(500L to "t14-500-songs"), emptyList(), KitPages.jumpAvail, null),
                 jumpCase("t14-fade-songs", "the jump grid cross fade over the songs hub with its # divider focused as main.cpp enter_hub leaves it, as main.cpp t14:150:songs", songsEnter, false, false, mapOf(150L to "t14-150-songs"), T14_SONGS, KitPages.jumpAvail, null),
+                jumpCase("t14-fade-songs-off", "the same cross fade under ACCENT OFF at the series times", songsEnter, false, false, series("t14", T14_OFF, "-songs"), T14_SONGS, KitPages.jumpAvail, null),
                 jumpCase("t14-close-songs", "the jump grid closing 600 ms after the open over the songs hub with its # divider focused, as main.cpp t14x:120:songs", songsEnter, true, false, mapOf(CLOSE_AT + T14X to "t14x-120-songs"), T14_SONGS, KitPages.jumpAvail, null),
                 pressCase("f3-tap", "a tap on the first song row: down at 0, up at 50 (main.cpp rowpress tap); the tap plays the song and opens now playing with T7, as funeOS v0.4.2 hub_play goes through play_open; a plain T7 push stands in for the play open, its hold not modelled, since the T7 quads record no region", TAP_UP, true, mapOf(TAP_SHOT to "rowpress-0-hubsongs-tap")),
                 pressCase("f3-down", "the first song row down with no up (main.cpp rowpress down), shot at 50", -1L, false, mapOf(DOWN_SHOT to "rowpress-0-hubsongs-down")),
@@ -612,6 +614,8 @@ class MotionSheetTest {
         private val T12_CLOSE = listOf(0L, 176L, 183L, 188L, 217L, 220L, 450L)
         private val T12_CLOSE_R1 = listOf(0L, 176L, 188L, 220L)
         private const val SHEET_ROW = 3
+        private val T14_OFF = listOf(0L, 17L, 33L, 50L, 67L, 83L, 100L, 117L, 133L, 150L, 167L, 183L, 200L, 206L, 217L, 233L, 250L, 267L, 283L, 300L, 317L, 333L, 350L, 367L, 383L, 400L)
+        private val T14_STATIC = listOf(206L)
         private val SONG_VERBS = listOf("play", "play next", "add to now playing", "add to playlist", "pin to quickplay", "info", "go to album", "delete")
         private const val THUMB_565 = "the R1 and V1 references are RGB565: under the panel 150 ms into its fade the ground beside the thumb reads (24, 20, 16), its blue cut from about 22 to 16, beside the thumb's (66, 65, 66), so funeOS's peak reads 50 where the 8 bit pixels give the kit's 44; at rest the panel reads (24, 24, 24) and the thumb gates in t12-196-accentoff"
         private const val SHEET_PANEL = "under the sheet panel (color.bgElevated) where it is drawn, on both sides"
@@ -625,9 +629,9 @@ class MotionSheetTest {
             "t5-100", "t5-250", "t5-450", "t5-700", "t5-1500", "t5-300-songs",
             "t13-120", "t13-400", "t13x-80", "t14-500-songs", "t14-150-songs", "t14x-120-songs",
             "t12-150", "t12-500",
-        ) + names(series("t5", T5_OFF)) + names(series("t12", T12_OFF)) + names(series("t12", T12_CLOSE, "-close"))
-        private val R1_KINDS = setOf(HELD, SERIES, "t12-150", "t12-500") + names(series("t5", T5_STATIC)) + names(series("t12", T12_STATIC)) + names(series("t12", T12_CLOSE_R1, "-close"))
-        private val V1_KINDS = setOf(HELD, SERIES, "t12-150", "t12-500") + names(series("t5", T5_STATIC)) + names(series("t12", T12_STATIC)) + names(series("t12", T12_CLOSE, "-close"))
+        ) + names(series("t5", T5_OFF)) + names(series("t12", T12_OFF)) + names(series("t12", T12_CLOSE, "-close")) + names(series("t14", T14_OFF, "-songs"))
+        private val R1_KINDS = setOf(HELD, SERIES, "t12-150", "t12-500") + names(series("t5", T5_STATIC)) + names(series("t12", T12_STATIC)) + names(series("t12", T12_CLOSE_R1, "-close")) + names(series("t14", T14_STATIC, "-songs"))
+        private val V1_KINDS = setOf(HELD, SERIES, "t12-150", "t12-500") + names(series("t5", T5_STATIC)) + names(series("t12", T12_STATIC)) + names(series("t12", T12_CLOSE, "-close")) + names(series("t14", T14_STATIC, "-songs"))
         private const val FOLDER = "motion"
         private const val FPS = 40
         private const val STEP = 1000L / FPS
@@ -650,6 +654,7 @@ class MotionSheetTest {
         private const val T5_GRID = "funeOS t5 leaves the ALBUMS grid; the kit has no grid page, so the songs rows stand in"
         private const val MOVE_QUIET = "page moves and pivot switches draw funeOS content the kit has no page or part for (the ALBUMS grid, the artist page, the artist row thumb strips)"
         private const val OVERLAY_QUIET = "the page or home under the overlay shows funeOS fixture rows and home items the kit page does not draw"
+        private const val PAGE_TEXT = "the shade takes the whole band from the page content top down as funeOS song row text (titles the kit page does not draw), white at the page alpha through the grid, since the kit has no funeOS text boxes to narrow it; at that alpha the text reaches this region's half contrast, so a region over a part of a row with no text is excluded too"
         private const val FADE_QUIET = "below full alpha the grid cross fades over the funeOS page under it"
         private const val PLAY_QUIET = "after the up funeOS v0.4.2 opens now playing with T7 (play_open): the hub turns out on the NpLeave pane and now playing turns in, drawn through quads that record no region"
         private const val PRESS_QUIET = "the funeOS songs hub shows a seventh song row below the kit page's last row"
