@@ -582,6 +582,7 @@ class MotionSheetTest {
                 t5Case("t5-off", "the same pivot switch under ACCENT OFF at the series times", artists, false, series("t5", T5_OFF)),
                 t5Case("t5-songs", "pivot switch from albums to songs with the # divider focused, as main.cpp t5:300:songs", songsEnter, false, mapOf(300L to "t5-300-songs")),
                 moveCase("t7", "the songs hub to now playing, page form", t7) { t7.push(np, MoveKind.T7) },
+                scrollCase("thumbfade", "main.cpp thumbfade: the songs pivot switched in at 2000 (the thumb shown), a down at (120, 250) u at 2900 drags to 170 by 3092 and holds to the up at 3236, so no fling; the thumb hold runs from the up", fadeTouches, SWITCH, THUMB_FADE.associateWith { "thumbfade-$it" }),
                 scrollCase("fling", "main.cpp fling: the songs pivot set at 2400, a down at (120, 300) u at 2800 moves up 20 u per 10 ms and lifts at 2880, a 2000 u/s fling; the focus follows the scroll to the first whole row", flingTouches, SELECT + Tok.motion_t2Swap.toLong(), FLING_SHOTS.associate { FLING_UP + it to "fling-songs-$it" }),
                 restCase("hub", "the artists hub at rest with the # divider focused as main.cpp enter_hub leaves it (main.cpp hub), the list thumb faded", artists, mapOf(0L to "hub"), ARTISTS_QUIET),
                 restCase("hub-large", "the artists hub at rest under SIZE LARGE (main.cpp large hub)", artists, mapOf(0L to "large-hub"), ARTISTS_QUIET),
@@ -753,11 +754,13 @@ class MotionSheetTest {
             "t5-100", "t5-250", "t5-450", "t5-700", "t5-1500", "t5-300-songs",
             "t13-120", "t13-400", "t13x-80", "t14-500-songs", "t14-150-songs", "t14x-120-songs",
             "t12-150", "t12-500", JUMP_HELD, "hub", "large-hub", "large-hub-songs", "fling-songs-150", "fling-songs-900",
+            "thumbfade-2700", "thumbfade-4736", "thumbfade-4800", "thumbfade-5000", "thumbfade-5236",
         ) + names(series("t5", T5_OFF)) + names(series("t12", T12_OFF)) + names(series("t12", T12_CLOSE, "-close")) + names(series("t14", T14_OFF, "-songs"))
         private val R1_KINDS = setOf(
             HELD, SERIES, "t12-150", "t12-500", JUMP_HELD, "hub", "large-hub", "large-hub-songs", "fling-songs-150", "fling-songs-900",
+            "thumbfade-2700", "thumbfade-4736", "thumbfade-4800", "thumbfade-5000", "thumbfade-5236",
         ) + names(series("t5", T5_STATIC)) + names(series("t12", T12_STATIC)) + names(series("t12", T12_CLOSE_R1, "-close")) + names(series("t14", T14_STATIC, "-songs"))
-        private val V1_KINDS = setOf(HELD, SERIES, "t12-150", "t12-500", "hub", "hub-songs", "fling-songs-150", "fling-songs-900") + names(series("t5", T5_STATIC)) + names(series("t12", T12_STATIC)) + names(series("t12", T12_CLOSE, "-close")) + names(series("t14", T14_STATIC, "-songs"))
+        private val V1_KINDS = setOf(HELD, SERIES, "t12-150", "t12-500", "hub", "hub-songs", "fling-songs-150", "fling-songs-900", "thumbfade-4736", "thumbfade-5000", "thumbfade-5236") + names(series("t5", T5_STATIC)) + names(series("t12", T12_STATIC)) + names(series("t12", T12_CLOSE, "-close")) + names(series("t14", T14_STATIC, "-songs"))
         private const val FOLDER = "motion"
         private const val FPS = 40
         private const val STEP = 1000L / FPS
