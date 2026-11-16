@@ -5,6 +5,7 @@ import net.seilent.funekit.Insets
 import net.seilent.funekit.Nav
 import net.seilent.funekit.Surface
 import net.seilent.funekit.Window
+import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.Chrome
 import net.seilent.funekit.kit.Word
 import net.seilent.funekit.kit.motion.MoveForms
@@ -23,6 +24,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import kotlin.math.max
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
@@ -128,6 +130,36 @@ class CarryTest {
         assertTrue("a T3 frame whose rows carry a non zero content x, so the rows form is read", moved > 0)
     }
 
+    @Test
+    fun aDownDuringAnAlbumPushMapsAboutTheContentOriginAtAtLeastFullScaleOrGoesToTheLandedPage() {
+        val none = Insets(0, 0, 0, 0)
+        val s = scale(Window(720, 1280, 35, none, none, none, none, none, null), Nav.None, Surface.Page, false)
+        val ox = Tok.motion_contentX * s.widthPx
+        val oy = Tok.motion_contentY * s.heightPx
+        for ((k, shown) in listOf(MoveKind.T3a to true, MoveKind.T3z to true, MoveKind.T3m to false, MoveKind.T3c to false)) {
+            val move = PageMove()
+            val mp = MovePaint(move)
+            val forms = MoveForms()
+            val st = PageStack<String>(forms, { PageKind.Plain }, move = move, ends = { mp.ends(it, null, PageSide(s, Blank), PageSide(s, Blank), forms) })
+            st.pages.add("a")
+            st.push("b", k)
+            st.frame(0L)
+            assertEquals(k, st.turn?.kind)
+            assertEquals("$k content at $DOWN_AT", shown, move.at(Part.Content, Prop.A, DOWN_AT) > 0f)
+            val m = mp.carry(DOWN_X, DOWN_Y, DOWN_AT)
+            if (!shown) {
+                assertNull("$k", m)
+                continue
+            }
+            val cs = max(move.at(Part.Content, Prop.S, DOWN_AT), 1f)
+            assertEquals("$k", 1f, cs, 0f)
+            val v = FloatArray(MATRIX)
+            checkNotNull(m).getValues(v)
+            near(ox + (DOWN_X - ox) / cs to oy + (DOWN_Y - oy) / cs, v[0] * DOWN_X + v[1] * DOWN_Y + v[2] to v[3] * DOWN_X + v[4] * DOWN_Y + v[5])
+            near(DOWN_X to DOWN_Y, v[0] * DOWN_X + v[1] * DOWN_Y + v[2] to v[3] * DOWN_X + v[4] * DOWN_Y + v[5])
+        }
+    }
+
     private object Blank : PagePaint {
         override val chrome: Chrome? = null
         override val header: Word? = null
@@ -161,5 +193,8 @@ class CarryTest {
         const val FRAMES = 1000L
         const val STEP = 16L
         const val MATRIX = 9
+        const val DOWN_AT = 300L
+        const val DOWN_X = 360f
+        const val DOWN_Y = 700f
     }
 }

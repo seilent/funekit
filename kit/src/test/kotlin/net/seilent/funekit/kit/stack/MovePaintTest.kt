@@ -45,6 +45,7 @@ import net.seilent.funekit.kit.Word
 import net.seilent.funekit.kit.chrome
 import net.seilent.funekit.kit.chromeOf
 import net.seilent.funekit.kit.motion.MorphKind
+import net.seilent.funekit.kit.motion.MoveEnds
 import net.seilent.funekit.kit.motion.MoveForms
 import net.seilent.funekit.kit.motion.MoveKind
 import net.seilent.funekit.kit.motion.NpForm
@@ -2196,6 +2197,168 @@ class MovePaintTest {
         assertTrue(pairRun(side(A, false), side(OTHER, true)).paint.ctx.ends.morph)
     }
 
+    private class TilePage(
+        d: PagePaint,
+        val name: String,
+        val log: MutableList<String>,
+        val rect: Edges? = null,
+        headerText: String? = null,
+        val thumb: Edges? = null,
+    ) : PagePaint by d {
+        override val header: Word? = headerText?.let { Word(it, emptyList(), 0f, 0f, 0f, 0f, 0f) } ?: d.header
+
+        override fun tileRect(album: Long): Edges? = if (album == ALBUM_ID) rect else null
+
+        override fun thumbRect(row: Int): Edges? = if (row == ROW) thumb else null
+
+        override fun hide(h: TileHide?) {
+            log += "$name hide ${h?.album} ${h?.ring}"
+        }
+
+        override fun DrawScope.tile(album: Long, side: Float, cx: Float, cy: Float, alpha: Float, rec: DrawRecord?) {
+            log += "$name tile $album"
+        }
+    }
+
+    private val cell = Edges(21, 360, 216, 555)
+    private val art = Edges(48, 372, 396, 720)
+    private val column = Edges(0, 299, 348, 647)
+
+    private fun tiles(
+        log: MutableList<String>,
+        from: Pair<String, (PagePaint) -> PagePaint>,
+        to: Pair<String, (PagePaint) -> PagePaint>,
+        sides: Map<String, (Boolean) -> WordSide?> = emptyMap(),
+    ) = Run(sides = sides, wraps = mapOf(from, to))
+
+    private fun ends(e: MoveEnds): List<Float> = listOf(e.tileS0, e.tileX0, e.tileY0, e.tileS1, e.tileX1, e.tileY1)
+
+    @Test
+    fun aT3mFliesTheFocusedCellOntoTheAlbumArtDrawnByTheAlbumPage() {
+        assertEquals(21, px(Tok.gridX, s.ppu))
+        val log = mutableListOf<String>()
+        val r = tiles(log, "hub" to { d: PagePaint -> TilePage(d, "hub", log, cell) }, "album" to { d: PagePaint -> TilePage(d, "album", log, art) })
+        r.stack.pages.add("hub")
+        r.stack.push("album", MoveKind.T3m, album = ALBUM_ID)
+        r.stack.frame(0L)
+        val e = r.paint.ctx.ends
+        assertEquals(listOf(195f, 118.5f, 457.5f, 348f, 222f, 546f), ends(e))
+        assertEquals(listOf("hub hide $ALBUM_ID false", "album hide $ALBUM_ID false"), log)
+        log.clear()
+        r.draw(300L)
+        assertEquals(listOf("album tile $ALBUM_ID"), log.filter { "tile" in it })
+        log.clear()
+        r.paint.landed()
+        assertEquals(listOf("hub hide null null", "album hide null null"), log)
+    }
+
+    @Test
+    fun aT3aFromTheColumnHoldsTheHeaderWhenBothReadAlbumsAndGrowsTheWordFromAnotherHeader() {
+        val log = mutableListOf<String>()
+        val held = tiles(log, "col" to { d: PagePaint -> TilePage(d, "col", log, column, OTHER) }, "album" to { d: PagePaint -> TilePage(d, "album", log, art, OTHER) })
+        held.stack.pages.add("col")
+        held.stack.push("album", MoveKind.T3a, album = ALBUM_ID)
+        held.stack.frame(0L)
+        val e = held.paint.ctx.ends
+        assertEquals(listOf(348f, 174f, 473f, 348f, 222f, 546f), ends(e))
+        assertTrue(e.colHold)
+        assertFalse(e.word)
+        assertFalse(held.move.has(Part.Word, Prop.S))
+        val grown = tiles(log, "col" to { d: PagePaint -> TilePage(d, "col", log, column, A) }, "album" to { d: PagePaint -> TilePage(d, "album", log, art, OTHER) })
+        grown.stack.pages.add("col")
+        grown.stack.push("album", MoveKind.T3a, album = ALBUM_ID)
+        grown.stack.frame(0L)
+        assertFalse(grown.paint.ctx.ends.colHold)
+        assertTrue(grown.paint.ctx.ends.word)
+        assertTrue(grown.move.has(Part.Word, Prop.S))
+    }
+
+    @Test
+    fun aT4aBackToTheColumnFliesTheArtBackOntoItsCell() {
+        val log = mutableListOf<String>()
+        val r = tiles(log, "col" to { d: PagePaint -> TilePage(d, "col", log, column, OTHER) }, "album" to { d: PagePaint -> TilePage(d, "album", log, art, OTHER) })
+        r.stack.pages.addAll(listOf("col", "album"))
+        r.stack.pop(MoveKind.T4a, ALBUM_ID)
+        r.stack.frame(0L)
+        val e = r.paint.ctx.ends
+        assertTrue(e.tileBack)
+        assertEquals(listOf(348f, 222f, 546f, 348f, 174f, 473f), ends(e))
+        assertEquals(listOf("album hide $ALBUM_ID false", "col hide $ALBUM_ID false"), log)
+    }
+
+    @Test
+    fun aPivotPushFliesTheRowThumbOnlyWithTheThumbAndTheArrivingTileAndARowLessPushTapsTheMiddle() {
+        val sides = mapOf("hub" to { p: Boolean -> if (p) side(A, false) else null }, "artist" to { p: Boolean -> if (p) null else side(B, true) })
+        val thumb = Edges(180, 603, 218, 641)
+        val log = mutableListOf<String>()
+        val r = tiles(log, "hub" to { d: PagePaint -> TilePage(d, "hub", log, thumb = thumb) }, "artist" to { d: PagePaint -> TilePage(d, "artist", log, art) }, sides)
+        r.stack.pages.add("hub")
+        r.stack.push("artist", MoveKind.T3, row = ROW, album = ALBUM_ID)
+        r.stack.frame(0L)
+        val e = r.paint.ctx.ends
+        assertTrue(e.morph)
+        assertTrue(e.thumb)
+        assertEquals(listOf(38f, 199f, 622f, 348f, 222f, 546f), ends(e))
+        assertEquals(listOf("hub hide $ALBUM_ID true", "artist hide $ALBUM_ID true"), log)
+        val bare = mutableListOf<String>()
+        val n = tiles(bare, "hub" to { d: PagePaint -> TilePage(d, "hub", bare) }, "artist" to { d: PagePaint -> TilePage(d, "artist", bare, art) }, sides)
+        n.stack.pages.add("hub")
+        n.stack.push("artist", MoveKind.T3, row = ROW, album = ALBUM_ID)
+        n.stack.frame(0L)
+        assertFalse(n.paint.ctx.ends.thumb)
+        assertTrue(bare.none { "true" in it })
+        val mid = mutableListOf<String>()
+        val c = tiles(mid, "hub" to { d: PagePaint -> TilePage(d, "hub", mid, thumb = thumb) }, "artist" to { d: PagePaint -> TilePage(d, "artist", mid, art) }, sides)
+        c.stack.pages.add("hub")
+        c.stack.push("artist", MoveKind.T3, album = ALBUM_ID)
+        c.stack.frame(0L)
+        assertEquals(-1, c.row)
+        assertEquals(640f, c.paint.ctx.ends.tapY, 0f)
+        assertFalse(c.paint.ctx.ends.thumb)
+    }
+
+    @Test
+    fun aT3zDrawsTheArrivingPageAsOneCopyAtTheContentScaleAndPivot() {
+        val r = Run()
+        r.stack.pages.add("a")
+        r.stack.push("b", MoveKind.T3z)
+        r.stack.frame(0L)
+        var seen = 0
+        for (at in 0L..LATER * 5 step FRAME) {
+            val ca = r.move.at(Part.Content, Prop.A, at)
+            val cs = r.move.at(Part.Content, Prop.S, at)
+            if (ca <= 0f || cs == 1f) continue
+            r.pages.getValue("b").restAt.clear()
+            r.draw(at)
+            val ox = r.move.at(Part.Content, Prop.PX, at)
+            val oy = r.move.at(Part.Content, Prop.PY, at)
+            val got = r.pages.getValue("b").restAt.filter { it.name == "arrive" }
+            assertEquals("$at", 1, got.size)
+            assertEquals("$at", cs, got[0].k, 1e-6f)
+            assertEquals("$at", ox - ox * cs, got[0].dx, 1e-3f)
+            assertEquals("$at", oy - oy * cs + r.move.at(Part.Content, Prop.Y, at), got[0].dy, 1e-3f)
+            seen++
+        }
+        assertTrue(seen > 0)
+        assertEquals(Moves.kT3zY * s.heightPx, r.move.at(Part.Content, Prop.PY, LATER), 1e-3f)
+    }
+
+    @Test
+    fun aT4zDropsTheLeavingPageByItsDropInPagePx() {
+        val r = Run()
+        r.stack.pages.addAll(listOf("a", "b"))
+        r.stack.pop(MoveKind.T4z)
+        r.stack.frame(0L)
+        assertEquals(Moves.kT4zDrop * s.ppu, r.move.at(Part.Leave, Prop.Y, Moves.kT4zDropLen.toLong()), 1e-3f)
+        val at = 50L
+        assertTrue(r.move.at(Part.Leave, Prop.A, at) > 0f)
+        r.draw(at)
+        val got = r.pages.getValue("b").restAt.filter { it.name == "leave" }
+        assertEquals(1, got.size)
+        assertEquals(1f, got[0].k, 0f)
+        assertEquals(Math.round(r.move.at(Part.Leave, Prop.Y, at)).toFloat(), got[0].dy, 0f)
+    }
+
     companion object {
         private const val FRAME = 16L
         private const val ROWS = 40
@@ -2228,6 +2391,7 @@ class MovePaintTest {
         private const val GROUND_X = 90
         private const val GROUND_Y = 1240
         private const val MARK = 4f
+        private const val ALBUM_ID = 5L
         private val HOME_INK = Color.White
         private val ROW_INK = Color.White
         private val GROUND_INK = Color(0xFF203040)
