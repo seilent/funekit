@@ -30,6 +30,8 @@ kit/src/main/kotlin/net/seilent/funekit/kit/motion/Motion.kt PRESS_STEPS 16f fos
 kit/src/main/kotlin/net/seilent/funekit/kit/proj/Proj.kt HALF_TURN 180f fos player/core/curves.cpp:214-229 degrees to radians (funeOS core/curves.cpp sin_deg, cos_deg)
 kit/src/main/kotlin/net/seilent/funekit/kit/proj/Proj.kt HALF_PX 0.5 fos player/ui/app.cpp:29491 an edge less than half a px from the hinge takes no angle (funeOS ui/app.cpp edge_angle)
 kit/src/main/kotlin/net/seilent/funekit/kit/proj/Proj.kt EPS 1e-30f fos player/gfx/xform.cpp:25 a matrix whose determinant is near 0 has no inverse, funeOS 1e-300 in double, the float floor here (funeOS gfx/xform.cpp mat3_invert)
+kit/src/main/kotlin/net/seilent/funekit/kit/proj/Tilt.kt HALF_TURN 180.0 fos player/ui/tilt.h:16 the plate turn at full reach in degrees to radians (funeOS ui/tilt.h plate_pose)
+kit/src/main/kotlin/net/seilent/funekit/kit/proj/Tilt.kt N 3 fos player/gfx/xform.cpp:13-15 the tilt matrix is a 3 x 3 row major product (funeOS gfx/xform.cpp mat3_mul)
 kit/src/main/kotlin/net/seilent/funekit/kit/Glyph.kt HALF 2.0 fos player/gfx/glyph.cpp:76 arc chord midpoint, a full turn 2 pi and the box center (funeOS gfx/glyph.cpp arc, draw_centered)
 kit/src/main/kotlin/net/seilent/funekit/kit/Glyph.kt ARC_STEP 24.0 fos player/gfx/glyph.cpp:93 arcs flatten in steps of at most pi / 24 (funeOS gfx/glyph.cpp arc)
 kit/src/main/kotlin/net/seilent/funekit/kit/Glyph.kt MIN_STEPS 2 fos player/gfx/glyph.cpp:93 an arc has at least two steps (funeOS gfx/glyph.cpp arc)
