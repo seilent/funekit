@@ -227,7 +227,7 @@ private fun rememberRowTouch(kind: Kind, scale: Scale, onRescale: () -> Unit, ro
     val track = rememberSaveable(saver = listSaver(
         save = { it.save(ppu) },
         restore = { RowTrack.restore(it, spec, ppu) },
-    )) { RowTrack(rows.pitch, rows.view, 0, rows.above, rows.pitch64, rows.ppu64, rows.whole) }
+    )) { RowTrack(rows.pitch, rows.view, 0, rows.above, rows.pitch64, rows.ppu64, rows.whole, rows.collapse) }
     val state = remember(track) { LazyListState(track.drawFirst, 0) }
     val last = remember { floatArrayOf(scale.ppu) }
     SideEffect {
@@ -290,21 +290,31 @@ class Arbiter(val scale: Scale) {
         blocks.remove(key)
     }
 
-    private fun hits(spot: Spot, o: Offset): Boolean {
+    private fun hits(spot: Spot, o: Offset, up: Int = 0): Boolean {
         val r = root ?: return false
         if (spot.layer < modal || !r.isAttached || !spot.c.isAttached) return false
-        return r.localBoundingBoxOf(spot.c).contains(o)
+        val b = r.localBoundingBoxOf(spot.c)
+        return b.copy(top = b.top - up).contains(o)
+    }
+
+    private fun hits(t: ListTouch, spot: Spot, o: Offset): Boolean {
+        val rows = t.rows
+        val up = if (rows != null && rows.collapse) rows.above else 0
+        if (!hits(spot, o, up)) return false
+        if (up == 0 || rows == null) return true
+        val y = o.y - (root ?: return false).localPositionOf(spot.c, Offset.Zero).y
+        return y >= -rows.lift
     }
 
     internal fun listAt(o: Offset): ListTouch? {
-        val hit = lists.entries.filter { hits(it.value, o) }
+        val hit = lists.entries.filter { hits(it.key, it.value, o) }
         val top = hit.maxOfOrNull { it.value.layer } ?: return null
         return hit.last { it.value.layer == top }.key
     }
 
     internal fun tapAt(o: Offset): Tap? {
         val hit: List<Pair<Int, Tap?>> = taps.entries.filter { hits(it.value, o) }.map { it.value.layer to it.key.tap } +
-            lists.entries.filter { hits(it.value, o) }.mapNotNull { e -> rowTapAt(e.key, e.value, o)?.let { e.value.layer to it } }
+            lists.entries.filter { hits(it.key, it.value, o) }.mapNotNull { e -> rowTapAt(e.key, e.value, o)?.let { e.value.layer to it } }
         val top = hit.maxOfOrNull { it.first } ?: return null
         return hit.last { it.first == top }.second
     }
@@ -312,7 +322,7 @@ class Arbiter(val scale: Scale) {
     private fun rowTapAt(t: ListTouch, spot: Spot, o: Offset): Tap? {
         val r = t.rows ?: return null
         val y = o.y - (root ?: return null).localPositionOf(spot.c, Offset.Zero).y + t.over
-        if (y < 0f || y >= r.view) return null
+        if (y < -r.lift || y >= r.view) return null
         val i = r.tapRow(y)
         return if (i in 0 until r.count) t.rowTap(i) else null
     }

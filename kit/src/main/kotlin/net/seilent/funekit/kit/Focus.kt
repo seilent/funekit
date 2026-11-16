@@ -19,7 +19,7 @@ fun focusAfterScroll(row: Int, count: Int, off: Long, view: Long, pitch: Long, c
     return (if (top < band) first else last).coerceIn(0, count - 1)
 }
 
-fun focusAfterScroll(row: Int, t: RowTrack, collapse: Int = 0): Int {
+fun focusAfterScroll(row: Int, t: RowTrack, collapse: Int = if (t.collapse) t.above else 0): Int {
     if (t.count == 0) return row
     val band = t.q - t.q.coerceIn(0, collapse)
     val end = t.q + t.view
@@ -28,6 +28,16 @@ fun focusAfterScroll(row: Int, t: RowTrack, collapse: Int = 0): Int {
     val first = if (t.topOf(at) < band) at + 1 else at
     val last = max(first, t.rowAt(end) - 1)
     return (if (t.topOf(row) < band) first else last).coerceIn(0, t.count - 1)
+}
+
+fun scrollInto(top: Int, extent: Int, t: RowTrack, off: Int = t.q): Int {
+    val collapse = if (t.collapse) t.above else 0
+    val want = when {
+        top < off - off.coerceIn(0, collapse) || (top == 0 && off > 0) -> if (top != 0) top + collapse else 0
+        top + extent > off + t.view -> top + extent - t.view
+        else -> off
+    }
+    return want.coerceIn(0, t.max)
 }
 
 class FocusTrack {

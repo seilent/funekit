@@ -12,10 +12,11 @@ import net.seilent.funekit.px64
 import kotlin.math.abs
 import kotlin.math.floor
 import kotlin.math.max
+import kotlin.math.min
 
 private const val HALF_PX = 0.5f
 
-data class RowSpec(val pitch: Int, val view: Int, val above: Int = 0, val pitch64: Long = fxInt(pitch), val ppu64: Long = fxInt(1)) {
+data class RowSpec(val pitch: Int, val view: Int, val above: Int = 0, val pitch64: Long = fxInt(pitch), val ppu64: Long = fxInt(1), val collapse: Boolean = false) {
     val whole: Boolean get() = ppu64 == fxInt(1) && pitch64 == fxInt(pitch)
 
     companion object {
@@ -27,7 +28,7 @@ data class RowSpec(val pitch: Int, val view: Int, val above: Int = 0, val pitch6
     }
 }
 
-class RowTrack(pitch: Int, view: Int, q: Int = 0, above: Int = 0, pitch64: Long = fxInt(pitch), ppu64: Long = fxInt(1), whole: Boolean = ppu64 == fxInt(1) && pitch64 == fxInt(pitch)) : Track {
+class RowTrack(pitch: Int, view: Int, q: Int = 0, above: Int = 0, pitch64: Long = fxInt(pitch), ppu64: Long = fxInt(1), whole: Boolean = ppu64 == fxInt(1) && pitch64 == fxInt(pitch), collapse: Boolean = false) : Track {
     var pitch = pitch
         private set
     var view = view
@@ -39,6 +40,8 @@ class RowTrack(pitch: Int, view: Int, q: Int = 0, above: Int = 0, pitch64: Long 
     var ppu64 = ppu64
         private set
     var whole = whole
+        private set
+    var collapse = collapse
         private set
     var count = 0
         private set
@@ -63,6 +66,7 @@ class RowTrack(pitch: Int, view: Int, q: Int = 0, above: Int = 0, pitch64: Long 
     val sub: Int get() = q - topOf(first)
     val drawFirst: Int get() = rowAt(max(0, q - above))
     val drawSub: Int get() = q - above - topOf(drawFirst)
+    val lift: Int get() = if (collapse) min(q, above) else 0
 
     override val canMove: Boolean get() = max > 0
 
@@ -113,6 +117,7 @@ class RowTrack(pitch: Int, view: Int, q: Int = 0, above: Int = 0, pitch64: Long 
         pitch64 = spec.pitch64
         ppu64 = spec.ppu64
         whole = spec.whole
+        collapse = spec.collapse
         if (counted) q = q.coerceIn(0, max)
     }
 
@@ -132,6 +137,7 @@ class RowTrack(pitch: Int, view: Int, q: Int = 0, above: Int = 0, pitch64: Long 
         pitch64 = spec.pitch64
         ppu64 = spec.ppu64
         whole = spec.whole
+        collapse = spec.collapse
         q = topOf(f) + px(s / lastPpu, ppu)
     }
 
@@ -139,6 +145,6 @@ class RowTrack(pitch: Int, view: Int, q: Int = 0, above: Int = 0, pitch64: Long 
 
     companion object {
         fun restore(saved: List<Float>, spec: RowSpec, ppu: Float): RowTrack =
-            RowTrack(spec.pitch, spec.view, 0, spec.above, spec.pitch64, spec.ppu64, spec.whole).also { it.q = it.topOf(saved[0].toInt()) + px(saved[1], ppu) }
+            RowTrack(spec.pitch, spec.view, 0, spec.above, spec.pitch64, spec.ppu64, spec.whole, spec.collapse).also { it.q = it.topOf(saved[0].toInt()) + px(saved[1], ppu) }
     }
 }

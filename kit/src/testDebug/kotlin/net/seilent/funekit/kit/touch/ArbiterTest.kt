@@ -916,6 +916,110 @@ class ArbiterTest {
         assertEquals(0, cutCount)
     }
 
+    private fun albumList() {
+        rule.setContent {
+            val a = remember { Arbiter(a105) }
+            arb = a
+            touch = rememberListTouch(Kind.List, a105, rows = RowSpec(ALBUM_PITCH, ALBUM_VIEW, ALBUM_ABOVE, collapse = true))
+            val counted = remember { booleanArrayOf(false) }
+            SideEffect {
+                if (!counted[0]) {
+                    touch.count(ALBUM_ROWS, touch.first)
+                    counted[0] = true
+                }
+            }
+            Box(Modifier.fillMaxSize().arbiter(a, page(turn = false))) {
+                Column {
+                    Box(Modifier.pxSize(720, ALBUM_TOP))
+                    FuneList(a, touch, Modifier.pxSize(720, ALBUM_VIEW), rowTap = { rowTap(it) }) {
+                        items(ALBUM_ROWS) { Box(Modifier.pxSize(720, ALBUM_PITCH)) }
+                    }
+                }
+            }
+        }
+        rule.waitForIdle()
+    }
+
+    private fun albumAt(q: Int) {
+        rule.runOnIdle {
+            touch.halt()
+            touch.toPx(q)
+        }
+        rule.waitForIdle()
+        assertEquals(q, touch.px)
+    }
+
+    private fun dragFrom(y: Float) {
+        rule.onRoot().performTouchInput {
+            down(Offset(360f, y))
+            moveTo(Offset(360f, y - 100f))
+            moveTo(Offset(360f, y - 150f))
+            up()
+        }
+        rule.waitForIdle()
+    }
+
+    private fun taps(vararg ys: Float): List<Int> {
+        tapped.clear()
+        for (y in ys) tapRow(y)
+        return tapped.toList()
+    }
+
+    @Test
+    @Config(qualifiers = "w720dp-h1280dp-mdpi")
+    fun aCollapseListTakesADownOnlyFromItsMovingRowsTop() {
+        albumList()
+        assertEquals(1876, requireNotNull(touch.rows).max)
+        dragFrom(500f)
+        assertEquals(0, touch.px)
+        assertEquals(0, presses)
+        assertEquals(emptyList<Int>(), taps(500f))
+        assertEquals(listOf(0), taps(756f))
+        albumAt(300)
+        assertEquals(300, requireNotNull(touch.rows).lift)
+        dragFrom(455f)
+        assertEquals(300, touch.px)
+        dragFrom(456f)
+        assertTrue("a drag from the rows top scrolls, px ${touch.px}", touch.px > 300)
+        albumAt(300)
+        assertEquals(listOf(0, 0, 1), taps(456f, 575f, 576f))
+        albumAt(600)
+        assertEquals(345, requireNotNull(touch.rows).lift)
+        assertEquals(emptyList<Int>(), taps(410f))
+        assertEquals(listOf(2, 2, 3), taps(411f, 515f, 516f))
+    }
+
+    @Test
+    @Config(qualifiers = "w720dp-h1280dp-mdpi")
+    fun aDownInTheBandAboveTheMovingRowsTopLeavesAFlingRunningAndOneOnTheRowsGrabsIt() {
+        albumList()
+        albumAt(300)
+        rule.mainClock.autoAdvance = false
+        rule.runOnUiThread { touch.release(2000f) }
+        rule.mainClock.advanceTimeBy(48)
+        assertTrue(touch.scroll.flinging)
+        val lift = requireNotNull(touch.rows).lift
+        assertTrue("the fling runs back from 300, lift $lift", lift in 1 until 300)
+        assertTrue("y 420 is inside the band and above the rows top ${ALBUM_TOP - lift}", 420 >= ALBUM_TOP - ALBUM_ABOVE && 420 < ALBUM_TOP - lift)
+        rule.onRoot().performTouchInput {
+            down(Offset(360f, 420f))
+            up()
+        }
+        val q = touch.px
+        rule.mainClock.advanceTimeBy(16)
+        assertTrue(touch.scroll.flinging)
+        assertTrue("the fling moved on from $q to ${touch.px}", touch.px < q)
+        val rows = ALBUM_TOP - requireNotNull(touch.rows).lift
+        assertTrue("y 700 is on the rows below $rows", 700 >= rows)
+        rule.onRoot().performTouchInput {
+            down(Offset(360f, 700f))
+            up()
+        }
+        rule.mainClock.advanceTimeBy(16)
+        assertFalse(touch.scroll.flinging)
+        assertTrue(tapped.isEmpty())
+    }
+
     @Test
     fun onTheP2160PageTheSlopTheEdgeBandsAndTheFlingCapKeepTheFitPx() {
         val dpi = Dpi(403.411f, 403.411f, 440, 1080, 2160, 1, 1080, 2160)
@@ -943,6 +1047,14 @@ class ArbiterTest {
         assertEquals(-9000f, touch.scroll.flingVelocity(20000f))
         assertEquals(0f, touch.scroll.flingVelocity(-224f))
         assertEquals(225f, touch.scroll.flingVelocity(-225f))
+    }
+
+    private companion object {
+        const val ALBUM_TOP = 756
+        const val ALBUM_PITCH = 120
+        const val ALBUM_VIEW = 524
+        const val ALBUM_ABOVE = 345
+        const val ALBUM_ROWS = 20
     }
 
     private fun decay(retention: Float) = 3369f / (62.5f * -ln(retention))

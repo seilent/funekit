@@ -169,4 +169,45 @@ class FocusTest {
         assertEquals(800, f.row)
         assertEquals(1f, f.rowAlpha(800, 50, 1f, 0.6f), 0f)
     }
+
+    private fun album(q: Int): RowTrack =
+        RowTrack(ALBUM_PITCH, ALBUM_VIEW, 0, ALBUM_ABOVE, collapse = true).also {
+            it.count(ALBUM_ROWS, 0)
+            it.at(q)
+        }
+
+    @Test
+    fun aCollapseTrackTakesItsBandFromTheLiftAboveTheListTop() {
+        assertEquals(1876, album(0).max)
+        assertEquals(0, focusAfterScroll(0, album(345)))
+        assertEquals(3, focusAfterScroll(0, album(600)))
+        assertEquals(345, album(600).lift)
+        assertEquals(300, album(300).lift)
+        val open = RowTrack(ALBUM_PITCH, ALBUM_VIEW, 0, ALBUM_ABOVE).also {
+            it.count(ALBUM_ROWS, 0)
+            it.at(600)
+        }
+        assertEquals(0, open.lift)
+    }
+
+    @Test
+    fun scrollIntoTakesTheRowBelowTheCollapseBandAndReadsTheScrollTarget() {
+        val t = album(600)
+        assertEquals(585, scrollInto(240, ALBUM_PITCH, t))
+        assertEquals(0, scrollInto(0, ALBUM_PITCH, t))
+        assertEquals(600, scrollInto(360, ALBUM_PITCH, t))
+        assertEquals(600, scrollInto(960, ALBUM_PITCH, t))
+        assertEquals(796, scrollInto(1200, ALBUM_PITCH, t))
+        val aim = album(100)
+        assertEquals(300, scrollInto(120, ALBUM_PITCH, aim, 300))
+        assertEquals(100, scrollInto(120, ALBUM_PITCH, aim))
+        assertEquals(0, scrollInto(0, ALBUM_PITCH, aim, 300))
+    }
+
+    private companion object {
+        const val ALBUM_PITCH = 120
+        const val ALBUM_VIEW = 524
+        const val ALBUM_ABOVE = 345
+        const val ALBUM_ROWS = 20
+    }
 }
