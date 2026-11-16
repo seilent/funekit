@@ -1,6 +1,7 @@
 package net.seilent.funekit.artist
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AgentTest {
@@ -21,6 +22,18 @@ class AgentTest {
             api.post("https://example.org/post", mapOf("k" to "v"), emptyMap())
             api.download("https://example.org/down", 16) { _, _ -> false }
             assertEquals(listOf<String?>(a.userAgent, a.userAgent, a.userAgent), f.agents)
+        }
+    }
+
+    @Test
+    fun aListenBrainzBodyCarriesTheHostsPlayerAndClient() {
+        for (app in listOf("hosta", "hostb")) {
+            val f = Fixtures()
+            val a = agent(app)
+            ListenBrainz(f, a.userAgent, RateLimiter(0) { time.now }, time.sleep, ListenBrainz.BASE, a).submit("tok", listOf(Listen(1_800_000_000, "A", "T")))
+            val body = f.calls.single { it.startsWith("POST ") }
+            assertTrue(body, body.contains("\"media_player\":\"player-$app\",\"submission_client\":\"$app\",\"submission_client_version\":\"1.2\""))
+            assertEquals(listOf<String?>(a.userAgent), f.agents)
         }
     }
 }
