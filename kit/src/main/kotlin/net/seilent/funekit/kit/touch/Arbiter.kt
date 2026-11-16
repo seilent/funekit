@@ -227,7 +227,7 @@ private fun rememberRowTouch(kind: Kind, scale: Scale, onRescale: () -> Unit, ro
     val track = rememberSaveable(saver = listSaver(
         save = { it.save(ppu) },
         restore = { RowTrack.restore(it, spec, ppu) },
-    )) { RowTrack(rows.pitch, rows.view, 0, rows.above, rows.pitch64, rows.ppu64, rows.whole, rows.collapse) }
+    )) { RowTrack(rows.pitch, rows.view, 0, rows.above, rows.pitch64, rows.ppu64, rows.whole, rows.collapse, rows.top64) }
     val state = remember(track) { LazyListState(track.drawFirst, 0) }
     val last = remember { floatArrayOf(scale.ppu) }
     SideEffect {

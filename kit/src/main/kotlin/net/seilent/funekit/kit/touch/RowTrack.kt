@@ -16,8 +16,16 @@ import kotlin.math.min
 
 private const val HALF_PX = 0.5f
 
-data class RowSpec(val pitch: Int, val view: Int, val above: Int = 0, val pitch64: Long = fxInt(pitch), val ppu64: Long = fxInt(1), val collapse: Boolean = false) {
-    val whole: Boolean get() = ppu64 == fxInt(1) && pitch64 == fxInt(pitch)
+data class RowSpec(
+    val pitch: Int,
+    val view: Int,
+    val above: Int = 0,
+    val pitch64: Long = fxInt(pitch),
+    val ppu64: Long = fxInt(1),
+    val collapse: Boolean = false,
+    val top64: Long = 0L,
+) {
+    val whole: Boolean get() = ppu64 == fxInt(1) && pitch64 == fxInt(pitch) && top64 == 0L
 
     companion object {
         fun of(pitchU: Float, s: Scale, view: Int, above: Int = 0): RowSpec {
@@ -25,10 +33,15 @@ data class RowSpec(val pitch: Int, val view: Int, val above: Int = 0, val pitch6
             val ppu64 = fx(s.ppu)
             return RowSpec(px64(p64, ppu64) + 1, view, above, p64, ppu64)
         }
+
+        fun of64(pitch64: Long, s: Scale, view: Int, above: Int = 0, top64: Long = 0L, collapse: Boolean = false): RowSpec {
+            val ppu64 = fx(s.ppu)
+            return RowSpec(px64(pitch64, ppu64) + 1, view, above, pitch64, ppu64, collapse, top64)
+        }
     }
 }
 
-class RowTrack(pitch: Int, view: Int, q: Int = 0, above: Int = 0, pitch64: Long = fxInt(pitch), ppu64: Long = fxInt(1), whole: Boolean = ppu64 == fxInt(1) && pitch64 == fxInt(pitch), collapse: Boolean = false) : Track {
+class RowTrack(pitch: Int, view: Int, q: Int = 0, above: Int = 0, pitch64: Long = fxInt(pitch), ppu64: Long = fxInt(1), whole: Boolean = ppu64 == fxInt(1) && pitch64 == fxInt(pitch), collapse: Boolean = false, top64: Long = 0L) : Track {
     var pitch = pitch
         private set
     var view = view
@@ -39,9 +52,11 @@ class RowTrack(pitch: Int, view: Int, q: Int = 0, above: Int = 0, pitch64: Long 
         private set
     var ppu64 = ppu64
         private set
-    var whole = whole
+    var whole = whole && top64 == 0L
         private set
     var collapse = collapse
+        private set
+    var top64 = top64
         private set
     var count = 0
         private set
@@ -50,7 +65,9 @@ class RowTrack(pitch: Int, view: Int, q: Int = 0, above: Int = 0, pitch64: Long 
     private var pending = 0f
     private var counted = false
 
-    fun topOf(r: Int): Int = px64(r * pitch64, ppu64)
+    val boxTop: Int get() = px64(top64, ppu64)
+
+    fun topOf(r: Int): Int = if (top64 == 0L) px64(r * pitch64, ppu64) else px64(top64 + r * pitch64, ppu64) - boxTop
 
     fun rowAt(px: Int): Int {
         var r = (fxOfPx(px.toFloat(), ppu64) / pitch64).toInt()
@@ -118,6 +135,7 @@ class RowTrack(pitch: Int, view: Int, q: Int = 0, above: Int = 0, pitch64: Long 
         ppu64 = spec.ppu64
         whole = spec.whole
         collapse = spec.collapse
+        top64 = spec.top64
         if (counted) q = q.coerceIn(0, max)
     }
 
@@ -138,6 +156,7 @@ class RowTrack(pitch: Int, view: Int, q: Int = 0, above: Int = 0, pitch64: Long 
         ppu64 = spec.ppu64
         whole = spec.whole
         collapse = spec.collapse
+        top64 = spec.top64
         q = topOf(f) + px(s / lastPpu, ppu)
     }
 
@@ -145,6 +164,6 @@ class RowTrack(pitch: Int, view: Int, q: Int = 0, above: Int = 0, pitch64: Long 
 
     companion object {
         fun restore(saved: List<Float>, spec: RowSpec, ppu: Float): RowTrack =
-            RowTrack(spec.pitch, spec.view, 0, spec.above, spec.pitch64, spec.ppu64, spec.whole, spec.collapse).also { it.q = it.topOf(saved[0].toInt()) + px(saved[1], ppu) }
+            RowTrack(spec.pitch, spec.view, 0, spec.above, spec.pitch64, spec.ppu64, spec.whole, spec.collapse, spec.top64).also { it.q = it.topOf(saved[0].toInt()) + px(saved[1], ppu) }
     }
 }

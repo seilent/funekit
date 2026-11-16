@@ -3,6 +3,7 @@ package net.seilent.funekit.kit.touch
 import net.seilent.funekit.fx
 import net.seilent.funekit.fxInt
 import net.seilent.funekit.gen.Tok
+import net.seilent.funekit.px64
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -11,7 +12,17 @@ import org.junit.Test
 class RowTrackTest {
     private companion object {
         const val SONGS = 1291
+        const val SONG_PITCH = 160
+        const val SONG_BOX = 608
+        const val COLUMN_PITCH = 359
+        const val COLUMN_BOX = 299
     }
+
+    private fun songs(): RowTrack = RowTrack(SONG_PITCH, 1000, pitch64 = fx(53.2f), ppu64 = fx(3f), top64 = fx(202.5f)).also { it.count(20, 0) }
+
+    private fun column(): RowTrack = RowTrack(COLUMN_PITCH, 1000, pitch64 = fx(119.5f), ppu64 = fx(3f), top64 = fx(99.5f)).also { it.count(30, 0) }
+
+    private fun drawn(t: RowTrack, box: Int, rows: IntRange): List<Int> = rows.map { box + t.topOf(it) - t.q }
 
     private fun a105(q: Int = 0): RowTrack = RowTrack(165, 920).also {
         it.count(30, 0)
@@ -299,5 +310,60 @@ class RowTrackTest {
         assertEquals(fx(55f), t.pitch64)
         assertEquals(275, t.topOf(2))
         assertFalse(t.whole)
+    }
+
+    @Test
+    fun aBoxTopInSixteenSixteenPlacesEachRowAtTheTopPlusItsPitchRoundedOnce() {
+        val t = songs()
+        assertFalse(t.whole)
+        assertEquals(SONG_BOX, t.boxTop)
+        assertEquals(listOf(608, 767, 927, 1086, 1246, 1405, 1565, 1725, 1884), drawn(t, SONG_BOX, 0..8))
+        assertEquals(listOf(608, 768, 927, 1087, 1246, 1406, 1566, 1725, 1885), (0..8).map { SONG_BOX + px64(it * t.pitch64, t.ppu64) })
+        assertFalse(RowSpec(SONG_PITCH, 1000, 0, fx(53.2f), fx(3f), top64 = fx(202.5f)).whole)
+    }
+
+    @Test
+    fun theColumnRestsOnALetterRowAsFuneOsAtAWholePxOffsetAndAHalfPxOffsetMovesAlternateRows() {
+        val t = column()
+        assertEquals(COLUMN_BOX, t.boxTop)
+        assertEquals(listOf(299, 657, 1016, 1374, 1733), drawn(t, COLUMN_BOX, 0..4))
+        t.at(t.topOf(2))
+        assertEquals(717, t.q)
+        assertEquals(listOf(299, 657, 1016, 1374), drawn(t, COLUMN_BOX, 2..5))
+        t.at(t.topOf(1))
+        assertEquals(358, t.q)
+        val funeOs = listOf(299, 657, 1016, 1374)
+        val kit = drawn(t, COLUMN_BOX, 1..4)
+        assertEquals(listOf(299, 658, 1016, 1375), kit)
+        assertEquals(listOf(false, true, false, true), kit.indices.map { kit[it] != funeOs[it] })
+    }
+
+    @Test
+    fun aTapOnTheColumnTakesTheRowOfItsOwnTops() {
+        val t = column()
+        assertEquals(358, t.topOf(1))
+        assertEquals(0, t.tapRow(656.9f - COLUMN_BOX))
+        assertEquals(1, t.tapRow(657f - COLUMN_BOX))
+    }
+
+    @Test
+    fun theSongsTrackKeepsItsBoxTopThroughEveryResizeAndRescale() {
+        val t = songs()
+        t.resize(SONG_PITCH, 900)
+        assertEquals(fx(202.5f), t.top64)
+        assertEquals(767, SONG_BOX + t.topOf(1))
+        assertFalse(t.whole)
+        t.resize(RowSpec(SONG_PITCH, 800, 0, fx(53.2f), fx(3f), top64 = fx(202.5f)))
+        assertEquals(767, SONG_BOX + t.topOf(1))
+        assertFalse(t.whole)
+        t.rescale(3f, 2f, 107)
+        assertEquals(fx(2f), t.ppu64)
+        assertEquals(405, t.boxTop)
+        assertEquals(listOf(405, 511, 618), drawn(t, t.boxTop, 0..2))
+        t.rescale(2f, 3f, SONG_PITCH)
+        assertEquals(SONG_BOX, t.boxTop)
+        assertEquals(listOf(608, 767), drawn(t, SONG_BOX, 0..1))
+        t.rescale(3f, 2f, RowSpec(107, 800, 0, fx(53.2f), fx(2f), top64 = fx(202.5f)))
+        assertEquals(listOf(405, 511, 618), drawn(t, t.boxTop, 0..2))
     }
 }
