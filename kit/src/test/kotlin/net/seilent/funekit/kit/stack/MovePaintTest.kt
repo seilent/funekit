@@ -2122,6 +2122,60 @@ class MovePaintTest {
         assertEquals(Tok.motion_t4mFade.toInt(), l.dur)
     }
 
+    private class PivotRowPage(d: PagePaint, val band: Edges, val marks: MutableList<List<Float>>) : PagePaint by d {
+        override fun pivotRow(): Edges = band
+
+        override fun DrawScope.pivotRowInk(rec: DrawRecord?) {
+            val t = rec as? Track ?: return
+            drawRect(ROW_INK, Offset(band.x0.toFloat(), band.y0.toFloat()), Size(MARK, MARK))
+            marks += listOf(t.k, t.tx, t.ty, t.a, t.clip[2])
+        }
+    }
+
+    @Test
+    fun aPivotPushDrawsThePagesPivotRowInkInsideTheBandWidenedToTheReach() {
+        val pc = chromeOf(measurer, fonts, s, unit, "artist", listOf(OTHER, "songs"), null)
+        val g = Geo(s, pc, pitch, top, bottom)
+        val band = Edges(0, px(s.board.pivotTop, s.ppu), s.widthPx, px(s.board.page_contentTop, s.ppu))
+        assertEquals(189, band.y0)
+        val marks = mutableListOf<List<Float>>()
+        val r = Run(
+            g = g,
+            sides = mapOf("a" to { p: Boolean -> if (p) side(A, false) else null }, "b" to { p: Boolean -> if (p) null else side(B, true) }),
+            wraps = mapOf("b" to { d: PagePaint -> PivotRowPage(d, band, marks) }),
+        )
+        r.stack.pages.add("a")
+        r.stack.push("b", MoveKind.T3)
+        r.stack.frame(0L)
+        val e = r.paint.ctx.ends
+        assertTrue(e.morph)
+        assertTrue(e.pivots)
+        assertTrue(r.move.has(Part.Pivots, Prop.S))
+        assertFalse(r.move.has(Part.Pivots, Prop.X))
+        assertEquals(0.59f * s.widthPx, r.move.at(Part.Pivots, Prop.PX, 300L), 1e-3f)
+        assertEquals(0.63f, r.move.at(Part.Pivots, Prop.S, 267L), 1e-6f)
+        r.draw(266L)
+        assertTrue(marks.isEmpty())
+        for (at in listOf(267L, 333L, 400L)) {
+            marks.clear()
+            r.draw(at)
+            val sc = r.move.at(Part.Pivots, Prop.S, at)
+            val ox = r.move.at(Part.Pivots, Prop.PX, at)
+            val oy = r.move.at(Part.Pivots, Prop.PY, at)
+            val m = marks.single()
+            assertEquals("$at", sc, m[0], 1e-6f)
+            assertEquals("$at", ox - ox * sc, m[1], 1e-3f)
+            assertEquals("$at", oy - oy * sc, m[2], 1e-3f)
+            assertEquals("$at", r.move.at(Part.Pivots, Prop.A, at), m[3], 1e-6f)
+        }
+        assertEquals(895, r.paint.ctx.pivotReach)
+        marks.clear()
+        r.draw(300L)
+        val m = marks.single()
+        assertEquals(m[0] * 895 + m[1], m[4], 1e-3f)
+        assertTrue("the pivot ink at ${s.widthPx + 40} px falls inside the clip at ${m[4]}", m[0] * (s.widthPx + 40) + m[1] < m[4])
+    }
+
     companion object {
         private const val FRAME = 16L
         private const val ROWS = 40
@@ -2153,6 +2207,7 @@ class MovePaintTest {
         private const val PROBE = 8
         private const val GROUND_X = 90
         private const val GROUND_Y = 1240
+        private const val MARK = 4f
         private val HOME_INK = Color.White
         private val ROW_INK = Color.White
         private val GROUND_INK = Color(0xFF203040)

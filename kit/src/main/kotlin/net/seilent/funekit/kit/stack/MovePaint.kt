@@ -45,6 +45,7 @@ import net.seilent.funekit.kit.statusRow
 import net.seilent.funekit.kit.wordBottom
 import net.seilent.funekit.px
 import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 
@@ -53,6 +54,8 @@ private const val MID = 2
 private const val SLIDE_X = 200f
 private const val SLIDE_W = 480f
 private const val TAIL_STEP = 4L
+private const val REACH_STEP = 16L
+private const val REACH_PAD = 2
 
 class Bands(val first: Int, val y: IntArray, val dy: IntArray, val dx: Float)
 
@@ -136,6 +139,8 @@ interface PagePaint {
     fun hide(h: TileHide?) {}
 
     fun pivotRow(): Edges? = null
+
+    fun DrawScope.pivotRowInk(rec: DrawRecord?) {}
 
     fun thumbFade(at: Long): Float = 0f
 
@@ -362,6 +367,7 @@ class MoveCtx(
 
     var tail: Int = -1
     var leaveTail: Int = -1
+    var pivotReach: Int = -1
 
     fun carry(old: MoveCtx, v: PageMove, at: Long): MoveCtx {
         fun cur(p: Part, q: Prop) = v.at(p, q, at)
@@ -822,6 +828,22 @@ class MovePaint(private val move: PageMove) {
         return need
     }
 
+    private fun pivotReach(w: Float): Int {
+        val v = move
+        val l = v.leg(Part.Pivots, Prop.S)
+        var reach = w
+        if (l != null) {
+            var t = v.t0 + l.delay
+            val end = v.partEnd(Part.Pivots)
+            while (t <= end) {
+                val ox = v.at(Part.Pivots, Prop.PX, t)
+                reach = max(reach, ox + (w - v.at(Part.Pivots, Prop.X, t) - ox) / v.at(Part.Pivots, Prop.S, t))
+                t += REACH_STEP
+            }
+        }
+        return floor(reach).toInt() + REACH_PAD
+    }
+
     private fun leaveTail(m: MoveCtx): Int {
         val b = m.leaveBands ?: return 0
         val held = m.leaveAt ?: return 0
@@ -1191,17 +1213,20 @@ class MovePaint(private val move: PageMove) {
         val pivrow = to != null && pr != null && v.has(Part.Pivots, Prop.S)
         val pva = if (pivrow) v.at(Part.Pivots, Prop.A, now) else 0f
         val tc = to?.paint?.chrome
+        if (pivrow && m.pivotReach < 0) m.pivotReach = pivotReach(size.width)
         if (to != null && pr != null && tc != null && pva > 0f) {
+            val rx = max(pr.x1, m.pivotReach).toFloat()
             val sc = v.at(Part.Pivots, Prop.S, now)
             val px = v.at(Part.Pivots, Prop.PX, now)
             val py = v.at(Part.Pivots, Prop.PY, now)
             layer(rec, pva, layerPaint) {
                 placed(rec, Place(sc, px - px * sc + v.at(Part.Pivots, Prop.X, now), py - py * sc, 0f, 0f)) {
-                    clipped(rec, pr.x0.toFloat(), pr.y0.toFloat(), pr.x1.toFloat(), pr.y1.toFloat()) {
+                    clipped(rec, pr.x0.toFloat(), pr.y0.toFloat(), rx, pr.y1.toFloat()) {
                         tc.headerPart = ChromePart(hidden = true)
                         chrome(tc, now)
                         rec?.chrome("pivrow.chrome", tc, now, size.width.toInt())
                         tc.clearParts()
+                        with(to.paint) { pivotRowInk(rec) }
                     }
                 }
             }
