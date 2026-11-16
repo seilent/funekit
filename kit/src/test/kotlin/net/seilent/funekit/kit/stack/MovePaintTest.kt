@@ -2176,6 +2176,26 @@ class MovePaintTest {
         assertTrue("the pivot ink at ${s.widthPx + 40} px falls inside the clip at ${m[4]}", m[0] * (s.widthPx + 40) + m[1] < m[4])
     }
 
+    private fun pairRun(a: WordSide?, b: WordSide?): Run {
+        val r = Run(sides = mapOf("a" to { p: Boolean -> if (p) a else null }, "b" to { p: Boolean -> if (p) null else b }))
+        r.stack.pages.add("a")
+        r.stack.push("b", MoveKind.T3)
+        r.stack.frame(0L)
+        return r
+    }
+
+    @Test
+    fun aPivotMorphPairsEqualWordsOfOtherKindsAndNeedsAHeaderSide() {
+        val e = pairRun(side(A, false), side(A, true)).paint.ctx.ends
+        assertTrue(e.morph)
+        assertEquals(MorphKind.Pivot, e.morphKind)
+        assertTrue(e.morphHeaderIn)
+        assertFalse(e.morphHeaderOut)
+        assertFalse(pairRun(side(OTHER, true), side(OTHER, true)).paint.ctx.ends.morph)
+        assertFalse(pairRun(side(A, false), side(OTHER, false)).paint.ctx.ends.morph)
+        assertTrue(pairRun(side(A, false), side(OTHER, true)).paint.ctx.ends.morph)
+    }
+
     companion object {
         private const val FRAME = 16L
         private const val ROWS = 40

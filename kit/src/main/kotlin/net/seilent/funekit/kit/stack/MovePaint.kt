@@ -700,7 +700,7 @@ fun moveCtx(t: Turn<*>, home: HomeSide?, from: PageSide?, to: PageSide?, forms: 
         val byRow = rs != null && hs != null && hs.header && foldWord(rs.text) == foldWord(hs.text)
         val a = if (byRow) (if (push) rs else hs) else from.paint.wordSide(push)
         val b = if (byRow) (if (push) hs else rs) else to.paint.wordSide(!push)
-        if (a != null && b != null && (byRow || a.text != b.text)) {
+        if (a != null && b != null && (byRow || !(a.text == b.text && a.header == b.header)) && (a.header || b.header)) {
             val m = Morph(a, b, push)
             morph = m
             morphLook = if (!push && !byRow && lit && a.header) Tok.alpha_full else m.word.look
