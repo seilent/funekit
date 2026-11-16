@@ -86,7 +86,6 @@ import net.seilent.funekit.kit.touch.Scroll
 import net.seilent.funekit.kit.touch.Slop
 import net.seilent.funekit.kit.touch.Velocity
 import net.seilent.funekit.kit.word
-import net.seilent.funekit.fxOfPx
 import net.seilent.funekit.px
 import net.seilent.funekit.scale
 import org.junit.Test
@@ -374,7 +373,7 @@ class MotionSheetTest {
             val n = page.listRows
             var dragging = false
             var downY = 0f
-            fun after(at: Long) = focus.afterScroll(n, fxOfPx(track.q.toFloat(), track.ppu64), fxOfPx(track.view.toFloat(), track.ppu64), track.pitch64, at)
+            fun after(at: Long) = focus.afterScroll(track, at)
             fun bar() = listThumbOf(s, top, bottom, track)
             fun touch(e: Touch) {
                 val y = e.y * s.stdPpu

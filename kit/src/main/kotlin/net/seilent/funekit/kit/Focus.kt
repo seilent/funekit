@@ -3,7 +3,6 @@ package net.seilent.funekit.kit
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
-import net.seilent.funekit.fxOfPx
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.motion.Leg
 import net.seilent.funekit.kit.motion.lerp
@@ -20,8 +19,16 @@ fun focusAfterScroll(row: Int, count: Int, off: Long, view: Long, pitch: Long, c
     return (if (top < band) first else last).coerceIn(0, count - 1)
 }
 
-fun focusAfterScroll(row: Int, t: RowTrack, collapse: Long = 0L): Int =
-    focusAfterScroll(row, t.count, fxOfPx(t.q.toFloat(), t.ppu64), fxOfPx(t.view.toFloat(), t.ppu64), t.pitch64, collapse)
+fun focusAfterScroll(row: Int, t: RowTrack, collapse: Int = 0): Int {
+    if (t.count == 0) return row
+    val band = t.q - t.q.coerceIn(0, collapse)
+    val end = t.q + t.view
+    if (t.topOf(row) >= band && t.topOf(row + 1) <= end) return row
+    val at = t.rowAt(band)
+    val first = if (t.topOf(at) < band) at + 1 else at
+    val last = max(first, t.rowAt(end) - 1)
+    return (if (t.topOf(row) < band) first else last).coerceIn(0, t.count - 1)
+}
 
 class FocusTrack {
     var revision by mutableIntStateOf(0)
@@ -65,6 +72,8 @@ class FocusTrack {
 
     fun afterScroll(count: Int, off: Long, view: Long, pitch: Long, now: Long) =
         set(focusAfterScroll(row, count, off, view, pitch), count, now, false)
+
+    fun afterScroll(t: RowTrack, now: Long) = set(focusAfterScroll(row, t), t.count, now, false)
 
     fun animating(now: Long): Boolean = now - intoAt < into.end || now - outAt < out.end
 }

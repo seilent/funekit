@@ -1,5 +1,8 @@
 package net.seilent.funekit.kit
 
+import net.seilent.funekit.fx
+import net.seilent.funekit.gen.Tok
+import net.seilent.funekit.kit.touch.RowTrack
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -82,6 +85,17 @@ class FocusTest {
     }
 
     @Test
+    fun theCollapseLiftMovesTheBandTopUpOnAWholePixelRowTrack() {
+        val t = RowTrack(40, 280).also { it.count(20, 0) }
+        t.at(30)
+        assertEquals(1, focusAfterScroll(0, t))
+        assertEquals(0, focusAfterScroll(0, t, 50))
+        t.at(120)
+        assertEquals(3, focusAfterScroll(1, t))
+        assertEquals(2, focusAfterScroll(1, t, 50))
+    }
+
+    @Test
     fun theFocusAfterAScrollLandsWithNoMotion() {
         val f = FocusTrack()
         f.set(4, 20, 0, true)
@@ -100,5 +114,59 @@ class FocusTest {
         assertEquals(4, focusAfterScroll(2, 30, 539, 1804, 163))
         assertEquals(5, focusAfterScroll(5, 30, 539, 1804, 163))
         assertEquals(13, focusAfterScroll(14, 30, 539, 1804, 163))
+    }
+
+    private fun song(ppu: Float, view: Int, count: Int = 1291): RowTrack =
+        RowTrack(0, view, pitch64 = fx(Tok.rowSong), ppu64 = fx(ppu)).also { it.count(count, 0) }
+
+    @Test
+    fun anR1SongTrackRestingOnARowTopThatRoundedUpKeepsThatRow() {
+        val t = song(2f, 560)
+        assertEquals(85120, t.topOf(800))
+        t.at(t.topOf(800))
+        assertEquals(800, focusAfterScroll(800, t))
+        t.at(t.topOf(800) + 1)
+        assertEquals(801, focusAfterScroll(800, t))
+    }
+
+    @Test
+    fun aV1SongTrackRestingOnRow3KeepsIt() {
+        val t = song(1f, 200)
+        assertEquals(160, t.topOf(3))
+        t.at(160)
+        assertEquals(3, focusAfterScroll(3, t))
+    }
+
+    @Test
+    fun aV1RowWhoseBottomRoundedDownToTheViewEndIsWhole() {
+        val t = song(1f, 106, 20)
+        assertEquals(106, t.topOf(2))
+        assertEquals(1, focusAfterScroll(1, t))
+    }
+
+    @Test
+    fun aWholePixelTrackAnswersAsThePxRule() {
+        val t = RowTrack(40, 280).also { it.count(60, 0) }
+        for (off in 0..2000 step 7) {
+            t.at(off)
+            assertEquals(off, t.q)
+            for (r in 0..40) assertEquals("row $r at $off", focusAfterScroll(r, 60, off.toLong(), 280L, 40L), focusAfterScroll(r, t))
+        }
+    }
+
+    @Test
+    fun anEmptyTrackKeepsTheRowItIsGiven() {
+        assertEquals(5, focusAfterScroll(5, song(2f, 560, 0)))
+    }
+
+    @Test
+    fun theFocusAfterAScrollOnARowTrackLandsWithNoMotion() {
+        val t = song(2f, 560)
+        val f = FocusTrack()
+        f.set(799, t.count, 0, true)
+        t.at(t.topOf(800))
+        f.afterScroll(t, 50)
+        assertEquals(800, f.row)
+        assertEquals(1f, f.rowAlpha(800, 50, 1f, 0.6f), 0f)
     }
 }
