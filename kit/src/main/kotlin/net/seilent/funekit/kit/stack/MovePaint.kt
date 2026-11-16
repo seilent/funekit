@@ -122,6 +122,7 @@ interface PagePaint {
 
     val nowPlaying: Boolean get() = false
     val queue: Boolean get() = false
+    val albumCol: Boolean get() = false
 
     fun tileRect(album: Long): Edges? = null
 
@@ -649,6 +650,7 @@ fun moveCtx(t: Turn<*>, home: HomeSide?, from: PageSide?, to: PageSide?, forms: 
         e = aw.e
         word = aw.word
         look = aw.look
+        if (pop) e = e.copy(colBack = from.paint.albumCol)
         if (!pop) {
             e = e.copy(zoom = false)
             val a = from.paint.tileRect(album)

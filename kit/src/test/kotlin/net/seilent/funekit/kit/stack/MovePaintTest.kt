@@ -2096,6 +2096,32 @@ class MovePaintTest {
 
     private data class Quad4(val dt: Long, val s: Float, val x: Float, val y: Float)
 
+    private class AlbumColumn(d: PagePaint) : PagePaint by d {
+        override val albumCol = true
+    }
+
+    @Test
+    fun aT4mFromTheAlbumColumnTakesTheColumnBackAndFromAnAlbumFadesInFromTheWordEnd() {
+        val plain = MoveForms()
+        val r = Run(forms = plain, wraps = mapOf("c" to { d: PagePaint -> AlbumColumn(d) }))
+        r.stack.pages.addAll(listOf("hub", "c"))
+        r.stack.pop(MoveKind.T4m)
+        r.stack.frame(0L)
+        assertTrue(r.paint.ctx.ends.colBack)
+        assertEquals(0f, r.move.at(Part.Content, Prop.A, 299L), 0f)
+        assertEquals(100f / Tok.motion_t3cBack, r.move.at(Part.Content, Prop.A, 400L), 1e-4f)
+        assertEquals(1f, r.move.at(Part.Content, Prop.A, 467L), 0f)
+        val a = Run(forms = plain)
+        a.stack.pages.addAll(listOf("hub", "album"))
+        a.stack.pop(MoveKind.T4m)
+        a.stack.frame(0L)
+        assertFalse(a.paint.ctx.ends.colBack)
+        assertTrue(a.paint.ctx.ends.word)
+        val l = requireNotNull(a.move.leg(Part.Content, Prop.A))
+        assertEquals(a.move.wordEnd, l.delay)
+        assertEquals(Tok.motion_t4mFade.toInt(), l.dur)
+    }
+
     companion object {
         private const val FRAME = 16L
         private const val ROWS = 40
