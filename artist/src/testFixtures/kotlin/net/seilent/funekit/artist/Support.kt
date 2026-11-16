@@ -1,6 +1,7 @@
 package net.seilent.funekit.artist
 
 import java.awt.Color
+import java.awt.RenderingHints
 import java.awt.image.BufferedImage
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -461,6 +462,82 @@ object Images {
         val at = if ((jpeg[3].toInt() and 0xFF) == 0xE0) 4 + (((jpeg[4].toInt() and 0xFF) shl 8) or (jpeg[5].toInt() and 0xFF)) else 2
         return jpeg.copyOfRange(0, at) + app1 + jpeg.copyOfRange(at, jpeg.size)
     }
+}
+
+class AwtCodec(var face: ((Int, Int) -> Pair<Double, Double>?)? = null) : Codec {
+    val qualities = ArrayList<Int>()
+    var faces = 0
+
+    override fun bounds(bytes: ByteArray): Size? = read(bytes)?.let { Size(it.width, it.height) }
+
+    override fun decode(bytes: ByteArray, maxSide: Int): Picture? = read(bytes)?.let { picture(it) }
+
+    override fun upright(bytes: ByteArray, maxSide: Int, orientation: Int): Picture? = read(bytes)?.let { picture(fit(Images.orient(it, orientation), maxSide)) }
+
+    private fun read(bytes: ByteArray): BufferedImage? = try {
+        ImageIO.read(ByteArrayInputStream(bytes))
+    } catch (e: Exception) {
+        null
+    }
+
+    private fun fit(img: BufferedImage, maxSide: Int): BufferedImage {
+        val side = maxOf(img.width, img.height)
+        if (side <= maxSide) return img
+        val w = maxOf(1, (img.width.toLong() * maxSide / side).toInt())
+        val h = maxOf(1, (img.height.toLong() * maxSide / side).toInt())
+        val out = BufferedImage(w, h, BufferedImage.TYPE_INT_RGB)
+        val g = out.createGraphics()
+        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR)
+        g.drawImage(img, 0, 0, w, h, null)
+        g.dispose()
+        return out
+    }
+
+    private fun picture(img: BufferedImage): Picture {
+        return object : Picture {
+            override val w = img.width
+            override val h = img.height
+            override fun face() = face?.invoke(w, h).also { faces++ }
+            override fun jpeg(crop: Rect, w: Int, h: Int, quality: Int): ByteArray {
+                qualities += quality
+                val out = BufferedImage(w, h, BufferedImage.TYPE_INT_RGB)
+                val g = out.createGraphics()
+                g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR)
+                g.drawImage(img, 0, 0, w, h, crop.x, crop.y, crop.x + crop.w, crop.y + crop.h, null)
+                g.dispose()
+                return Images.jpeg(out, quality)
+            }
+        }
+    }
+}
+
+class Collected : BrowseSink {
+    val order = java.util.concurrent.CopyOnWriteArrayList<String>()
+    val tiles = java.util.concurrent.CopyOnWriteArrayList<Pair<String, Tile>>()
+    val done = java.util.concurrent.CopyOnWriteArrayList<String>()
+    @Volatile var search: BrowseFeed.Search? = null
+    var onTile: (Pair<String, Tile>) -> Unit = {}
+
+    override fun sections(order: List<String>) {
+        this.order += order
+    }
+
+    override fun tile(section: String, t: Tile) {
+        tiles += section to t
+        onTile(section to t)
+    }
+
+    override fun sectionDone(section: String) {
+        done += section
+    }
+
+    override fun search(outcome: BrowseFeed.Search) {
+        search = outcome
+    }
+
+    fun of(section: String): List<Tile> = synchronized(tiles) { tiles.filter { it.first == section }.map { it.second } }
+
+    fun all(): List<Tile> = synchronized(tiles) { tiles.map { it.second } }
 }
 
 object Inline : java.util.concurrent.AbstractExecutorService() {

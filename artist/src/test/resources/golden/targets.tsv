@@ -1,0 +1,4 @@
+phoneTarget	720x1680
+deviceTargets	a105=1280x720,r1=720x720,v1=480x360
+miss floor	240x320
+meta sized	1 720x1680 1280x720
