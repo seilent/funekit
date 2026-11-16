@@ -219,7 +219,33 @@ class RowTrackTest {
         assertEquals(1, r1.tapRow(452f - 240f))
         assertEquals(2, r1.tapRow(453f - 240f))
         assertEquals(1, r1.tapRow(452.7f - 240f))
-        assertEquals(2, r1.tapRow(452.9f - 240f))
+        assertEquals(1, r1.tapRow(452.9f - 240f))
+    }
+
+    @Test
+    fun anR1TapOnTheFirstPxOfARowTakesThatRow() {
+        val r1 = song(2f, 560)
+        for (r in 0..2000) assertEquals("row $r", r, r1.tapRow((r1.topOf(r) - r1.q).toFloat()))
+        r1.at(1000)
+        for (r in 10..2000) assertEquals("row $r at 1000", r, r1.tapRow((r1.topOf(r) - r1.q).toFloat()))
+    }
+
+    @Test
+    fun aV1TapInTheLastSubPxOfARowTakesThatRow() {
+        val v1 = song(1f, 320)
+        assertEquals(160, v1.topOf(3))
+        assertEquals(2, v1.tapRow(159.75f))
+        assertEquals(3, v1.tapRow(160f))
+    }
+
+    @Test
+    fun anR1TapPast131072PxAddsTheOffsetExactly() {
+        val r1 = song(2f, 560)
+        r1.at(131200)
+        assertEquals(131200, r1.q)
+        assertEquals(131298, r1.topOf(1234))
+        assertEquals(1233, r1.tapRow(97.995f))
+        assertEquals(1234, r1.tapRow(98f))
     }
 
     @Test

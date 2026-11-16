@@ -10,6 +10,7 @@ import net.seilent.funekit.fxOfPx
 import net.seilent.funekit.px
 import net.seilent.funekit.px64
 import kotlin.math.abs
+import kotlin.math.floor
 import kotlin.math.max
 
 private const val HALF_PX = 0.5f
@@ -55,7 +56,7 @@ class RowTrack(pitch: Int, view: Int, q: Int = 0, above: Int = 0, pitch64: Long 
         return r
     }
 
-    fun tapRow(y: Float): Int = (fxOfPx(y + q, ppu64) / pitch64).toInt()
+    fun tapRow(y: Float): Int = rowAt(floor(y).toInt() + q)
 
     val max: Int get() = max(0, topOf(count) - view)
     val first: Int get() = rowAt(q)
