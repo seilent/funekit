@@ -1,0 +1,19 @@
+block	mbid:00000000-0000-4000-8000-000000000001	00000000-0000-4000-8000-000000000001	commons	File:Stage.jpg	aa11	Name A	1799999999000	v1	123
+block	name:name b		deezer	12345		Name\tB	1799999998000	
+drop	name:name e		Name E	1799999995000	v1
+drop	name:name f	00000000-0000-4000-8000-000000000003	Name F	1799999994000		clear	7,8
+drop	name:name g		Name G	1792137600000		clear
+drop	name:name h		Name H	1799999993000		clear
+reject	name:name c	00000000-0000-4000-8000-000000000002	Resolver C	Name C	1799999997000	r1	456
+reject	name:name d		Resolver D	Name D	1799999996000			UC0000000000000000000001
+held	Name I	00000000-0000-4000-8000-000000000004	v1
+held	Name I2		r1
+upgradedevice	v1
+upgradedevice	r1
+upgrade	mbid:00000000-0000-4000-8000-000000000004	Name J	00000000-0000-4000-8000-000000000004	1799999992000	v1	library
+upgrade	name:name k	Name K		1799999991000	r1	
+push	Name L	00000000-0000-4000-8000-000000000001	
+origin	Name L	00000000-0000-4000-8000-000000000001	phone
+push	Name M		v1
+push	Name N		
+origin	Name N		library
