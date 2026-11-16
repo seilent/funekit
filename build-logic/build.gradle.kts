@@ -22,6 +22,10 @@ gradlePlugin {
             id = "funekit.pin"
             implementationClass = "net.seilent.funekit.logic.PinPlugin"
         }
+        create("noscrape") {
+            id = "funekit.noscrape"
+            implementationClass = "net.seilent.funekit.logic.NoScrapePlugin"
+        }
     }
 }
 
