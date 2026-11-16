@@ -11,6 +11,8 @@ import kotlin.math.min
 private const val SLIDE_OUT = 300
 private const val SLIDE_IN = 500
 private const val HALF = 2f
+private const val SPLIT = 2
+private const val MS_PER_S = 1000f
 
 enum class MoveKind { T2, T2n, T2w, T4h, T4n, T3, T4, T3m, T4m, T7, T8, T3c, T3a, T4a, T3z, T4z, None }
 
@@ -18,6 +20,7 @@ enum class Part {
     Leave, LeaveHeader, LeavePivots, LeaveGround, LeaveWord, Content, Header, Zoom, Pivots, Ground, Word, Look, Home,
     Sub, Peek, Tile, NpIn, NpOut, NpLeave, NpEdge, NpPeek, NpUnder, NpPhoto, NpRing, NpArtist, NpAlbum, NpTitle, NpRings,
     NpTimeR, NpTimeL, NpBar, NpShuffle, NpNext, NpStatus, NpUHeader, NpURow0, NpURow1, NpURow2, NpURow3, NpURows, NpUArtist,
+    NpLArtist, NpLRow1, NpLRows, NpLHead, NpLPivot, NpLName, NpLRing0, NpLRing1, NpLRing2, NpLLabel, NpLPress,
     Face, HomeTurn,
 }
 
@@ -31,6 +34,8 @@ enum class MorphKind { None, Pivot, Row }
 
 enum class NpForm { Page, Front, Ring }
 
+enum class NpLeave { Pane, Album, Detail }
+
 val leaveGroup: Set<Part> = setOf(Part.Leave, Part.LeaveHeader, Part.LeavePivots, Part.LeaveGround, Part.LeaveWord)
 
 val arriveGroup: Set<Part> = setOf(Part.Content, Part.Header, Part.Pivots)
@@ -38,6 +43,11 @@ val arriveGroup: Set<Part> = setOf(Part.Content, Part.Header, Part.Pivots)
 val npInGroup: Set<Part> = setOf(
     Part.NpIn, Part.NpRing, Part.NpArtist, Part.NpAlbum, Part.NpTitle, Part.NpRings, Part.NpTimeR, Part.NpTimeL, Part.NpBar,
     Part.NpShuffle, Part.NpNext, Part.NpStatus, Part.NpPhoto,
+)
+
+val npLeaveGroup: Set<Part> = setOf(
+    Part.NpLArtist, Part.NpLRow1, Part.NpLRows, Part.NpLHead, Part.NpLPivot, Part.NpLName, Part.NpLRing0, Part.NpLRing1,
+    Part.NpLRing2, Part.NpLLabel, Part.NpLPress,
 )
 
 val npUnderGroup: Set<Part> = setOf(
@@ -163,6 +173,7 @@ data class MoveEnds(
     val rowsDx: Float = 0f,
     val endAt: Int = 0,
     val npForm: NpForm = NpForm.Page,
+    val npLeave: NpLeave = NpLeave.Pane,
     val npCut: Boolean = false,
     val npHome: Boolean = false,
     val turn: Boolean = false,
@@ -187,7 +198,11 @@ data class MoveEnds(
     val slideX: Float = 0f,
 )
 
-fun npInk(): Int = ms(Tok.motion_t7PaneInk)
+fun npInk(l: NpLeave = NpLeave.Pane): Int = when (l) {
+    NpLeave.Album -> ms(Tok.motion_t7AlbEnd) + ms(Tok.motion_npDark)
+    NpLeave.Detail -> ms(Tok.motion_t7DetailEnd) + ms(Tok.motion_npDark)
+    NpLeave.Pane -> ms(Tok.motion_t7PaneInk)
+}
 
 class PageMove {
     private class Off(val p: Part, val q: Prop, val at: Int, val d: Float)
@@ -1122,10 +1137,54 @@ class PageMove {
         ramp(Part.Peek, Prop.X, Moves.kT4nPeekX * e.homeU, 0f, inAt, Moves.kT4nPeek, Curves.easeOut)
     }
 
+    private fun albumLeave(e: MoveEnds) {
+        val inMs = ms(Tok.motion_t7AlbSlideIn)
+        val end = ms(Tok.motion_t7AlbSlide)
+        val fade = ms(Tok.motion_t7AlbFade)
+        val x0 = -Tok.motion_t7AlbSlideInX * e.pxU
+        val x1 = -Tok.motion_t7AlbSlideX * e.pxU
+        val bands = listOf(Part.NpLArtist to Tok.motion_t7AlbEnd, Part.NpLRow1 to Tok.motion_t7AlbRow1Gone, Part.NpLRows to Tok.motion_t7AlbRowsGone)
+        for ((p, gone) in bands) {
+            ramp(p, Prop.X, 0f, x0, 0, inMs, Curves.easeIn)
+            append(MoveLeg(p, Prop.X, x0, x1, inMs, end - inMs))
+            ramp(p, Prop.A, 1f, Tok.motion_t7AlbFadeA, 0, fade, Curves.linear)
+            append(MoveLeg(p, Prop.A, Tok.motion_t7AlbFadeA, 0f, fade, ms(gone) - fade))
+        }
+    }
+
+    private fun detailLeave(e: MoveEnds) {
+        val dim = ms(Tok.motion_t7DetailDim)
+        val half = (dim + 1) / SPLIT
+        val stepX = -Tok.motion_t7DetailStep * e.pxU
+        val dims = listOf(
+            Part.NpLPivot to Tok.motion_t7Detail17Pivot, Part.NpLName to Tok.motion_t7Detail17Name,
+            Part.NpLRing0 to Tok.motion_t7Detail17Ring0, Part.NpLRing1 to Tok.motion_t7Detail17Ring1,
+            Part.NpLRing2 to Tok.motion_t7Detail17Ring2, Part.NpLLabel to Tok.motion_t7Detail17Label,
+        )
+        for ((p, a) in dims) {
+            ramp(p, Prop.A, 1f, a, 0, half, Curves.linear)
+            append(MoveLeg(p, Prop.A, a, 0f, half, dim - half))
+        }
+        step(Part.NpLPress, Prop.A, 1f, 0f, dim)
+        step(Part.NpLPivot, Prop.X, 0f, stepX, 0)
+        step(Part.NpLName, Prop.X, 0f, stepX, 0)
+        val head = Moves.kT7DetailHeadA
+        keys(Part.NpLHead, Prop.A, head)
+        val last = head.t.last()
+        val v = Tok.motion_t7DetailHeadV * e.pxU / MS_PER_S
+        ramp(Part.NpLHead, Prop.X, stepX, stepX - v * last, 0, last, Curves.linear)
+        ramp(Part.NpLHead, Prop.Y, 0f, -v * (last - half), half, last - half, Curves.linear)
+    }
+
     private fun npLegs(k: MoveKind, e: MoveEnds, f: MoveForms) {
         if (k == MoveKind.T8) {
             t8Legs(e)
             return
+        }
+        when (e.npLeave) {
+            NpLeave.Album -> albumLeave(e)
+            NpLeave.Detail -> detailLeave(e)
+            NpLeave.Pane -> Unit
         }
         keys(Part.NpLeave, Prop.R, Moves.kT7PaneR)
         keys(Part.NpLeave, Prop.X, Moves.kT7PaneX.scaled(e.pxU))
@@ -1138,7 +1197,7 @@ class PageMove {
             keys(Part.NpPeek, Prop.R, Moves.kT7PeekR)
             keys(Part.NpPeek, Prop.A, Moves.kT7PeekA)
         }
-        val ink = npInk()
+        val ink = npInk(e.npLeave)
         if (e.npCut) {
             for (p in npInGroup) step(p, Prop.A, 0f, 1f, ink)
             return

@@ -26,6 +26,7 @@ import net.seilent.funekit.kit.motion.MoveEnds
 import net.seilent.funekit.kit.motion.MoveForms
 import net.seilent.funekit.kit.motion.MoveKind
 import net.seilent.funekit.kit.motion.NpForm
+import net.seilent.funekit.kit.motion.NpLeave
 import net.seilent.funekit.kit.motion.lerp
 import net.seilent.funekit.kit.motion.PageMove
 import net.seilent.funekit.kit.motion.Part
@@ -56,6 +57,7 @@ private const val SLIDE_W = 480f
 private const val TAIL_STEP = 4L
 private const val REACH_STEP = 16L
 private const val REACH_PAD = 2
+private const val NP_LEAVE_BANDS = 9
 
 class Bands(val first: Int, val y: IntArray, val dy: IntArray, val dx: Float)
 
@@ -76,6 +78,8 @@ sealed interface Content {
 class WordSide(val text: String, val s: Float, val look: Float, val x: Float, val y: Float, val pivot: Int, val header: Boolean, val word: Word)
 
 class TileHide(val album: Long, val ring: Boolean)
+
+class NpBands(val form: NpLeave, val bands: List<Pair<Edges, Part>>)
 
 class HomeMove(val items: Float, val sel: Int, val selAlpha: Float, val sub: Float, val off: Float, val watermark: Boolean = true)
 
@@ -157,6 +161,10 @@ interface PagePaint {
     }
 
     fun npRing(): Edges? = null
+
+    fun npLeaveBands(): NpBands? = null
+
+    val npArtTop: Int get() = -1
 }
 
 fun PagePaint.rowTop(i: Int): Int = rowY(i) - scroll
@@ -360,6 +368,7 @@ class MoveCtx(
     val rowHide: PageSide? = null,
     val hideRow: Int = -1,
     val rowBottom: Int = -1,
+    val npBands: List<Pair<Edges, Part>> = emptyList(),
 ) {
     val scale: Scale? get() = (to ?: from)?.scale ?: home?.scale
 
@@ -452,7 +461,15 @@ private fun underBands(to: PageSide, p: Float): List<Pair<Edges, Part>> {
         if (y1 > y0) out += Edges(0, y0, s.widthPx, y1) to part
     }
     band(0, hy, Part.NpUHeader)
-    band(hy, top, Part.NpUnder)
+    var head = hy
+    if (pp.npArtTop >= 0) {
+        val art = pp.npArtTop.coerceIn(hy, top)
+        val mid = ((px(Tok.npTextTop, p) + px(Tok.npAlbumBaseline, p)) / MID).coerceIn(hy, art)
+        band(hy, mid, Part.NpUArtist)
+        band(mid, art, Part.NpUHeader)
+        head = art
+    }
+    band(head, top, Part.NpUnder)
     val rows = listOf(Part.NpURow0, Part.NpURow1, Part.NpURow2, Part.NpURow3, Part.NpURows)
     for (i in 0 until n) {
         val y0 = max(y!![i], top)
@@ -472,6 +489,7 @@ internal const val NP_PANE = "np.pane"
 internal const val NP_HOME = "np.home"
 internal const val NP_UNDER = "np.under."
 internal const val NP_LEAVE = "np.leave"
+internal const val NP_LBAND = "np.lband."
 internal const val NP_PART = "np.part."
 internal const val NP_RING = "np.ring"
 internal const val TURN_LEAVE = "turn.leave"
@@ -575,7 +593,13 @@ private fun tileEnds(e: MoveEnds, a: Edges, b: Edges): MoveEnds = e.copy(
 
 fun moveCtx(t: Turn<*>, home: HomeSide?, from: PageSide?, to: PageSide?, forms: MoveForms, npForm: NpForm = NpForm.Page): MoveCtx {
     val k = t.kind
-    if (k == MoveKind.T7 || k == MoveKind.T8) return MoveCtx(npEnds(k, if (k == MoveKind.T7) to else from, home, npForm, k == MoveKind.T8 && to == null), k, home, from, to, false, 0f, null, 0f, -1, null, 0f, 0f, 0f, null, 0f)
+    if (k == MoveKind.T7 || k == MoveKind.T8) {
+        var ne = npEnds(k, if (k == MoveKind.T7) to else from, home, npForm, k == MoveKind.T8 && to == null)
+        val nb = if (k == MoveKind.T7 && npForm == NpForm.Page) from?.paint?.npLeaveBands() else null
+        val leaves = nb != null && nb.form != NpLeave.Pane && nb.bands.isNotEmpty() && nb.bands.size <= NP_LEAVE_BANDS
+        if (leaves && nb != null) ne = ne.copy(npLeave = nb.form)
+        return MoveCtx(ne, k, home, from, to, false, 0f, null, 0f, -1, null, 0f, 0f, 0f, null, 0f, npBands = if (leaves && nb != null) nb.bands else emptyList())
+    }
     val side = to ?: from ?: return MoveCtx.None
     val s = side.scale
     val leaveG = from?.paint?.grounded == true
@@ -1018,7 +1042,15 @@ class MovePaint(private val move: PageMove) {
             }
             return
         }
-        val leave: DrawScope.() -> Unit = {
+        val leave: DrawScope.() -> Unit = leave@{
+            val lf = m.from
+            if (lf != null && m.npBands.isNotEmpty()) {
+                for ((b, part) in m.npBands) {
+                    val t = M3.translate(Math.round(v.at(part, Prop.X, now)).toFloat(), Math.round(v.at(part, Prop.Y, now)).toFloat())
+                    quadAt(rec, NP_LBAND + part.name, v.at(part, Prop.A, now), t, b) { restOf(lf, now, null, "leave") }
+                }
+                return@leave
+            }
             val la = v.at(Part.NpLeave, Prop.A, now)
             val t = cam(Part.NpLeave, max(1f, whole(Tok.motion_t7PaneD, p)), peye, cx, now)
             val from = m.from

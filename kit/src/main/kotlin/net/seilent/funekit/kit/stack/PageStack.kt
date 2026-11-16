@@ -24,6 +24,7 @@ import net.seilent.funekit.kit.motion.Part
 import net.seilent.funekit.kit.motion.Prop
 import net.seilent.funekit.kit.motion.arriveGroup
 import net.seilent.funekit.kit.motion.npInGroup
+import net.seilent.funekit.kit.motion.npLeaveGroup
 import net.seilent.funekit.kit.touch.Gesture
 
 enum class Phase { Rest, Exit, Enter }
@@ -586,6 +587,7 @@ class PageStack<P : Any>(
         cutOwed = false
         move.land(Part.NpLeave)
         move.land(Part.NpPeek)
+        for (p in npLeaveGroup) move.land(p)
     }
 
     private fun backKey() = ask { now -> if (opened != null) refuse(now) }

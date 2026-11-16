@@ -702,6 +702,55 @@ class PageMoveTest {
 
     private fun started(k: MoveKind, e: MoveEnds) = PageMove().also { it.start(k, 0, e, forms) }
 
+    private fun mid(m: PageMove, p: Part, q: Prop, at: Long) = (m.at(p, q, at) + m.at(p, q, at + 1)) / 2
+
+    @Test
+    fun t7FromAnAlbumSlidesAndFadesItsBandsOutAndInksAt200() {
+        assertEquals(200, npInk(NpLeave.Album))
+        assertEquals(133, npInk(NpLeave.Detail))
+        assertEquals(300, npInk(NpLeave.Pane))
+        val m = started(MoveKind.T7, MoveEnds(npLeave = NpLeave.Album, pxU = 3f))
+        near(-188.7, m.at(Part.NpLRows, Prop.X, 83), "rows X at 83")
+        near(-377.25, mid(m, Part.NpLRows, Prop.X, 116), "rows X at 116.5")
+        near(-565.8, m.at(Part.NpLRows, Prop.X, 150), "rows X at 150")
+        near(0.75, m.at(Part.NpLRows, Prop.A, 83), "rows A at 83")
+        near(0.375, mid(m, Part.NpLRows, Prop.A, 91), "rows A at 91.5")
+        near(0.0, m.at(Part.NpLRows, Prop.A, 100), "rows A at 100")
+        assertTrue(m.at(Part.NpLRow1, Prop.A, 139) > 0f)
+        near(0.0, m.at(Part.NpLRow1, Prop.A, 140), "row 1 A at 140")
+        assertTrue(m.at(Part.NpLArtist, Prop.A, 149) > 0f)
+        near(0.0, m.at(Part.NpLArtist, Prop.A, 150), "artist A at 150")
+        near(0.0, m.at(Part.NpIn, Prop.A, 199), "album arrival before its ink")
+        assertTrue(m.at(Part.NpIn, Prop.A, 200) > 0f)
+        assertFalse(m.has(Part.NpLHead, Prop.A))
+    }
+
+    @Test
+    fun t7FromADetailPageDimsItsBandsStepsThemLeftAndInksAt133() {
+        val m = started(MoveKind.T7, MoveEnds(npLeave = NpLeave.Detail, pxU = 3f))
+        near(0.34, m.at(Part.NpLPivot, Prop.A, 17), "pivot A at 17")
+        near(0.0, m.at(Part.NpLPivot, Prop.A, 33), "pivot A at 33")
+        near(-11.7, m.at(Part.NpLPivot, Prop.X, 0), "pivot X at 0")
+        near(-11.7, m.at(Part.NpLName, Prop.X, 0), "name X at 0")
+        near(0.25, m.at(Part.NpLName, Prop.A, 17), "name A at 17")
+        near(0.70, m.at(Part.NpLLabel, Prop.A, 17), "label A at 17")
+        near(1.0, m.at(Part.NpLPress, Prop.A, 32), "press A at 32")
+        near(0.0, m.at(Part.NpLPress, Prop.A, 33), "press A at 33")
+        near(-11.7, m.at(Part.NpLHead, Prop.X, 0), "head X at 0")
+        near(-200.7, m.at(Part.NpLHead, Prop.X, 100), "head X at 100")
+        near(0.0, m.at(Part.NpLHead, Prop.Y, 17), "head Y at 17")
+        near(-156.87, m.at(Part.NpLHead, Prop.Y, 100), "head Y at 100")
+        near(0.97, m.at(Part.NpLHead, Prop.A, 0), "head A at 0")
+        near(0.0, m.at(Part.NpLHead, Prop.A, 100), "head A at 100")
+        near(0.0, m.at(Part.NpIn, Prop.A, 132), "detail arrival before its ink")
+        assertTrue(m.at(Part.NpIn, Prop.A, 133) > 0f)
+        val pane = started(MoveKind.T7, MoveEnds(pxU = 3f))
+        assertFalse(pane.has(Part.NpLRows, Prop.A))
+        assertFalse(pane.has(Part.NpLHead, Prop.A))
+        near(0.0, pane.at(Part.NpIn, Prop.A, 299), "pane arrival before its ink")
+        assertTrue(pane.at(Part.NpIn, Prop.A, 300) > 0f)
+    }
+
     @Test
     fun t3mGrowsTheTileAndTheWordThenFadesTheContentIn() {
         val m = started(MoveKind.T3m, MoveEnds(word = true, wordS0 = 0.5f, wordS1 = 1f, wordY0 = 0f, wordY1 = 1f, tileS0 = 0.2f, tileS1 = 1f))

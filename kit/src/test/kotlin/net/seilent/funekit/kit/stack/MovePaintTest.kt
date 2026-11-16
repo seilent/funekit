@@ -49,6 +49,7 @@ import net.seilent.funekit.kit.motion.MoveEnds
 import net.seilent.funekit.kit.motion.MoveForms
 import net.seilent.funekit.kit.motion.MoveKind
 import net.seilent.funekit.kit.motion.NpForm
+import net.seilent.funekit.kit.motion.NpLeave
 import net.seilent.funekit.kit.motion.PageMove
 import net.seilent.funekit.kit.motion.Part
 import net.seilent.funekit.kit.motion.Prop
@@ -2359,6 +2360,81 @@ class MovePaintTest {
         assertEquals(Math.round(r.move.at(Part.Leave, Prop.Y, at)).toFloat(), got[0].dy, 0f)
     }
 
+    private class LeavingPage(d: PagePaint, val nb: NpBands?, val art: Int = -1, override val top: Int = d.top) : PagePaint by d {
+        override fun npLeaveBands(): NpBands? = nb
+
+        override val npArtTop: Int get() = art
+    }
+
+    @Test
+    fun aT7FromAnAlbumPageLeavesItsBandsAsShiftedQuadsWithNoCamera() {
+        val three = NpBands(
+            NpLeave.Album,
+            listOf(Edges(0, 189, 720, 294) to Part.NpLArtist, Edges(0, 411, 720, 531) to Part.NpLRow1, Edges(0, 531, 720, 1280) to Part.NpLRows),
+        )
+        val r = Run(wraps = mapOf("a" to { d: PagePaint -> LeavingPage(d, three) }))
+        r.stack.pages.add("a")
+        r.stack.push("np", MoveKind.T7)
+        r.stack.frame(0L)
+        assertEquals(NpLeave.Album, r.paint.ctx.ends.npLeave)
+        val at = 83L
+        val rec = r.draw(at)
+        val bands = rec.quads.filter { it.name.startsWith(NP_LBAND) }
+        assertEquals(three.bands.map { NP_LBAND + it.second.name }, bands.map { it.name })
+        assertTrue(rec.quads.none { it.name == NP_LEAVE })
+        for ((i, q) in bands.withIndex()) {
+            val (b, part) = three.bands[i]
+            assertEquals(listOf(b.x0, b.y0, b.x1, b.y1), requireNotNull(q.src).let { listOf(it.x0, it.y0, it.x1, it.y1) })
+            assertEquals(r.move.at(part, Prop.A, at), q.a, 0f)
+            val o = q.t.map(0f, 0f)
+            assertEquals(Math.round(r.move.at(part, Prop.X, at)).toFloat(), o.x, 0f)
+            assertEquals(Math.round(r.move.at(part, Prop.Y, at)).toFloat(), o.y, 0f)
+        }
+        assertEquals(-189f, bands[2].t.map(0f, 0f).x, 0f)
+        val ten = NpBands(NpLeave.Album, List(10) { Edges(0, it * 100, 720, it * 100 + 100) to Part.NpLRows })
+        val p = Run(wraps = mapOf("a" to { d: PagePaint -> LeavingPage(d, ten) }))
+        p.stack.pages.add("a")
+        p.stack.push("np", MoveKind.T7)
+        p.stack.frame(0L)
+        assertEquals(NpLeave.Pane, p.paint.ctx.ends.npLeave)
+        val pr = p.draw(at)
+        assertTrue(pr.quads.any { it.name == NP_LEAVE })
+        assertTrue(pr.quads.none { it.name.startsWith(NP_LBAND) })
+    }
+
+    @Test
+    fun aT8IntoAlbumDetailSplitsItsHeadAtTheArtTopAndTheLinesMid() {
+        assertEquals(258, px(Tok.npTextTop, s.stdPpu))
+        assertEquals(330, px(Tok.npAlbumBaseline, s.stdPpu))
+        val r = Run(wraps = mapOf("a" to { d: PagePaint -> LeavingPage(d, null, ALBUM_ART_TOP, ALBUM_ROWS_TOP) }))
+        r.stack.pages.add("a")
+        r.stack.pages.add("np")
+        r.stack.back { MoveKind.T8 }
+        r.stack.frame(0L)
+        val rec = r.draw(342L)
+        val head = rec.quads.take(4).map { it.name to requireNotNull(it.src).let { e -> listOf(e.y0, e.y1) } }
+        assertEquals(
+            listOf(
+                NP_UNDER + Part.NpUHeader.name to listOf(0, 189),
+                NP_UNDER + Part.NpUArtist.name to listOf(189, 294),
+                NP_UNDER + Part.NpUHeader.name to listOf(294, 372),
+                NP_UNDER + Part.NpUnder.name to listOf(372, 756),
+            ),
+            head,
+        )
+        val plain = Run()
+        plain.stack.pages.add("a")
+        plain.stack.pages.add("np")
+        plain.stack.back { MoveKind.T8 }
+        plain.stack.frame(0L)
+        val pq = plain.draw(342L)
+        assertTrue(pq.quads.none { it.name == NP_UNDER + Part.NpUArtist.name })
+        assertEquals(
+            listOf(NP_UNDER + Part.NpUHeader.name to listOf(0, 189), NP_UNDER + Part.NpUnder.name to listOf(189, 360)),
+            pq.quads.take(2).map { it.name to requireNotNull(it.src).let { e -> listOf(e.y0, e.y1) } },
+        )
+    }
+
     companion object {
         private const val FRAME = 16L
         private const val ROWS = 40
@@ -2392,6 +2468,8 @@ class MovePaintTest {
         private const val GROUND_Y = 1240
         private const val MARK = 4f
         private const val ALBUM_ID = 5L
+        private const val ALBUM_ART_TOP = 372
+        private const val ALBUM_ROWS_TOP = 756
         private val HOME_INK = Color.White
         private val ROW_INK = Color.White
         private val GROUND_INK = Color(0xFF203040)
