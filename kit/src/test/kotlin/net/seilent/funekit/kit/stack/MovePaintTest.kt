@@ -2360,6 +2360,316 @@ class MovePaintTest {
         assertEquals(Math.round(r.move.at(Part.Leave, Prop.Y, at)).toFloat(), got[0].dy, 0f)
     }
 
+    private class HeadPage(private val d: ListPage, private val head: Edges, private val heads: MutableList<Drawn>) : PagePaint by d {
+        override fun DrawScope.rest(now: Long, rec: DrawRecord?, name: String) {
+            (rec as? Track)?.let { heads += Drawn("$name.head", -1, it.tx, it.ty, head.y0, it.k, it.k * head.y0 + it.ty, it.k * head.y1 + it.ty, it.clip, it.a) }
+            with(d) { rest(now, rec, name) }
+        }
+
+        override fun DrawScope.content(c: Content, now: Long, rec: DrawRecord?, name: String, fade: Float) = contentRows(this@HeadPage, c, now, rec, name, fade)
+    }
+
+    @Test
+    fun aT4mLeavesTheWholeLeavingPageWithItsHeadAboveTheRowsAndFadesItOverTheLeave() {
+        val head = Edges(0, 189, 720, 294)
+        val heads = mutableListOf<Drawn>()
+        val r = Run(forms = MoveForms(), wraps = mapOf("album" to { d: PagePaint -> HeadPage(d as ListPage, head, heads) }))
+        r.stack.pages.addAll(listOf("hub", "album"))
+        r.stack.pop(MoveKind.T4m)
+        r.stack.frame(0L)
+        val c = r.paint.ctx
+        assertFalse(c.ends.leaveRows)
+        assertNull(c.leaveBands)
+        assertNull(c.leaveAt)
+        assertEquals(133f, Tok.motion_leave)
+        val la = r.move.at(Part.Leave, Prop.A, 67L)
+        assertEquals(1f - 67f / 133f, la, 1e-4f)
+        r.draw(67L)
+        assertEquals(1, heads.size)
+        val h = heads[0]
+        assertEquals(1f, h.k, 0f)
+        assertEquals(0f, h.dx, 0f)
+        assertEquals(0f, h.dy, 0f)
+        assertEquals(la, h.alpha, 1e-6f)
+        assertTrue("the head band 189 to 294 lies above the rows top $top", head.y1 < top)
+        assertEquals("the leave layer is the whole screen, funeOS kScreen", listOf(Float.NEGATIVE_INFINITY, Float.NEGATIVE_INFINITY, Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY), h.clip)
+        assertTrue("the leaving rows still draw", r.drawn.any { it.name == "leave" && it.row == 0 })
+        heads.clear()
+        assertEquals(0f, r.move.at(Part.Leave, Prop.A, 133L), 0f)
+        r.draw(133L)
+        assertTrue("faded out by the leave end", heads.isEmpty())
+    }
+
+    @Test
+    fun everyLeaveWithNoBandsTakesTheWholePageAndABandedLeaveKeepsItsBandClip() {
+        for (k in listOf(MoveKind.T4, MoveKind.T4m, MoveKind.T4z)) {
+            val r = Run(forms = MoveForms())
+            r.stack.pages.addAll(listOf("a", "b"))
+            r.stack.pop(k)
+            r.stack.frame(0L)
+            assertNull("$k", r.paint.ctx.leaveBands)
+            assertTrue("$k", r.move.at(Part.Leave, Prop.A, 17L) > 0f)
+            r.draw(17L)
+            val got = r.pages.getValue("b").restAt.filter { it.name == "leave" }
+            assertEquals("$k", 1, got.size)
+            assertEquals("$k clip ${got[0].clip}", Float.NEGATIVE_INFINITY, got[0].clip[1], 0f)
+            assertEquals("$k clip ${got[0].clip}", Float.POSITIVE_INFINITY, got[0].clip[3], 0f)
+        }
+        val r = Run(forms = MoveForms())
+        r.stack.pages.add("b")
+        r.stack.back { MoveKind.T4h }
+        r.stack.frame(0L)
+        assertEquals(360, requireNotNull(r.paint.ctx.leaveBands).y.first())
+        r.draw(17L)
+        val rows = r.drawn.filter { it.name == "leave" }
+        assertTrue(rows.isNotEmpty())
+        for (d in rows) assertTrue("T4h row ${d.row} clip ${d.clip}", d.clip[1].isFinite() && d.clip[1] > 300f)
+    }
+
+    private class LinePage(private val d: ListPage, private val line: Edges?, private val band: Edges?, private val calls: MutableList<Drawn>) : PagePaint by d {
+        override fun lineBand(): Edges? = line
+
+        override fun pivotRow(): Edges? = band
+
+        override fun DrawScope.rest(now: Long, rec: DrawRecord?, name: String) {
+            (rec as? Track)?.let { calls += Drawn(name, -1, it.tx, it.ty, 0, it.k, clip = it.clip, alpha = it.a) }
+            with(d) { rest(now, rec, name) }
+        }
+
+        override fun DrawScope.content(c: Content, now: Long, rec: DrawRecord?, name: String, fade: Float) = contentRows(this@LinePage, c, now, rec, name, fade)
+    }
+
+    private val unbounded = listOf(Float.NEGATIVE_INFINITY, Float.NEGATIVE_INFINITY, Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
+
+    @Test
+    fun anAlbumArrivalWithNoBandsDrawsTheWholeArrivingPage() {
+        for (k in listOf(MoveKind.T3m, MoveKind.T3c, MoveKind.T3a, MoveKind.T4, MoveKind.T4m)) {
+            val calls = mutableListOf<Drawn>()
+            val pop = k == MoveKind.T4 || k == MoveKind.T4m
+            val to = if (pop) "a" else "b"
+            val r = Run(forms = MoveForms(), wraps = mapOf(to to { d: PagePaint -> LinePage(d as ListPage, null, null, calls) }))
+            if (pop) r.stack.pages.addAll(listOf("a", "b")) else r.stack.pages.add("a")
+            if (pop) r.stack.pop(k) else r.stack.push("b", k)
+            r.stack.frame(0L)
+            assertFalse("$k", r.paint.ctx.rows)
+            val at = (0L..1000L step 16).first { r.move.at(Part.Content, Prop.A, it) > 0f }
+            r.draw(at)
+            val got = calls.filter { it.name == "arrive" }
+            assertEquals("$k at $at", 1, got.size)
+            assertEquals("$k at $at", unbounded, got[0].clip)
+        }
+    }
+
+    @Test
+    fun aPivotPushIntoAPageWithALineCutsTheArrivalAtTheLineWhileThePivotRowDrawsAndTheContentRests() {
+        val pc = chromeOf(measurer, fonts, s, unit, "artist", listOf(OTHER, "songs"), null)
+        val g = Geo(s, pc, pitch, top, bottom)
+        val band = Edges(0, px(s.board.pivotTop, s.ppu), s.widthPx, px(s.board.page_contentTop, s.ppu))
+        val line = Edges(0, band.y0, s.widthPx, 300)
+        val calls = mutableListOf<Drawn>()
+        val r = Run(
+            g = g,
+            sides = mapOf("a" to { p: Boolean -> if (p) side(A, false) else null }, "b" to { p: Boolean -> if (p) null else side(B, true) }),
+            wraps = mapOf("b" to { d: PagePaint -> LinePage(d as ListPage, line, band, calls) }),
+        )
+        r.stack.pages.add("a")
+        r.stack.push("b", MoveKind.T3)
+        r.stack.frame(0L)
+        assertTrue(r.move.has(Part.Pivots, Prop.S))
+        assertFalse(r.paint.ctx.rows)
+        var cut = 0
+        var whole = 0
+        for (at in 0L..800L step 16) {
+            if (r.move.at(Part.Content, Prop.A, at) <= 0f) continue
+            calls.clear()
+            r.draw(at)
+            val got = calls.single { it.name == "arrive" }
+            val rests = r.move.at(Part.Content, Prop.S, at) == 1f && r.move.at(Part.Content, Prop.Y, at) == 0f
+            if (r.move.at(Part.Pivots, Prop.A, at) > 0f && rests) {
+                assertEquals("$at", listOf(0f, line.y1.toFloat(), s.widthPx.toFloat(), s.heightPx.toFloat()), got.clip)
+                cut++
+            } else {
+                assertEquals("$at", unbounded, got.clip)
+                whole++
+            }
+        }
+        assertTrue("premise: the pivot row draws on frames where the content rests, cut $cut whole $whole", cut > 0)
+        val bare = mutableListOf<Drawn>()
+        val n = Run(
+            g = g,
+            sides = mapOf("a" to { p: Boolean -> if (p) side(A, false) else null }, "b" to { p: Boolean -> if (p) null else side(B, true) }),
+            wraps = mapOf("b" to { d: PagePaint -> LinePage(d as ListPage, line, null, bare) }),
+        )
+        n.stack.pages.add("a")
+        n.stack.push("b", MoveKind.T3)
+        n.stack.frame(0L)
+        assertNull("no pivot row band", n.paint.ctx.pivotRow)
+        var drawnWhole = 0
+        for (at in 0L..800L step 16) {
+            if (n.move.at(Part.Content, Prop.A, at) <= 0f) continue
+            bare.clear()
+            n.draw(at)
+            assertEquals("$at", unbounded, bare.single { it.name == "arrive" }.clip)
+            drawnWhole++
+        }
+        assertTrue(drawnWhole > 0)
+    }
+
+    @Test
+    fun aT4FromAPageWithALineLeavesTheLineAsItsOwnLayerAtTheLeavePivotsAlpha() {
+        val line = Edges(0, 189, s.widthPx, 300)
+        val calls = mutableListOf<Drawn>()
+        val r = Run(forms = MoveForms(), wraps = mapOf("b" to { d: PagePaint -> LinePage(d as ListPage, line, null, calls) }))
+        r.stack.pages.addAll(listOf("a", "b"))
+        r.stack.pop(MoveKind.T4)
+        r.stack.frame(0L)
+        assertNull(r.paint.ctx.leaveBands)
+        assertEquals(1f, r.move.at(Part.Leave, Prop.S, 67L), 0f)
+        val lpa = r.move.at(Part.LeavePivots, Prop.A, 67L)
+        assertEquals(1f - 67f / 133f, lpa, 1e-4f)
+        r.draw(67L)
+        val leave = calls.single { it.name == "leave" }
+        assertEquals("the leave layer starts under the line", listOf(0f, 300f, s.widthPx.toFloat(), s.heightPx.toFloat()), leave.clip)
+        val l = calls.single { it.name == "leave.line" }
+        assertEquals(listOf(0f, 189f, s.widthPx.toFloat(), 300f), l.clip)
+        assertEquals(0f, l.dx, 0f)
+        assertEquals(0f, l.dy, 0f)
+        assertEquals(lpa, l.alpha, 1e-6f)
+        calls.clear()
+        r.draw(133L)
+        assertTrue(calls.none { it.name == "leave.line" })
+    }
+
+    @Test
+    fun aPivotPopMovesTheLeavingLineByTheRoundedLeavePivotsShift() {
+        val line = Edges(0, 189, s.widthPx, 300)
+        val calls = mutableListOf<Drawn>()
+        val r = Run(
+            sides = mapOf("a" to { p: Boolean -> if (p) side(A, false) else null }, "b" to { p: Boolean -> if (p) null else side(B, true) }),
+            wraps = mapOf("b" to { d: PagePaint -> LinePage(d as ListPage, line, null, calls) }),
+        )
+        r.stack.pages.addAll(listOf("a", "b"))
+        r.stack.pop(MoveKind.T4)
+        r.stack.frame(0L)
+        assertEquals(MorphKind.Pivot, r.paint.ctx.ends.morphKind)
+        assertTrue(r.move.has(Part.LeavePivots, Prop.X))
+        var seen = 0
+        for (at in 0L..400L step 16) {
+            val lpa = r.move.at(Part.LeavePivots, Prop.A, at)
+            calls.clear()
+            r.draw(at)
+            val l = calls.filter { it.name == "leave.line" }
+            assertEquals("premise: a pivot pop keeps the leave at scale 1, at $at", 1f, r.move.at(Part.Leave, Prop.S, at), 0f)
+            if (lpa <= 0f) {
+                assertTrue("$at", l.isEmpty())
+                continue
+            }
+            val dx = Math.round(r.move.at(Part.LeavePivots, Prop.X, at)).toFloat()
+            val dy = Math.round(r.move.at(Part.LeavePivots, Prop.Y, at)).toFloat()
+            assertEquals("$at", dx, l.single().dx, 0f)
+            assertEquals("$at", dy, l.single().dy, 0f)
+            assertEquals("$at", listOf(dx, 189f + dy, dx + s.widthPx, 300f + dy), l.single().clip)
+            assertEquals("$at", lpa, l.single().alpha, 1e-6f)
+            if (dx != 0f || dy != 0f) seen++
+        }
+        assertTrue("premise: the line moves on some frame", seen > 0)
+    }
+
+    @Test
+    fun aZoomedLeaveFromAPageWithALineTakesTheWholePageAndNoLineLayer() {
+        val line = Edges(0, 189, s.widthPx, 300)
+        val calls = mutableListOf<Drawn>()
+        val w = Run(
+            sides = mapOf("a" to { p: Boolean -> if (p) side(A, false) else null }, "b" to { p: Boolean -> if (p) null else side(B, true) }),
+            wraps = mapOf("a" to { d: PagePaint -> LinePage(d as ListPage, line, null, calls) }),
+        )
+        w.stack.pages.add("a")
+        w.stack.push("b", MoveKind.T3, row = 3)
+        w.stack.frame(0L)
+        assertTrue(w.paint.ctx.ends.morph)
+        var zoomed = 0
+        for (at in 0L..600L step 16) {
+            val ls = w.move.at(Part.Leave, Prop.S, at)
+            if (w.move.at(Part.Leave, Prop.A, at) <= 0f || ls == 1f) continue
+            calls.clear()
+            w.draw(at)
+            assertTrue("$at", calls.none { it.name == "leave.line" })
+            val leave = calls.single { it.name == "leave" }
+            assertEquals("$at", ls, leave.k, 1e-6f)
+            assertEquals("$at clip ${leave.clip}", Float.NEGATIVE_INFINITY, leave.clip[1], 0f)
+            zoomed++
+        }
+        assertTrue("premise: frames of a zoomed leave at a nonzero alpha", zoomed > 0)
+    }
+
+    @Test
+    fun aCarriedLeaveFromAPageWithALineKeepsItsHeldBandAndNoLineLayer() {
+        val line = Edges(0, 189, s.widthPx, 300)
+        val calls = mutableListOf<Drawn>()
+        val pc = chromeOf(measurer, fonts, s, unit, "artist", listOf(OTHER, "songs"), null)
+        val r = Run(g = Geo(s, pc, pitch, top, bottom), rows = mapOf("b" to 0), forms = zoomForms, wraps = mapOf("b" to { d: PagePaint -> LinePage(d as ListPage, line, null, calls) }))
+        r.stack.pages.add("a")
+        r.stack.push("b", MoveKind.T3)
+        r.stack.frame(0L)
+        assertTrue(r.paint.ctx.rows)
+        assertTrue("premise: the arriving page has pivots", r.paint.ctx.ends.pivots)
+        r.stack.frame(r.move.swapAt)
+        val at = r.move.swapAt + ENTER
+        val sy = r.move.at(Part.Content, Prop.S, at)
+        r.stack.back { MoveKind.T4 }
+        r.stack.frame(at)
+        val c = r.paint.ctx
+        assertNotNull("premise: the retarget carries the frozen layer", c.leaveAt)
+        val t = at + 1
+        assertEquals("premise: the T4 leave rests at scale 1", 1f, r.move.at(Part.Leave, Prop.S, t), 0f)
+        assertTrue("premise: the leave pivots draw", r.move.at(Part.LeavePivots, Prop.A, t) > 0f)
+        assertTrue(r.move.at(Part.Leave, Prop.A, t) > 0f)
+        calls.clear()
+        r.draw(t)
+        assertTrue("no line layer from a carried leave", calls.none { it.name == "leave.line" })
+        val leave = calls.single { it.name == "leave" }
+        val oy = (1 - sy) * ya + sy * r.move.at(Part.Leave, Prop.Y, t)
+        assertEquals("the held band clip, not the line bottom", oy + sy * 360, leave.clip[1], 0.01f)
+    }
+
+    @Test
+    fun aT2IntoAGridPageWithALineCutsOnlyFramesWhereTheContentRestsAtScaleOneAndYZero() {
+        val pc = chromeOf(measurer, fonts, s, unit, "artist", listOf(OTHER, "songs"), null)
+        val g = Geo(s, pc, pitch, top, bottom)
+        val band = Edges(0, px(s.board.pivotTop, s.ppu), s.widthPx, px(s.board.page_contentTop, s.ppu))
+        val line = Edges(0, band.y0, s.widthPx, 300)
+        for (lift in listOf(0f, 3f)) {
+            val calls = mutableListOf<Drawn>()
+            val r = Run(g = g, kinds = mapOf("b" to PageKind.Grid), wraps = mapOf("b" to { d: PagePaint -> LinePage(d as ListPage, line, band, calls) }))
+            r.stack.push("b", MoveKind.T2)
+            r.stack.frame(0L)
+            assertTrue(r.paint.ctx.ends.word)
+            assertFalse(r.paint.ctx.rows)
+            assertTrue(r.move.has(Part.Pivots, Prop.S))
+            if (lift != 0f) r.move.set(Part.Content, Prop.Y, lift)
+            var cut = 0
+            var scaled = 0
+            var resting = 0
+            for (at in 0L..1000L step 16) {
+                if (r.move.at(Part.Content, Prop.A, at) <= 0f || r.move.at(Part.Pivots, Prop.A, at) <= 0f) continue
+                calls.clear()
+                r.draw(at)
+                val got = calls.single { it.name == "arrive" }
+                val cs = r.move.at(Part.Content, Prop.S, at)
+                val y = r.move.at(Part.Content, Prop.Y, at)
+                if (cs != 1f) scaled++ else resting++
+                if (cs == 1f && y == 0f) {
+                    assertEquals("$lift at $at", listOf(0f, line.y1.toFloat(), s.widthPx.toFloat(), s.heightPx.toFloat()), got.clip)
+                    cut++
+                } else {
+                    assertEquals("$lift at $at", unbounded, got.clip)
+                }
+            }
+            assertTrue("premise $lift: scaled $scaled resting $resting", scaled > 0 && resting > 0)
+            if (lift == 0f) assertTrue(cut > 0) else assertEquals(0, cut)
+        }
+    }
+
     private class LeavingPage(d: PagePaint, val nb: NpBands?, val art: Int = -1, override val top: Int = d.top) : PagePaint by d {
         override fun npLeaveBands(): NpBands? = nb
 

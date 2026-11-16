@@ -72,7 +72,7 @@ sealed interface Content {
 
     class Frozen(val bands: Bands) : Content
 
-    class Lift(val bands: Bands?, val at: Place, val cut: Float?, val tail: Int = 0, val barX: Float = Float.MAX_VALUE) : Content
+    class Lift(val bands: Bands?, val at: Place, val cut: Float?, val tail: Int = 0, val barX: Float = Float.MAX_VALUE, val lineTop: Int = -1) : Content
 }
 
 class WordSide(val text: String, val s: Float, val look: Float, val x: Float, val y: Float, val pivot: Int, val header: Boolean, val word: Word)
@@ -143,6 +143,8 @@ interface PagePaint {
     fun hide(h: TileHide?) {}
 
     fun pivotRow(): Edges? = null
+
+    fun lineBand(): Edges? = null
 
     fun DrawScope.pivotRowInk(rec: DrawRecord?) {}
 
@@ -219,9 +221,13 @@ fun DrawScope.contentRows(p: PagePaint, c: Content, now: Long, rec: DrawRecord?,
         is Content.Lift -> cut(rec, c.cut) {
             val b = c.bands
             if (b == null) {
-                val y = p.restBand()
                 placed(rec, c.at) {
-                    clipped(rec, 0f, y[0].toFloat(), size.width, y[1].toFloat()) {
+                    if (c.lineTop >= 0) {
+                        clipped(rec, 0f, c.lineTop.toFloat(), size.width, size.height) {
+                            with(p) { rest(now, rec, name) }
+                            bar()
+                        }
+                    } else {
                         with(p) { rest(now, rec, name) }
                         bar()
                     }
@@ -1187,6 +1193,8 @@ class MovePaint(private val move: PageMove) {
         val ox = Tok.motion_contentX * size.width
         val oy = Tok.motion_contentY * size.height
         val la = v.at(Part.Leave, Prop.A, now)
+        val line = from?.paint?.lineBand()
+        val lineOn = line != null && m.leaveAt == null && v.at(Part.Leave, Prop.S, now) == 1f
         if (from != null && la > 0f) {
             val lb = m.leaveBands
             val held = m.leaveAt
@@ -1200,9 +1208,17 @@ class MovePaint(private val move: PageMove) {
                     px = ox
                     py = oy
                 }
-                Content.Lift(null, Place(ls, px - px * ls, py - py * ls + v.at(Part.Leave, Prop.Y, now), 0f, 0f), null)
+                Content.Lift(null, Place(ls, px - px * ls, py - py * ls + v.at(Part.Leave, Prop.Y, now), 0f, 0f), null, lineTop = if (lineOn && line != null) line.y1 else -1)
             }
             layer(rec, la, layerPaint) { with(from.paint) { content(c, now, rec, "leave", m.leaveThumb) } }
+        }
+        val lpa = if (lineOn) v.at(Part.LeavePivots, Prop.A, now) else 0f
+        if (from != null && line != null && lpa > 0f) {
+            layer(rec, lpa, layerPaint) {
+                shifted(rec, Math.round(v.at(Part.LeavePivots, Prop.X, now)).toFloat(), Math.round(v.at(Part.LeavePivots, Prop.Y, now)).toFloat()) {
+                    clipped(rec, line.x0.toFloat(), line.y0.toFloat(), line.x1.toFloat(), line.y1.toFloat()) { with(from.paint) { rest(now, rec, "leave.line") } }
+                }
+            }
         }
         val mo = m.morph
         val morphing = mo != null && now < v.t0 + v.wordEnd
@@ -1218,6 +1234,9 @@ class MovePaint(private val move: PageMove) {
             }
         }
         val ca = v.at(Part.Content, Prop.A, now)
+        val pr = m.pivotRow
+        val pivrow = to != null && pr != null && v.has(Part.Pivots, Prop.S)
+        val pva = if (pivrow) v.at(Part.Pivots, Prop.A, now) else 0f
         if (m.ends.thumb) tileOf(m, now, rec)
         if (to != null && ca > 0f) {
             val cs = v.at(Part.Content, Prop.S, now)
@@ -1228,7 +1247,9 @@ class MovePaint(private val move: PageMove) {
             } else {
                 val px = if (image) v.at(Part.Content, Prop.PX, now) else ox
                 val py = if (image) v.at(Part.Content, Prop.PY, now) else oy
-                Content.Lift(null, Place(cs, px - px * cs, py - py * cs + v.at(Part.Content, Prop.Y, now), 0f, 0f), null)
+                val aline = to.paint.lineBand()
+                val acut = pva > 0f && aline != null && !image && cs == 1f && v.at(Part.Content, Prop.Y, now) == 0f
+                Content.Lift(null, Place(cs, px - px * cs, py - py * cs + v.at(Part.Content, Prop.Y, now), 0f, 0f), null, lineTop = if (acut && aline != null) aline.y1 else -1)
             }
             layer(rec, ca, layerPaint) {
                 if (image) {
@@ -1241,9 +1262,6 @@ class MovePaint(private val move: PageMove) {
             }
         }
         if (!m.ends.thumb) tileOf(m, now, rec)
-        val pr = m.pivotRow
-        val pivrow = to != null && pr != null && v.has(Part.Pivots, Prop.S)
-        val pva = if (pivrow) v.at(Part.Pivots, Prop.A, now) else 0f
         val tc = to?.paint?.chrome
         if (pivrow && m.pivotReach < 0) m.pivotReach = pivotReach(size.width)
         if (to != null && pr != null && tc != null && pva > 0f) {
