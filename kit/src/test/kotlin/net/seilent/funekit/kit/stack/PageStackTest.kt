@@ -15,6 +15,7 @@ import net.seilent.funekit.kit.motion.Prop
 import net.seilent.funekit.kit.touch.Gesture
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -1153,6 +1154,117 @@ class PageStackTest {
         }
         assertEquals(1, s.snap)
         assertFalse(s.hideFocus)
+    }
+
+    private class Cuts {
+        val enters = mutableListOf<String>()
+        val starts = mutableListOf<Turn<String>>()
+        val closings = mutableListOf<Overlay>()
+        val dropped = mutableListOf<String>()
+        val stack = PageStack<String>(
+            MoveForms(),
+            { PageKind.Hub },
+            enter = { enters += it },
+            started = { starts += it },
+            closing = { o, _ -> closings += o },
+            dropped = { p, _ -> dropped += p },
+        ) { MoveEnds() }.also { it.pages.add("hub") }
+
+        fun open(kind: OverKind): Long {
+            stack.open(Overlay(kind))
+            stack.frame(0)
+            val t = requireNotNull(stack.overlay).dur().toLong()
+            stack.frame(t)
+            return t
+        }
+
+        fun refused(o: Overlay?) {
+            assertNull("no turn", stack.turn)
+            assertSame("the overlay is kept", o, stack.overlay)
+            assertTrue("nothing entered", enters.isEmpty())
+        }
+    }
+
+    @Test
+    fun aCutPushDropsASettledSheetWithNoCloseAndStartsThePushOnItsFrame() {
+        val c = Cuts()
+        val t = c.open(OverKind.Sheet)
+        assertEquals(1, c.stack.snap)
+        assertTrue(c.stack.covered)
+        c.stack.cutPush("album", MoveKind.T3, 2)
+        assertNotNull("an ask runs on a later frame", c.stack.overlay)
+        c.stack.frame(t + STEP)
+        assertNull(c.stack.overlay)
+        val turn = requireNotNull(c.stack.turn)
+        assertEquals(MoveKind.T3, turn.kind)
+        assertEquals("hub", turn.from)
+        assertEquals("album", turn.to)
+        assertFalse(turn.popping)
+        assertEquals(2, turn.row)
+        assertEquals(t + STEP, turn.at)
+        assertEquals(Phase.Exit, c.stack.phase)
+        assertEquals(listOf(turn), c.starts)
+        assertTrue("no close", c.closings.isEmpty())
+        assertTrue("no dropped", c.dropped.isEmpty())
+        assertFalse(c.stack.hideFocus)
+        assertFalse(c.stack.covered)
+        assertEquals("no snapshot", 1, c.stack.snap)
+        assertEquals(listOf("album"), c.enters)
+        c.stack.frame(t + STEP + STEP)
+        assertNull(c.stack.overlay)
+        assertTrue(c.dropped.isEmpty())
+    }
+
+    @Test
+    fun aCutPushOverADialogIsRefused() {
+        val c = Cuts()
+        val t = c.open(OverKind.Dlg)
+        val o = c.stack.overlay
+        c.stack.cutPush("album", MoveKind.T3, 2)
+        c.stack.frame(t + STEP)
+        c.refused(o)
+        assertFalse(o!!.closing)
+    }
+
+    @Test
+    fun aCutPushOverAClosingSheetIsRefused() {
+        val c = Cuts()
+        val t = c.open(OverKind.Sheet)
+        val o = c.stack.overlay
+        c.stack.close()
+        c.stack.cutPush("album", MoveKind.T3, 2)
+        c.stack.frame(t + STEP)
+        assertTrue(o!!.closing)
+        c.refused(o)
+    }
+
+    @Test
+    fun aCutPushOverARisingSheetIsRefused() {
+        val c = Cuts()
+        c.stack.open(Overlay(OverKind.Sheet))
+        c.stack.frame(0)
+        val o = c.stack.overlay
+        assertTrue(o!!.moving(STEP))
+        c.stack.cutPush("album", MoveKind.T3, 2)
+        c.stack.frame(STEP)
+        c.refused(o)
+    }
+
+    @Test
+    fun aCutPushWhileAMoveRunsIsRefused() {
+        val c = Cuts()
+        c.stack.pages.add("artist")
+        val t = c.open(OverKind.Sheet)
+        val o = c.stack.overlay
+        c.stack.pop(MoveKind.T4)
+        c.stack.cutPush("album", MoveKind.T3, 2)
+        c.stack.frame(t + STEP)
+        val turn = requireNotNull(c.stack.turn)
+        assertEquals(MoveKind.T4, turn.kind)
+        assertTrue(turn.popping)
+        assertEquals("artist", turn.from)
+        assertSame("the overlay is kept", o, c.stack.overlay)
+        assertTrue("nothing entered", c.enters.isEmpty())
     }
 
     companion object {

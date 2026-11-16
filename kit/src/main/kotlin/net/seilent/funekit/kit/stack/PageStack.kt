@@ -139,6 +139,16 @@ class PageStack<P : Any>(
         start(Turn(kind, top, page, popping = false, row = row, album = album), now, retarget = false)
     }
 
+    fun cutPush(page: P, kind: MoveKind, row: Int = -1, album: Long = -1L) = ask { now ->
+        val o = overlay ?: return@ask
+        if (o.kind != OverKind.Sheet) return@ask
+        if (o.closing || o.moving(now)) return@ask
+        if (phase != Phase.Rest) return@ask
+        if (pending > 0) return@ask
+        dropOverlay(show = false)
+        start(Turn(kind, top, page, popping = false, row = row, album = album), now, retarget = false)
+    }
+
     fun pop(kind: MoveKind, album: Long = -1L) = ask { now ->
         armedLand(now)
         if (phase != Phase.Rest) land(now)
