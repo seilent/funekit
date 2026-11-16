@@ -285,8 +285,21 @@ class QpPan {
     private var dragging = false
     private var dragAt = 0f
     private var x0 = 0f
+    private var left = false
+    var tiles: List<Edges> = emptyList()
+        private set
 
     fun at(now: Long): Float = if (dragging) dragAt else leg.at((now - t0).toFloat())
+
+    fun moved(now: Long): Boolean {
+        if (!left && at(now) != if (active) 0f else 1f) left = true
+        return left
+    }
+
+    fun snap(l: QpLayout, off: Long, waiting: Boolean) {
+        val b = px(Tok.focus_border, l.s.stdPpu)
+        tiles = if (waiting) emptyList() else (0 until l.count).map { l.rect(it, off) }.filter { it.y0 < l.s.heightPx && it.y1 + b > 0 }
+    }
 
     fun moving(now: Long): Boolean = dragging || (now - t0) < leg.end
 
@@ -304,6 +317,7 @@ class QpPan {
     fun show(front: Boolean, now: Long) {
         dragging = false
         active = front
+        left = false
         this.front = front
         shown = true
         still = false
@@ -314,6 +328,7 @@ class QpPan {
     fun begin(x: Float) {
         x0 = x
         active = !front
+        left = false
         dragAt = if (front) 1f else 0f
         dragging = true
         shown = true

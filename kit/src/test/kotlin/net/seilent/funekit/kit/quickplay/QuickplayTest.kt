@@ -12,6 +12,7 @@ import net.seilent.funekit.Window
 import net.seilent.funekit.fx
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.fxU
+import net.seilent.funekit.kit.Edges
 import net.seilent.funekit.kit.lookOf
 import net.seilent.funekit.kit.proj.qpProjection
 import net.seilent.funekit.px
@@ -98,6 +99,89 @@ class QuickplayTest {
         assertEquals(0f, p.at(0), 0f)
         p.end(true, 1000)
         assertEquals(1f, p.at(1000 + 445), 0.001f)
+    }
+
+    @Test
+    fun aPanFromHomeLatchesMovedOnceItsMenuLeavesHomeAndShowResetsIt() {
+        val p = QpPan()
+        p.begin(100f)
+        assertTrue(p.active)
+        assertFalse(p.moved(0))
+        p.drag(100f, 1f)
+        assertFalse(p.moved(16))
+        p.drag(100f + 164.3f * 0.3f, 1f)
+        assertTrue(p.moved(32))
+        assertTrue(p.active)
+        p.drag(100f, 1f)
+        assertEquals(0f, p.at(48), 0f)
+        assertTrue(p.moved(48))
+        p.end(false, 64)
+        assertTrue(p.moved(64))
+        assertTrue(p.moved(64 + 445))
+        assertTrue(p.active)
+        p.show(false, 1000)
+        assertFalse(p.active)
+        assertFalse(p.moved(1000))
+    }
+
+    private fun snapSeed() = QpLayout(a105, qpTiles(QpData(null, items(9), items(10, QpKind.Song), items(12))), 3)
+
+    private fun has(tiles: List<Edges>, e: Edges): Boolean =
+        tiles.any { it.x0 == e.x0 && it.y0 == e.y0 && it.x1 == e.x1 && it.y1 == e.y1 }
+
+    @Test
+    fun aPanSnapKeepsTheTilesShownAboveTheBorderAtItsStartOffset() {
+        val l = snapSeed()
+        val b = px(Tok.focus_border, 3f)
+        assertEquals(6, b)
+        val side = l.rect(2, 0L).h
+        val off = l.tileTop(2) - l.ofPx((-b - side).toFloat())
+        assertEquals(-b, l.rect(2, off).y1)
+        val p = QpPan()
+        p.snap(l, off, false)
+        assertFalse(has(p.tiles, l.rect(2, off)))
+        assertFalse(has(p.tiles, l.rect(3, off)))
+        assertTrue(has(p.tiles, l.rect(4, off)))
+        assertTrue(l.rect(4, off).y1 > 0)
+        val inside = l.tileTop(2) - l.ofPx((1 - b - side).toFloat())
+        assertEquals(1 - b, l.rect(2, inside).y1)
+        p.snap(l, inside, false)
+        assertTrue(has(p.tiles, l.rect(2, inside)))
+    }
+
+    @Test
+    fun aPanSnapLeavesOutATileWhoseTopIsAtTheScreenBottom() {
+        val l = snapSeed()
+        val k = l.count - 1
+        val j = (0 until k).last { l.tileTop(it) < l.tileTop(k) }
+        val off = l.tileTop(k) - l.ofPx(a105.heightPx.toFloat())
+        assertEquals("premise: the last tile's top is at the screen bottom", a105.heightPx, l.rect(k, off).y0)
+        assertTrue("premise: the row above shows", l.rect(j, off).y0 < a105.heightPx)
+        val p = QpPan()
+        p.snap(l, off, false)
+        assertFalse(has(p.tiles, l.rect(k, off)))
+        assertTrue(has(p.tiles, l.rect(j, off)))
+    }
+
+    @Test
+    fun aWaitingPanSnapIsEmpty() {
+        val p = QpPan()
+        p.snap(snapSeed(), 0L, false)
+        assertTrue(p.tiles.isNotEmpty())
+        p.snap(snapSeed(), 0L, true)
+        assertTrue(p.tiles.isEmpty())
+    }
+
+    @Test
+    fun aRebuildAfterThePanSnapLeavesItsTiles() {
+        val st = QuickplayState()
+        val l = snapSeed()
+        st.build(l, 0L)
+        st.pan.snap(l, 0L, false)
+        val before = st.pan.tiles.map { listOf(it.x0, it.y0, it.x1, it.y1) }
+        st.build(QpLayout(a105, qpTiles(QpData(null, items(1), emptyList(), emptyList())), 3), 0L)
+        assertEquals(before, st.pan.tiles.map { listOf(it.x0, it.y0, it.x1, it.y1) })
+        assertTrue(before.size > 1)
     }
 
     @Test

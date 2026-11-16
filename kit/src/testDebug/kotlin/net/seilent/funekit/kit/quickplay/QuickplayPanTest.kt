@@ -15,6 +15,7 @@ import net.seilent.funekit.Insets
 import net.seilent.funekit.Nav
 import net.seilent.funekit.Surface
 import net.seilent.funekit.Window
+import net.seilent.funekit.kit.Edges
 import net.seilent.funekit.kit.Toast
 import net.seilent.funekit.kit.home.HomeGeo
 import net.seilent.funekit.kit.home.HomeMenu
@@ -114,6 +115,26 @@ class QuickplayPanTest {
         assertEquals(686, qpTouch.state.firstVisibleItemScrollOffset)
         assertEquals(44924930L, qpOff(qpTouch, qp, l))
     }
+
+    @Test
+    fun aPanStartSnapsTheTilesAtTheAskedSpanInFrontAndAtTheListOffsetToHome() {
+        layers()
+        qp.focus = l.count - 1
+        val asked = 44924930L
+        assertFalse("premise: the focus is below the view at 0", l.rect(qp.focus, 0L).y0 < s.heightPx)
+        rule.runOnUiThread {
+            qpPanStart(true, geo, menu, home, qp, qpTouch, l, toast)
+            front = true
+        }
+        assertTrue(has(qp.pan.tiles, l.rect(qp.focus, asked)))
+        rule.waitForIdle()
+        assertEquals(asked, qpPos(qpTouch, qp, l))
+        rule.runOnUiThread { qpPanStart(false, geo, menu, home, qp, qpTouch, l, toast) }
+        assertTrue(has(qp.pan.tiles, l.rect(qp.focus, asked)))
+    }
+
+    private fun has(tiles: List<Edges>, e: Edges): Boolean =
+        tiles.any { it.x0 == e.x0 && it.y0 == e.y0 && it.x1 == e.x1 && it.y1 == e.y1 }
 
     @Test
     fun aPanStartHidesTheToast() {

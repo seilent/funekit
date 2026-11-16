@@ -27,9 +27,13 @@ fun qpPanStart(front: Boolean, geo: HomeGeo, menu: HomeMenu, homeTouch: ListTouc
     homeLandAim(menu, homeTouch, geo)
     qpTouch.land()
     qpLandAim(qp, qpTouch, l)
-    if (front) {
+    val off = if (front) {
         val vis = l.visible(qp.focus, qpPos(qpTouch, qp, l), l.headerAsc())
         qp.ask(vis, l.pxOf(vis))
         qpTouch.state.requestScrollToItem(0, l.pxOf(vis))
+        vis
+    } else {
+        qpPos(qpTouch, qp, l)
     }
+    qp.pan.snap(l, off, qp.waiting)
 }
