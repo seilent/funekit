@@ -27,6 +27,7 @@ import net.seilent.funekit.Scale
 import net.seilent.funekit.gen.Glyph
 import net.seilent.funekit.gen.Glyphs
 import net.seilent.funekit.gen.Tok
+import net.seilent.funekit.kit.touch.RowTrack
 import net.seilent.funekit.px
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -238,6 +239,20 @@ fun rememberRowInk(r: RowModel, s: Scale, accentOff: Boolean): RowInk {
     val density = LocalDensity.current
     val covers = rememberCovers()
     return remember(r, s, accentOff, density, fonts, covers) { rowInk(m, fonts, r, s, density, accentOff, covers) }
+}
+
+class RowWord(val text: String, val x64: Int, val base: Int, val look: Float)
+
+fun listRowWord(t: RowTrack, top: Int, bottom: Int, row: Int, grid: Boolean, m: RowModel?, ink: RowInk?, s: Scale): RowWord? {
+    if (m == null || ink == null || grid || row < 0 || row >= t.count) return null
+    val y = top + t.topOf(row) - t.q
+    if (y < top || y + t.topOf(row + 1) - t.topOf(row) > bottom) return null
+    if (m.kind != RowKind.Item || m.accent || m.primary.isEmpty()) return null
+    var right = Rows.right(s)
+    if (m.trailing.isNotEmpty()) right = penFloor(pen64(right.toFloat()) - pen64(ink.trailing.width)) - px(Tok.gutter, s.ppu)
+    val x64 = ink.lines.titleX64
+    if (x64 + pen64(ink.primary.width) > pen64(right.toFloat())) return null
+    return RowWord(m.primary, x64, y + ink.lines.title, Rows.primaryRole(m).alpha)
 }
 
 class RowGlow(val glow: Glow, val level: Float)

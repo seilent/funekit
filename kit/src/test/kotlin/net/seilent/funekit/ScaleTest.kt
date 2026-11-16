@@ -356,6 +356,29 @@ class ScaleTest {
     }
 
     @Test
+    fun keptUAndKeptExactTakeTheStandardPxBackToThePagePpuOnlyUnderLarge() {
+        val std = scale(keys, Nav.Buttons, Surface.Page, false)
+        val large = scale(keys, Nav.Buttons, Surface.Page, true)
+        assertEquals(196608L, fx(std.ppu))
+        assertEquals(235930L, fx(large.ppu))
+        assertEquals(196608L, fx(large.stdPpu))
+        assertEquals(6520832L, fx(99.5f))
+        assertEquals(6520832L, keptU(99.5f, std))
+        assertEquals(6520832L, keptExact(99.5f, std))
+        assertEquals(fx(252f), keptU(252f, std))
+        assertEquals(13762536L, keptU(252f, large))
+        assertEquals(756, px64(keptU(252f, large), fx(large.ppu)))
+        assertEquals(5443119L, keptU(99.5f, large))
+        assertEquals(299, px64(keptU(99.5f, large), fx(large.ppu)))
+        assertEquals(5434018L, keptExact(99.5f, large))
+        assertEquals(6526283L, keptExact(119.5f, large))
+        assertEquals(11068283L, keptU(202.5f, large))
+        assertEquals(608, px64(keptU(202.5f, large), fx(large.ppu)))
+        assertEquals(6280522L, keptU(115f, large))
+        assertEquals(345, px64(keptU(115f, large), fx(large.ppu)))
+    }
+
+    @Test
     fun theP2160PageTakesTheA105PhysicalSizeAndHomeKeepsFit() {
         for (w in listOf(p2160Gesture, p2160Buttons)) {
             val at = "${navMode(w)}"

@@ -233,3 +233,17 @@ fun Scale.kept(): Scale {
 
 fun keptText(r: Role, s: Scale): Role =
     if (!s.large || fx(r.size) >= fx(Tok.size_keptTextMax)) r else Role(fxU(fx(r.size) * fx(Tok.size_largeScale) / fxInt(PCT.toInt())), r.weight, r.case, r.alpha, r.tracking)
+
+fun keptU(u: Float, s: Scale): Long {
+    val v = fx(u)
+    val ppu = fx(s.ppu)
+    val std = fx(s.stdPpu)
+    return if (ppu == std) v else fxDiv(fxInt(px64(v, std)), ppu)
+}
+
+fun keptExact(u: Float, s: Scale): Long {
+    val v = fx(u)
+    val ppu = fx(s.ppu)
+    val std = fx(s.stdPpu)
+    return if (ppu == std) v else ((fxMul(v, std) shl FX_BITS) + ppu - 1) / ppu
+}
