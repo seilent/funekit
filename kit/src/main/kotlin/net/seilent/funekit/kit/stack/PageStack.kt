@@ -85,6 +85,7 @@ class PageStack<P : Any>(
     private var openSeq = -1
     private var swapHeld = false
     private var waiting = false
+    private var landAt = -1L
     private val gone = mutableListOf<P>()
     private var opened: PlayOpen? by mutableStateOf(null)
     private var pending = 0
@@ -349,6 +350,7 @@ class PageStack<P : Any>(
         if (!from.popping && from.keep == null) from.to?.let(enter)
         seq++
         swapHeld = false
+        landAt = -1L
         val row = if (from.popping && from.row < 0) from.from?.let { pushedRow(it) } ?: -1 else from.row
         val album = if (from.album >= 0) from.album else (if (from.popping) from.from else from.to)?.let(albumOf) ?: -1L
         val t = Turn(from.kind, from.from, from.to, from.popping, retarget, now, row, album, from.morph, from.keep)
@@ -443,6 +445,7 @@ class PageStack<P : Any>(
         seq++
         swapHeld = false
         waiting = false
+        landAt = -1L
         move.reverse(now)
         turn?.to?.let { gone += it }
         turn = turn?.let { Turn(it.kind, it.to, it.from, true, it.retarget, it.at, morph = it.morph) }
@@ -494,6 +497,7 @@ class PageStack<P : Any>(
         phase = Phase.Rest
         turn = null
         waiting = false
+        landAt = -1L
         if (k != null) {
             val i = pages.lastIndexOf(k)
             if (i >= 0) while (pages.lastIndex > i) gone += pages.removeAt(pages.lastIndex)
@@ -668,7 +672,15 @@ class PageStack<P : Any>(
         if (phase == Phase.Exit && now >= move.swapAt) {
             if (moveHeld(now)) swapHeld = true else swap(now)
         }
-        if (phase == Phase.Enter && now >= move.endAt && opened == null) rest()
+        if (phase == Phase.Enter && opened == null) {
+            val np = turn?.kind.let { it == MoveKind.T7 || it == MoveKind.T8 }
+            if (landAt in 0 until now || (np && now >= move.endAt)) {
+                rest()
+            } else if (landAt < 0 && now >= move.endAt) {
+                landAt = now
+                waiting = false
+            }
+        }
         if (waiting && turn?.to?.let(ready) == true) {
             waiting = false
             arrive(now)

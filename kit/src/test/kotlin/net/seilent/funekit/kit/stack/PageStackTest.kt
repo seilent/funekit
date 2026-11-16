@@ -6,6 +6,7 @@ import net.seilent.funekit.kit.motion.MoveEnds
 import net.seilent.funekit.kit.motion.MoveForms
 import net.seilent.funekit.kit.motion.MoveKind
 import net.seilent.funekit.kit.motion.MoveLeg
+import net.seilent.funekit.kit.motion.MorphKind
 import net.seilent.funekit.kit.motion.OverKind
 import net.seilent.funekit.kit.motion.Overlay
 import net.seilent.funekit.kit.motion.PageMove
@@ -28,7 +29,7 @@ class PageStackTest {
     private val pop: (Turn<String>) -> MoveKind = { MoveKind.T4 }
 
     @Test
-    fun aPushSwapsAtTheSwapTimeAndRestsAtTheEnd() {
+    fun aPushSwapsAtTheSwapTimeAndRestsTheFrameAfterItsEnd() {
         val s = stack()
         s.push("album", MoveKind.T3)
         s.frame(0)
@@ -41,6 +42,10 @@ class PageStackTest {
         s.frame(633)
         assertEquals(Phase.Enter, s.phase)
         s.frame(634)
+        assertEquals("the end frame still draws the move", Phase.Enter, s.phase)
+        s.frame(634)
+        assertEquals("a second frame at the end time is still the end frame", Phase.Enter, s.phase)
+        s.frame(650)
         assertEquals(Phase.Rest, s.phase)
     }
 
@@ -58,6 +63,8 @@ class PageStackTest {
         s.frame(219)
         assertEquals(Phase.Enter, s.phase)
         s.frame(220)
+        assertEquals(Phase.Enter, s.phase)
+        s.frame(236)
         assertEquals(Phase.Rest, s.phase)
         assertEquals(listOf("hub"), s.pages.toList())
     }
@@ -102,6 +109,8 @@ class PageStackTest {
         s.frame(push)
         assertEquals(listOf("album" to push), seen)
         s.frame(s.move.endAt)
+        assertEquals(Phase.Enter, s.phase)
+        s.frame(s.move.endAt + STEP)
         assertEquals(Phase.Rest, s.phase)
         val t0 = s.move.endAt + 100
         s.pop(MoveKind.T4)
@@ -111,6 +120,7 @@ class PageStackTest {
         s.frame(pop)
         assertEquals(listOf("album" to push, "hub" to pop), seen)
         s.frame(s.move.endAt)
+        s.frame(s.move.endAt + STEP)
         s.back { MoveKind.T4n }
         s.frame(s.move.endAt + 100)
         assertEquals(MoveKind.T4n, s.turn?.kind)
@@ -133,6 +143,9 @@ class PageStackTest {
         s.frame(299)
         assertEquals(Phase.Enter, s.phase)
         s.frame(300)
+        assertEquals(Phase.Enter, s.phase)
+        assertTrue(s.canBack)
+        s.frame(316)
         assertEquals(Phase.Rest, s.phase)
         assertFalse(s.canBack)
     }
@@ -149,6 +162,8 @@ class PageStackTest {
         assertTrue(s.move.reversed)
         assertTrue(s.pages.isEmpty())
         s.frame(100 + 100)
+        assertEquals(Phase.Enter, s.phase)
+        s.frame(100 + 100 + STEP)
         assertEquals(Phase.Rest, s.phase)
         assertTrue(s.pages.isEmpty())
     }
@@ -330,6 +345,8 @@ class PageStackTest {
         s.frame(299)
         assertEquals(Phase.Enter, s.phase)
         s.frame(300)
+        assertEquals(Phase.Enter, s.phase)
+        s.frame(316)
         assertEquals(Phase.Rest, s.phase)
     }
 
@@ -571,6 +588,7 @@ class PageStackTest {
         assertNull(s.overlay)
         assertFalse(s.jumpSettled)
         s.frame(jumpIn + 5000)
+        s.frame(jumpIn + 5000 + STEP)
         assertEquals(Phase.Rest, s.phase)
         s.push("hub", MoveKind.T3)
         s.frame(jumpIn + 5016)
@@ -1281,6 +1299,8 @@ class PageStackTest {
             t += 16
         }
         s.frame(t)
+        assertEquals("the end frame still draws the move", Phase.Enter, s.phase)
+        s.frame(t + 16)
         assertEquals(Phase.Rest, s.phase)
         assertEquals(listOf("hub", "album"), s.pages.toList())
         assertTrue(s.move.held(Part.Content))
@@ -1300,6 +1320,9 @@ class PageStackTest {
         assertEquals(Phase.Enter, s.phase)
         ok = true
         s.frame(end)
+        assertEquals(Phase.Enter, s.phase)
+        assertEquals(0f, s.move.at(Part.Content, Prop.A, end), 0f)
+        s.frame(end + STEP)
         assertEquals(Phase.Rest, s.phase)
         assertTrue(s.move.held(Part.Content))
         assertEquals(before, legsOf(s.move))
@@ -1368,6 +1391,7 @@ class PageStackTest {
         s.push("A", MoveKind.T3)
         s.frame(0)
         assertEquals(ALBUM, s.turn?.album)
+        s.frame(LANDED - STEP)
         s.frame(LANDED)
         assertEquals(Phase.Rest, s.phase)
         assertEquals("A", s.top)
@@ -1387,6 +1411,7 @@ class PageStackTest {
         plain.back(pop)
         plain.frame(0)
         assertEquals(-1L, plain.turn?.album)
+        plain.frame(LANDED - STEP)
         plain.frame(LANDED)
         plain.push("A", MoveKind.T3)
         plain.frame(LANDED + 1)
@@ -1414,5 +1439,75 @@ class PageStackTest {
         r.frame(EXITING + 1)
         assertTrue(r.move.reversed)
         assertEquals(-1L, r.turn?.album)
+    }
+
+    private fun popper(e: MoveEnds) = PageStack<String>(MoveForms(), { PageKind.Grid }) { e }.also { it.pages.addAll(listOf("hub", "artist")) }
+
+    private fun landsAt(s: PageStack<String>, kind: MoveKind, end: Long) {
+        s.pop(kind)
+        s.frame(0)
+        assertEquals(end, s.move.endAt)
+        s.frame(end - 1)
+        assertEquals(Phase.Enter, s.phase)
+        s.frame(end)
+        assertEquals("the end frame still draws the move", Phase.Enter, s.phase)
+        s.frame(end + STEP)
+        assertEquals(Phase.Rest, s.phase)
+        assertEquals(listOf("hub"), s.pages.toList())
+    }
+
+    @Test
+    fun aT4PivotPopDrawsItsEndFrameAt516AndRestsOnTheNext() =
+        landsAt(popper(MoveEnds(morph = true, morphKind = MorphKind.Pivot, morphS0 = 0.5f, morphS1 = 1f, grounds = true)), MoveKind.T4, 516L)
+
+    @Test
+    fun aT4mDrawsItsEndFrameAt581AndRestsOnTheNext() = landsAt(popper(MoveEnds(word = true)), MoveKind.T4m, 581L)
+
+    @Test
+    fun aT7RestsOnItsEndFrame() {
+        val s = stack()
+        s.push("np", MoveKind.T7)
+        s.frame(0)
+        val end = s.move.endAt
+        s.frame(end - 1)
+        assertEquals(Phase.Enter, s.phase)
+        s.frame(end)
+        assertEquals(Phase.Rest, s.phase)
+        assertEquals("np", s.top)
+    }
+
+    @Test
+    fun aT8RestsOnItsEndFrame() {
+        val s = stack()
+        s.pages.add("np")
+        s.pop(MoveKind.T8)
+        s.frame(0)
+        val end = s.move.endAt
+        s.frame(end - 1)
+        assertEquals(Phase.Enter, s.phase)
+        s.frame(end)
+        assertEquals(Phase.Rest, s.phase)
+        assertEquals("hub", s.top)
+    }
+
+    @Test
+    fun aBackOnTheEndFrameStartsAPopThatRunsToItsOwnEnd() {
+        val s = stack()
+        s.push("album", MoveKind.T3)
+        s.frame(0)
+        s.frame(167)
+        s.frame(634)
+        assertEquals(Phase.Enter, s.phase)
+        s.back(pop)
+        s.frame(650)
+        assertEquals(true, s.turn?.popping)
+        assertEquals(817L, s.move.swapAt)
+        assertEquals(Phase.Exit, s.phase)
+        val end = s.move.endAt
+        s.frame(end)
+        assertEquals(Phase.Enter, s.phase)
+        s.frame(end + STEP)
+        assertEquals(Phase.Rest, s.phase)
+        assertEquals(listOf("hub"), s.pages.toList())
     }
 }
