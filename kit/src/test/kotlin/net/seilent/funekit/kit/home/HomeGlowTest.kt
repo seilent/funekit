@@ -40,6 +40,7 @@ private const val GROW = 3
 private const val HALF_LEVEL = 128
 private const val ALPHA_SHIFT = 24
 private const val EDGE_LEVEL = 4
+private const val FRAME_MS = 16L
 
 private enum class Key(override val word: String, override val sub: String) : HomeEntry {
     Music("music", "albums artists playlists songs genres"),
@@ -128,6 +129,51 @@ class HomeGlowTest {
         val held = menu.restAt(1048L, false)
         assertEquals(1f, held.items[1].zoom)
         assertEquals(regular.toFloat(), inkWidth(draw { homeMenu(ink, menu, geo, held, null) }).toFloat(), 1f)
+    }
+
+    @Test
+    fun aSlopExitFadesTheDrawnGlowWithThePressLit() {
+        val density = Density(1f)
+        val fonts = createFontFamilyResolver(RuntimeEnvironment.getApplication())
+        val m = TextMeasurer(fonts, density, LayoutDirection.Ltr)
+        val keys = Key.entries
+        val ink = homeInk(m, fonts, s, density, keys) { if (it == Key.Apps) "" else it.sub }
+        val geo = HomeGeo(s, keys.size)
+        val menu = HomeMenu(keys.size)
+        val sp = s.stdPpu
+        val w = s.widthPx
+        val h = geo.contentPx
+        val x64 = pen64(Tok.homeTextX, sp)
+        val base = px(geo.baseline(2), sp)
+        val band = base - px(Tok.capHeight * Roles.homeItem.size, sp) until base
+        fun draw(block: DrawScope.() -> Unit): IntArray {
+            val img = ImageBitmap(w, h)
+            CanvasDrawScope().draw(density, LayoutDirection.Ltr, Canvas(img), Size(w.toFloat(), h.toFloat()), block)
+            return IntArray(w * h).also { img.readPixels(it) }
+        }
+        fun alpha(p: IntArray, x: Int, y: Int): Int = p[y * w + x] ushr ALPHA_SHIFT
+        val name = draw { word(ink.names[2], penPx(x64), base.toFloat(), Ink.white, 1f) }
+        val past = (0 until w).last { x -> band.any { y -> alpha(name, x, y) > 0 } } + 1
+        var t = 0L
+        fun frames(now: Long) {
+            while (t <= now) {
+                menu.tick(t)
+                t += FRAME_MS
+            }
+        }
+        menu.down(2, 0L)
+        frames(49L)
+        menu.cancel(50L)
+        val at50 = draw { homeMenu(ink, menu, geo, menu.restAt(50L, false), null) }
+        val y = band.maxBy { alpha(at50, past, it) }
+        val a50 = alpha(at50, past, y)
+        assertTrue(a50 > EDGE_LEVEL)
+        frames(100L)
+        val at100 = draw { homeMenu(ink, menu, geo, menu.restAt(100L, false), null) }
+        assertEquals(a50 / 2f, alpha(at100, past, y).toFloat(), 2f)
+        frames(150L)
+        val at150 = draw { homeMenu(ink, menu, geo, menu.restAt(150L, false), null) }
+        assertEquals(0, alpha(at150, past, y))
     }
 
     @Test

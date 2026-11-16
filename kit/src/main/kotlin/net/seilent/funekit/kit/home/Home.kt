@@ -182,7 +182,6 @@ class HomeMenu(val count: Int) {
         ring.cancel(now.toFloat())
         items.cancel(now)
         lit.up()
-        glow.clear()
     }
 
     fun tap(now: Long) {
@@ -233,7 +232,7 @@ class HomeMenu(val count: Int) {
 
     fun tick(now: Long) {
         val k = glow.key
-        if (k != null && !lit.on(k, now)) glow.clear()
+        if (k != null && items.lit(k, now) == 0f && !lit.on(k, now)) glow.clear()
     }
 
     fun animating(now: Long): Boolean =
