@@ -529,3 +529,5 @@ https://lrclib.net/api/get?track_name=%E5%A4%A7%E6%AD%A3%E6%B5%AA%E6%BC%AB&artis
 https://lrclib.net/api/get?track_name=%E3%81%A6%E3%82%89%E3%81%A6%E3%82%89&artist_name=%E9%8F%91%E6%9C%A8%E3%82%8D%E3%81%93&duration=199	code:404
 https://lrclib.net/api/get?track_name=%E7%88%86%E5%BC%BE&artist_name=HACHI%20%C3%97%20AZKi&duration=277	code:404
 https://lrclib.net/api/get?track_name=%E3%83%8D%E3%82%AF%E3%83%AD%E3%81%AE%E8%8A%B1%E5%AB%81&artist_name=%E5%BD%B1%E7%B8%AB%20%E8%8B%B1&duration=237	code:404
+https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/results/README.md	aeq-index.md
+https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/results/oratory1990/over-ear/Sennheiser%20HD%20650/Sennheiser%20HD%20650%20ParametricEQ.txt	aeq-hd650.txt
