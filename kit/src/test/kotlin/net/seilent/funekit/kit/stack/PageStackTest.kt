@@ -1141,6 +1141,10 @@ class PageStackTest {
         private const val STEP = 16L
         private const val RETARGET_MS = 200L
         private const val NP_POP = 200
+        private const val ALBUM = 7L
+        private const val LANDED = 5000L
+        private const val ENTERED = 200L
+        private const val EXITING = 50L
     }
 
     private fun popped(hook: String): PageStack<String> {
@@ -1354,5 +1358,61 @@ class PageStackTest {
         assertEquals("hub", s.turn?.to)
         assertFalse(s.move.held(Part.Content))
         assertEquals(0f, s.move.at(Part.Leave, Prop.A, 210), 1e-4f)
+    }
+
+    private fun albumStack() = PageStack<String>(MoveForms(), { PageKind.Grid }, albumOf = { if (it == "A") ALBUM else -1L }) { ends }.also { it.pages.add("hub") }
+
+    @Test
+    fun aTurnWithNoAlbumTakesTheAlbumOfThePagePushedOrPopped() {
+        val s = albumStack()
+        s.push("A", MoveKind.T3)
+        s.frame(0)
+        assertEquals(ALBUM, s.turn?.album)
+        s.frame(LANDED)
+        assertEquals(Phase.Rest, s.phase)
+        assertEquals("A", s.top)
+        s.back(pop)
+        s.frame(LANDED + 1)
+        assertEquals(true, s.turn?.popping)
+        assertEquals(ALBUM, s.turn?.album)
+        val kept = albumStack()
+        kept.push("A", MoveKind.T3, album = 3L)
+        kept.frame(0)
+        assertEquals(3L, kept.turn?.album)
+        val popped = albumStack().also { it.pages.add("A") }
+        popped.pop(MoveKind.T4, 3L)
+        popped.frame(0)
+        assertEquals(3L, popped.turn?.album)
+        val plain = PageStack<String>(MoveForms(), { PageKind.Grid }) { ends }.also { it.pages.addAll(listOf("hub", "A")) }
+        plain.back(pop)
+        plain.frame(0)
+        assertEquals(-1L, plain.turn?.album)
+        plain.frame(LANDED)
+        plain.push("A", MoveKind.T3)
+        plain.frame(LANDED + 1)
+        assertEquals(-1L, plain.turn?.album)
+    }
+
+    @Test
+    fun aRetargetedPopCarriesTheAlbumAndAReversedPushDropsIt() {
+        val s = albumStack()
+        s.push("A", MoveKind.T3)
+        s.frame(0)
+        s.frame(ENTERED)
+        assertEquals(Phase.Enter, s.phase)
+        s.back(pop)
+        s.frame(ENTERED + 1)
+        assertEquals(true, s.turn?.retarget)
+        assertEquals(true, s.turn?.popping)
+        assertEquals(ALBUM, s.turn?.album)
+        val r = albumStack()
+        r.push("A", MoveKind.T3)
+        r.frame(0)
+        r.frame(EXITING)
+        assertEquals(Phase.Exit, r.phase)
+        r.back(pop)
+        r.frame(EXITING + 1)
+        assertTrue(r.move.reversed)
+        assertEquals(-1L, r.turn?.album)
     }
 }

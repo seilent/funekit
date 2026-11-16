@@ -49,6 +49,7 @@ class PageStack<P : Any>(
     private val ready: (P) -> Boolean = { true },
     private val isNp: (P) -> Boolean = { false },
     private val gate: InputGate? = null,
+    private val albumOf: (P) -> Long = { -1L },
     private val ends: (Turn<P>) -> MoveEnds,
 ) {
     val pages = mutableStateListOf<P>()
@@ -348,7 +349,8 @@ class PageStack<P : Any>(
         seq++
         swapHeld = false
         val row = if (from.popping && from.row < 0) from.from?.let { pushedRow(it) } ?: -1 else from.row
-        val t = Turn(from.kind, from.from, from.to, from.popping, retarget, now, row, from.album, from.morph, from.keep)
+        val album = if (from.album >= 0) from.album else (if (from.popping) from.from else from.to)?.let(albumOf) ?: -1L
+        val t = Turn(from.kind, from.from, from.to, from.popping, retarget, now, row, album, from.morph, from.keep)
         turn = t
         started(t)
         starting(t)
