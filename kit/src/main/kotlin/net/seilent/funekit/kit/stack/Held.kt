@@ -45,6 +45,11 @@ suspend fun <P : Any> AwaitPointerEventScope.watchHeld(
     band: Gesture.Edge,
     popKind: (Turn<P>) -> MoveKind,
 ) {
+    if (stack.heldTap(down.uptimeMillis)) {
+        val w = HoldWatch(slop, down.position.x, down.position.y, down.uptimeMillis, true, Gesture.Edge.None)
+        watchLanded(stack, down, slop, w, true, false, popKind)
+        return
+    }
     if (!stack.hold(down.uptimeMillis, target, band)) {
         stack.touchDown()
         return
@@ -65,13 +70,14 @@ suspend fun <P : Any> AwaitPointerEventScope.watchHeld(
             if (w.back(c.position.x, c.position.y, c.uptimeMillis, !c.positionChanged())) {
                 c.consume()
                 stack.heldBack(popKind)
-            } else {
+            } else if (dev || !stack.heldReplay(down.uptimeMillis, target)) {
                 stack.touch()
             }
             return
         }
         val kept = c.historical.all { w.move(it.position.x, it.position.y, it.uptimeMillis) } && w.move(c.position.x, c.position.y, c.uptimeMillis)
         if (!kept) {
+            if (!dev && stack.heldReplay(down.uptimeMillis, target)) return
             stack.touch()
             if (dev) {
                 c.consume()
@@ -80,6 +86,7 @@ suspend fun <P : Any> AwaitPointerEventScope.watchHeld(
             return
         }
     }
+    if (!dev && stack.heldReplay(down.uptimeMillis, target)) return
     stack.touch()
     if (dev) dropRest(down) else watchLanded(stack, down, slop, w, target, band != Gesture.Edge.None, popKind)
 }

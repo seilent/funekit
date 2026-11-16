@@ -88,6 +88,7 @@ class PageStack<P : Any>(
     private var pending = 0
     private var replayDue = false
     private var cutOwed = false
+    fun heldTap(downAt: Long): Boolean = gate?.tapped(downAt) == true
 
     init {
         gate?.host = object : GateHost {
@@ -97,6 +98,9 @@ class PageStack<P : Any>(
 
             override val turning: Boolean
                 get() = phase != Phase.Rest && opened == null && pending == 0 && overlay.let { it == null || !(it.closing || it.moving(clock)) }
+
+            override val motion: Boolean
+                get() = phase != Phase.Rest || overlay.let { it != null && (it.closing || it.moving(clock)) }
 
             override fun cut() = npCut()
 
@@ -292,6 +296,17 @@ class PageStack<P : Any>(
             if (o == null || !(o.closing || o.moving(now))) touch(now)
             replayDue = true
         }
+    }
+
+    internal fun heldReplay(downAt: Long, target: Boolean): Boolean {
+        val g = gate ?: return false
+        if (!g.replayHeld(downAt, target)) return false
+        held = null
+        ask { now ->
+            touch(now)
+            replayDue = true
+        }
+        return true
     }
 
     private fun touch(now: Long) {

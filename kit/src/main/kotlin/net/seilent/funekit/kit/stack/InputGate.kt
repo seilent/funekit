@@ -8,6 +8,7 @@ internal interface GateHost {
     val asked: Int
     val armed: Boolean
     val turning: Boolean get() = false
+    val motion: Boolean get() = false
     fun cut()
     fun back()
     fun land() {}
@@ -51,6 +52,9 @@ class InputGate {
     private var tail = 0L
 
     private val queue = ArrayDeque<Kept>()
+    private val copies = ArrayList<Touch>()
+    private var recording = false
+    private var cancelOwed = false
     private val keysHeld = mutableSetOf<Int>()
     private val swallow = mutableSetOf<Int>()
     private var swallowTouch = false
@@ -64,6 +68,8 @@ class InputGate {
     private var props = emptyArray<MotionEvent.PointerProperties>()
     private var coords = emptyArray<MotionEvent.PointerCoords>()
     private var lastPass: ((MotionEvent) -> Boolean)? = null
+    private var tapFrom = NONE
+    private var tapAt = NONE
 
     fun touch(ev: MotionEvent, pass: (MotionEvent) -> Boolean): Boolean {
         onMain("InputGate.touch")
@@ -77,6 +83,7 @@ class InputGate {
                 }
             }
         }
+        if (ev.actionMasked == MotionEvent.ACTION_DOWN) forget()
         if (!holding && queue.isEmpty()) {
             if (ev.actionMasked == MotionEvent.ACTION_DOWN) {
                 carried = null
@@ -99,13 +106,41 @@ class InputGate {
                 host?.land()
                 return true
             }
-            return deliver(ev, pass)
+            return record(ev, pass)
         }
         if (ev.actionMasked == MotionEvent.ACTION_DOWN) carried = null
         keep(Touch(MotionEvent.obtain(ev), pass, carried))
         ends(ev)
         return true
     }
+
+    private fun record(ev: MotionEvent, pass: (MotionEvent) -> Boolean): Boolean {
+        val a = ev.actionMasked
+        if (a == MotionEvent.ACTION_DOWN) recording = host?.motion == true
+        if (recording) copies.add(Touch(MotionEvent.obtain(ev), pass))
+        val r = deliver(ev, pass)
+        if (recording && (a == MotionEvent.ACTION_UP || a == MotionEvent.ACTION_CANCEL)) forget()
+        return r
+    }
+
+    private fun forget() {
+        for (c in copies) c.recycle()
+        copies.clear()
+        recording = false
+    }
+
+    internal fun replayHeld(downAt: Long, tap: Boolean): Boolean {
+        if (holding || queue.isNotEmpty()) return false
+        if (copies.isEmpty() || copies.first().ev.downTime != downAt) return false
+        queue.addAll(copies)
+        copies.clear()
+        recording = false
+        cancelOwed = true
+        tapFrom = if (tap) downAt else NONE
+        return true
+    }
+
+    internal fun tapped(downAt: Long): Boolean = tapAt != NONE && tapAt == downAt
 
     private fun carries(ev: MotionEvent): Boolean {
         val h = holds ?: return false
@@ -217,17 +252,12 @@ class InputGate {
             }
             k.recycle()
         }
-        val p = lastPass
         if (gesture) pressed = true
-        if (cancel && gesture && p != null) {
-            val c = MotionEvent.obtain(downAt, lastAt, MotionEvent.ACTION_CANCEL, props.size, props, coords, 0, 0, 1f, 1f, lastDevice, 0, lastSource, 0)
-            try {
-                p(c)
-            } finally {
-                c.recycle()
-            }
-        }
+        if (cancel) cancelLive()
         close()
+        forget()
+        cancelOwed = false
+        tapFrom = NONE
         carried = null
         tail = 0L
         if (pressed) swallowTouch = true
@@ -238,8 +268,24 @@ class InputGate {
         backOwed = false
     }
 
+    private fun cancelLive() {
+        val p = lastPass ?: return
+        if (!gesture) return
+        val c = MotionEvent.obtain(downAt, lastAt, MotionEvent.ACTION_CANCEL, props.size, props, coords, 0, 0, 1f, 1f, lastDevice, 0, lastSource, 0)
+        try {
+            p(c)
+        } finally {
+            c.recycle()
+        }
+    }
+
     internal fun replay(now: Long): Boolean {
         if (holding || queue.isEmpty()) return false
+        if (cancelOwed) {
+            cancelOwed = false
+            cancelLive()
+            close()
+        }
         shift = maxOf(shift, now - queue.first().at, 0L)
         while (queue.isNotEmpty()) {
             val asked = host?.asked
@@ -249,9 +295,14 @@ class InputGate {
                     is Touch -> {
                         val c = k.ev.shifted(shift)
                         k.m?.let { c.transform(it) }
+                        if (k.ev.actionMasked == MotionEvent.ACTION_DOWN && k.ev.downTime == tapFrom) {
+                            tapFrom = NONE
+                            tapAt = c.downTime
+                        }
                         try {
                             deliver(c, k.pass)
                         } finally {
+                            tapAt = NONE
                             c.recycle()
                         }
                     }
@@ -270,6 +321,7 @@ class InputGate {
     }
 
     private companion object {
+        const val NONE = Long.MIN_VALUE
         val passes = setOf(
             KeyEvent.KEYCODE_VOLUME_UP, KeyEvent.KEYCODE_VOLUME_DOWN, KeyEvent.KEYCODE_VOLUME_MUTE, KeyEvent.KEYCODE_HEADSETHOOK,
             KeyEvent.KEYCODE_MEDIA_PLAY, KeyEvent.KEYCODE_MEDIA_PAUSE, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_MEDIA_STOP,

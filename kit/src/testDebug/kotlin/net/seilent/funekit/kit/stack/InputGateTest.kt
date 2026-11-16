@@ -18,6 +18,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.input.pointer.util.addPointerInputChange
@@ -34,12 +35,16 @@ import net.seilent.funekit.kit.motion.MoveForms
 import net.seilent.funekit.kit.motion.MoveKind
 import net.seilent.funekit.kit.motion.OverKind
 import net.seilent.funekit.kit.motion.Overlay
+import net.seilent.funekit.kit.motion.OverlayGate
 import net.seilent.funekit.kit.motion.PageMove
 import net.seilent.funekit.kit.motion.Part
 import net.seilent.funekit.kit.motion.Prop
+import net.seilent.funekit.kit.touch.Gesture
+import net.seilent.funekit.kit.touch.Slop
 import net.seilent.funekit.scale
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -562,6 +567,348 @@ class InputGateTest {
         assertTrue(states.contains(PlayOpen.State.Released))
     }
 
+    private class Gest(val rest: Boolean, val down: Long) {
+        val ups = mutableListOf<Pair<Long, Boolean>>()
+    }
+
+    private val log = mutableListOf<Triple<Int, Long, Boolean>>()
+    private val gests = mutableListOf<Gest>()
+    private val sheetSeen = mutableListOf<Pair<Int, Long>>()
+    private var atRest: () -> Unit = {}
+
+    private fun Modifier.box() = pointerInput(Unit) {
+        awaitEachGesture {
+            val d = awaitFirstDown(requireUnconsumed = false)
+            val g = Gest(stack.phase == Phase.Rest, d.uptimeMillis - t0)
+            gests += g
+            if (g.rest) atRest()
+            while (true) {
+                val c = awaitPointerEvent().changes.first()
+                if (!c.pressed) {
+                    g.ups += (c.uptimeMillis - t0) to c.isConsumed
+                    break
+                }
+            }
+        }
+    }
+
+    private fun Modifier.sheetBox(o: Overlay) = pointerInput(Unit) {
+        val og = OverlayGate()
+        awaitEachGesture {
+            val d = awaitFirstDown(requireUnconsumed = false)
+            if (!og.down(o, stack.clock, d.uptimeMillis)) return@awaitEachGesture
+            sheetSeen += DOWN to d.uptimeMillis - t0
+            while (true) {
+                val c = awaitPointerEvent().changes.first()
+                if (!c.pressed) break
+                sheetSeen += MOVE to c.uptimeMillis - t0
+            }
+        }
+    }
+
+    private fun held(inner: Modifier = Modifier.box()) {
+        gate.carry = { _, _ -> Matrix() }
+        gate.holds = { e -> stack.hold(e.eventTime, e.y < HOLD_HEADER, if (e.x < BAND) Gesture.Edge.Left else Gesture.Edge.None) }
+        content {
+            Box(
+                Modifier.fillMaxSize().pointerInput(Unit) {
+                    awaitEachGesture {
+                        val d = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                        val band = if (d.position.x < BAND) Gesture.Edge.Left else Gesture.Edge.None
+                        if (stack.moving || stack.heldTap(d.uptimeMillis)) watchHeld(stack, d, holdSlop, d.position.y < HOLD_HEADER, band, pop)
+                    }
+                },
+            ) {
+                Box(Modifier.fillMaxSize().then(inner))
+            }
+        }
+    }
+
+    private val holdSlop = Slop(25f, 45f)
+
+    private fun hsend(action: Int, ms: Long, down: Long, x: Float, y: Float) {
+        val e = MotionEvent.obtain(t0 + down, t0 + ms, action, x, y, 0).also { it.source = InputDevice.SOURCE_TOUCHSCREEN }
+        gate.touch(e) {
+            log += Triple(it.actionMasked, it.eventTime - t0, stack.phase == Phase.Rest)
+            rule.activity.dispatchTouchEvent(it)
+        }
+        e.recycle()
+    }
+
+    private fun frames(from: Long, to: Long) {
+        var t = from
+        while (t <= to) {
+            frame(t)
+            t += STEP
+        }
+    }
+
+    private fun pushed() {
+        stack.push("album", MoveKind.T3)
+        frame(0)
+        assertEquals(Phase.Exit, stack.phase)
+    }
+
+    private fun restGest(): Gest = gests.single { it.rest }
+
+    @Test
+    fun aBandTapThatIsNoBackDuringATurnReplaysRawOnTheLandedPage() {
+        held()
+        pushed()
+        frames(STEP, 2 * STEP)
+        hsend(MotionEvent.ACTION_DOWN, 30, 30, BAND / 2, BODY_Y)
+        assertNotNull(stack.held)
+        frame(3 * STEP)
+        hsend(MotionEvent.ACTION_UP, 60, 30, BAND / 2, BODY_Y)
+        assertEquals(Phase.Exit, stack.phase)
+        frame(64)
+        assertEquals(Phase.Rest, stack.phase)
+        frame(80)
+        assertEquals(
+            listOf(
+                Triple(MotionEvent.ACTION_DOWN, 30L, false),
+                Triple(MotionEvent.ACTION_UP, 60L, false),
+                Triple(MotionEvent.ACTION_DOWN, 80L, true),
+                Triple(MotionEvent.ACTION_UP, 110L, true),
+            ),
+            log,
+        )
+        val g = restGest()
+        assertEquals(80L, g.down)
+        assertEquals(listOf(110L), g.ups.map { it.first })
+        assertEquals(listOf("hub", "album"), stack.pages.toList())
+    }
+
+    @Test
+    fun aBandDownMovedOutOfTheSlopCancelsTheLiveGestureAndReplaysItRaw() {
+        held()
+        pushed()
+        frames(STEP, 2 * STEP)
+        hsend(MotionEvent.ACTION_DOWN, 30, 30, BAND / 2, BODY_Y)
+        frame(3 * STEP)
+        hsend(MotionEvent.ACTION_MOVE, 50, 30, BAND / 2, BODY_Y + HOLD_MOVE)
+        frame(64)
+        assertEquals(Phase.Rest, stack.phase)
+        frames(80, 112)
+        hsend(MotionEvent.ACTION_UP, 120, 30, BAND / 2, BODY_Y + HOLD_MOVE)
+        assertEquals(
+            listOf(
+                Triple(MotionEvent.ACTION_DOWN, 30L, false),
+                Triple(MotionEvent.ACTION_MOVE, 50L, false),
+                Triple(MotionEvent.ACTION_CANCEL, 50L, true),
+                Triple(MotionEvent.ACTION_DOWN, 80L, true),
+                Triple(MotionEvent.ACTION_MOVE, 100L, true),
+                Triple(MotionEvent.ACTION_UP, 170L, true),
+            ),
+            log,
+        )
+        val g = restGest()
+        assertEquals(80L, g.down)
+        assertEquals(listOf(170L), g.ups.map { it.first })
+    }
+
+    @Test
+    fun aBandHoldToTheKeyHoldReplaysItsDownRawAndBacksNothing() {
+        held()
+        pushed()
+        frames(STEP, 2 * STEP)
+        hsend(MotionEvent.ACTION_DOWN, 30, 30, BAND / 2, BODY_Y)
+        frames(3 * STEP, 416)
+        rule.mainClock.advanceTimeBy(Tok.input_keyHoldMs.toLong() + STEP, ignoreFrameDuration = true)
+        frame(432)
+        assertEquals(Phase.Rest, stack.phase)
+        frame(448)
+        hsend(MotionEvent.ACTION_UP, 500, 30, BAND / 2, BODY_Y)
+        assertEquals(
+            listOf(
+                Triple(MotionEvent.ACTION_DOWN, 30L, false),
+                Triple(MotionEvent.ACTION_CANCEL, 30L, true),
+                Triple(MotionEvent.ACTION_DOWN, 448L, true),
+                Triple(MotionEvent.ACTION_UP, 918L, true),
+            ),
+            log,
+        )
+        frames(464, 2000)
+        assertEquals(listOf("hub", "album"), stack.pages.toList())
+        assertEquals(Phase.Rest, stack.phase)
+    }
+
+    @Test
+    fun aTargetHoldToTheKeyHoldReplaysWithTheTapWatchAndItsUpInTheSlopBacksOnce() {
+        held()
+        pushed()
+        frames(STEP, 2 * STEP)
+        hsend(MotionEvent.ACTION_DOWN, 30, 30, HOLD_X, HOLD_HEADER / 2)
+        assertEquals(true, stack.held?.target)
+        frames(3 * STEP, 416)
+        rule.mainClock.advanceTimeBy(Tok.input_keyHoldMs.toLong() + STEP, ignoreFrameDuration = true)
+        frame(432)
+        assertEquals(Phase.Rest, stack.phase)
+        assertEquals("album", stack.top)
+        frame(448)
+        assertFalse(stack.heldTap(t0 + 448))
+        hsend(MotionEvent.ACTION_UP, 500, 30, HOLD_X, HOLD_HEADER / 2)
+        val g = gests.last()
+        assertEquals(448L, g.down)
+        assertEquals(listOf(918L to true), g.ups)
+        frames(512, 2000)
+        assertEquals(listOf("hub"), stack.pages.toList())
+        assertEquals(Phase.Rest, stack.phase)
+    }
+
+    @Test
+    fun aLaterDownInTheReplayFrameTakesNoTapWatch() {
+        held()
+        pushed()
+        frames(STEP, 2 * STEP)
+        hsend(MotionEvent.ACTION_DOWN, 30, 30, HOLD_X, HOLD_HEADER / 2)
+        assertEquals(true, stack.held?.target)
+        frames(3 * STEP, 416)
+        rule.mainClock.advanceTimeBy(Tok.input_keyHoldMs.toLong() + STEP, ignoreFrameDuration = true)
+        frame(432)
+        assertEquals(Phase.Rest, stack.phase)
+        hsend(MotionEvent.ACTION_UP, 436, 30, HOLD_X + HOLD_MOVE, HOLD_HEADER / 2)
+        hsend(MotionEvent.ACTION_DOWN, 438, 438, HOLD_X, HOLD_HEADER / 2)
+        hsend(MotionEvent.ACTION_UP, 440, 438, HOLD_X, HOLD_HEADER / 2)
+        assertTrue(log.none { it.third })
+        frame(448)
+        assertEquals(
+            listOf(
+                Triple(MotionEvent.ACTION_DOWN, 30L, false),
+                Triple(MotionEvent.ACTION_CANCEL, 30L, true),
+                Triple(MotionEvent.ACTION_DOWN, 448L, true),
+                Triple(MotionEvent.ACTION_UP, 854L, true),
+                Triple(MotionEvent.ACTION_DOWN, 856L, true),
+                Triple(MotionEvent.ACTION_UP, 858L, true),
+            ),
+            log,
+        )
+        val g = gests.last()
+        assertEquals(856L, g.down)
+        assertEquals(listOf(858L to false), g.ups)
+        frames(464, 2000)
+        assertEquals(listOf("hub", "album"), stack.pages.toList())
+    }
+
+    @Test
+    fun aRecordedDownHeldWhenAPlayOpenArmsReplaysNoCopyBehindItsHeldEvents() {
+        held()
+        pushed()
+        frames(STEP, 2 * STEP)
+        hsend(MotionEvent.ACTION_DOWN, 30, 30, BAND / 2, BODY_Y)
+        assertNotNull(stack.held)
+        val h = stack.pushOpen("np", t0 + 40, BOUND)
+        assertTrue(gate.holding)
+        hsend(MotionEvent.ACTION_MOVE, 50, 30, BAND / 2, BODY_Y + HOLD_MOVE)
+        hsend(MotionEvent.ACTION_UP, 60, 30, BAND / 2, BODY_Y + HOLD_MOVE)
+        assertTrue(gate.queued)
+        rule.mainClock.advanceTimeBy(Tok.input_keyHoldMs.toLong() + STEP, ignoreFrameDuration = true)
+        frames(3 * STEP, 96)
+        h.done()
+        frames(112, 2000)
+        assertEquals(1, log.count { it.first == MotionEvent.ACTION_DOWN })
+        assertTrue(log.none { it.first == MotionEvent.ACTION_CANCEL })
+        assertEquals(1, log.count { it.first == MotionEvent.ACTION_UP })
+        assertFalse(gate.queued)
+    }
+
+    @Test
+    fun aHeldTargetLeftDuringADevicePopReplaysNothing() {
+        held()
+        stack.pages.add("album")
+        stack.back(true, pop)
+        frame(0)
+        assertEquals(true, stack.turn?.popping)
+        frames(STEP, 2 * STEP)
+        hsend(MotionEvent.ACTION_DOWN, 30, 30, HOLD_X, HOLD_HEADER / 2)
+        assertEquals(true, stack.held?.dev)
+        frame(3 * STEP)
+        hsend(MotionEvent.ACTION_MOVE, 50, 30, HOLD_X, HOLD_HEADER / 2 + HOLD_MOVE)
+        frames(64, 64)
+        hsend(MotionEvent.ACTION_UP, 70, 30, HOLD_X, HOLD_HEADER / 2 + HOLD_MOVE)
+        frames(80, 2000)
+        assertTrue(log.none { it.first == MotionEvent.ACTION_DOWN && it.third })
+        assertTrue(gests.none { it.rest })
+        assertEquals(listOf("hub"), stack.pages.toList())
+    }
+
+    @Test
+    fun aReplayedTapThatArmsAPlayOpenHoldsItsUpForTheRelease() {
+        var h: PlayOpen? = null
+        atRest = { if (h == null) h = stack.pushOpen("np", t0 + 80, BOUND) }
+        held()
+        pushed()
+        frames(STEP, 2 * STEP)
+        hsend(MotionEvent.ACTION_DOWN, 30, 30, BAND / 2, BODY_Y)
+        frame(3 * STEP)
+        hsend(MotionEvent.ACTION_UP, 60, 30, BAND / 2, BODY_Y)
+        frames(64, 80)
+        assertNotNull(h)
+        assertEquals(Triple(MotionEvent.ACTION_DOWN, 80L, true), log.last())
+        frame(96)
+        assertTrue(restGest().ups.isEmpty())
+        h!!.done()
+        frames(112, 160)
+        val g = restGest()
+        assertEquals(80L, g.down)
+        assertEquals(1, g.ups.size)
+        assertEquals(1, log.count { it.first == MotionEvent.ACTION_UP && it.third })
+    }
+
+    @Test
+    fun aTargetHeldAboveARisingSheetToTheKeyHoldBacksOnceWithItsUpInTheSlop() {
+        held()
+        val o = Overlay(OverKind.Sheet)
+        stack.open(o)
+        frame(0)
+        assertEquals(o, stack.overlay)
+        frames(STEP, 2 * STEP)
+        assertTrue(o.moving(t0 + 30))
+        hsend(MotionEvent.ACTION_DOWN, 30, 30, HOLD_X, HOLD_HEADER / 2)
+        assertEquals(true, stack.held?.target)
+        frames(3 * STEP, 416)
+        rule.mainClock.advanceTimeBy(Tok.input_keyHoldMs.toLong() + STEP, ignoreFrameDuration = true)
+        assertFalse(o.moving(t0 + 432))
+        frames(432, 448)
+        hsend(MotionEvent.ACTION_UP, 500, 30, HOLD_X, HOLD_HEADER / 2)
+        val g = gests.last()
+        assertEquals(448L, g.down)
+        assertEquals(listOf(918L to true), g.ups)
+        frame(512)
+        assertTrue(o.closing)
+        frames(528, 2000)
+        assertEquals(null, stack.overlay)
+        assertEquals(listOf("hub"), stack.pages.toList())
+    }
+
+    @Test
+    fun aTargetHeldAboveARisingSheetMovedOutOfTheSlopLandsTheSheetBeforeItsRawReplay() {
+        val o = Overlay(OverKind.Sheet)
+        held(Modifier.sheetBox(o))
+        stack.open(o)
+        frame(0)
+        frames(STEP, 2 * STEP)
+        hsend(MotionEvent.ACTION_DOWN, 30, 30, HOLD_X, HOLD_HEADER / 2)
+        frames(3 * STEP, 96)
+        hsend(MotionEvent.ACTION_MOVE, 100, 30, HOLD_X, HOLD_HEADER / 2 + HOLD_MOVE)
+        assertTrue(o.moving(t0 + 112))
+        frame(112)
+        assertFalse(o.moving(t0 + 112))
+        assertTrue(sheetSeen.isEmpty())
+        frame(128)
+        assertEquals(
+            listOf(
+                Triple(MotionEvent.ACTION_DOWN, 30L, true),
+                Triple(MotionEvent.ACTION_MOVE, 100L, true),
+                Triple(MotionEvent.ACTION_CANCEL, 100L, true),
+                Triple(MotionEvent.ACTION_DOWN, 128L, true),
+                Triple(MotionEvent.ACTION_MOVE, 198L, true),
+            ),
+            log,
+        )
+        assertEquals(listOf(DOWN to 128L, MOVE to 198L), sheetSeen)
+    }
+
     private companion object {
         const val BOUND = 500L
         const val CARRY_DX = 12f
@@ -589,6 +936,11 @@ class InputGateTest {
         const val MOVE = 2
         const val MOVE_D = 40f
         const val PAGE = "page"
+        const val BAND = 16f
+        const val HOLD_HEADER = 100f
+        const val HOLD_X = 120f
+        const val HOLD_MOVE = 100f
+        const val BODY_Y = 200f
         const val HEADER = "header"
         const val ROW = "row"
     }
