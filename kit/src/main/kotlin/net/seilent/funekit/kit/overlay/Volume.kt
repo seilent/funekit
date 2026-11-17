@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.gen.TokBoard
 import net.seilent.funekit.kit.motion.Curves
+import net.seilent.funekit.kit.motion.OverHud
 import net.seilent.funekit.kit.motion.Press
 import net.seilent.funekit.kit.motion.lerp
 import net.seilent.funekit.kit.proj.TiltPose
@@ -42,7 +43,7 @@ class VolumeLook(
     val cross: Boolean,
 )
 
-class VolumeHud(var board: TokBoard.Board = TokBoard.v1, var w: Float = Tok.canvasW, var h: Float = board.canvasH) {
+class VolumeHud(var board: TokBoard.Board = TokBoard.v1, var w: Float = Tok.canvasW, var h: Float = board.canvasH) : OverHud {
     enum class Hit { None, Exit, Plus, Minus, Prev, Ring, Next }
     enum class Act { None, Pass, Plus, Minus, Prev, Ring, Next, Volume, Seek, Draw }
     class Pos(val on: Boolean = false, val ms: Long = 0, val dur: Long = 0, val track: Long = 0)
@@ -188,7 +189,7 @@ class VolumeHud(var board: TokBoard.Board = TokBoard.v1, var w: Float = Tok.canv
         bump()
     }
 
-    fun dismiss() {
+    override fun dismiss() {
         fadeAt = -1
         closeAt = -1
         pressUp = -1
@@ -226,7 +227,7 @@ class VolumeHud(var board: TokBoard.Board = TokBoard.v1, var w: Float = Tok.canv
         return true
     }
 
-    fun hide(now: Long) {
+    override fun hide(now: Long) {
         if (closeAt < 0 && shown) {
             val l = look(now)
             closeFrom = rest(now)
@@ -254,15 +255,17 @@ class VolumeHud(var board: TokBoard.Board = TokBoard.v1, var w: Float = Tok.canv
         bump()
     }
 
-    fun visible(now: Long): Boolean =
+    override fun visible(now: Long): Boolean =
         shown && !(closeAt >= 0 && now >= closeAt + closeMs()) &&
             !(fadeAt >= 0 && now >= fadeAt + Tok.motion_volumeRestSlow.toLong() + Tok.motion_volumeScrimOut.toLong())
 
-    fun opening(now: Long): Boolean = shown && now < endAt()
+    override fun opening(now: Long): Boolean = shown && now < endAt()
 
-    fun closing(now: Long): Boolean = closeAt >= 0 || (fadeAt >= 0 && now >= fadeAt + Tok.motion_volumeRestSlow.toLong())
+    override fun closing(now: Long): Boolean = closeAt >= 0 || (fadeAt >= 0 && now >= fadeAt + Tok.motion_volumeRestSlow.toLong())
 
     fun tapClosing(now: Long): Boolean = closeAt >= 0 && now < closeAt + closeMs()
+
+    override val hiding: Boolean get() = closeAt >= 0
 
     fun rest(now: Long): Float {
         if (!shown) return 0f
@@ -645,7 +648,7 @@ class VolumeHud(var board: TokBoard.Board = TokBoard.v1, var w: Float = Tok.canv
             (tilt && upAt >= 0 && tiltK(now) > 0f)
     }
 
-    fun wakeAt(now: Long): Long? {
+    override fun wakeAt(now: Long): Long? {
         val r = if (tilt && upAt >= 0) upAt + tiltHold() else -1
         val fast = if (fadeAt >= 0) fadeAt + Tok.motion_volumeRestSlow.toLong() else -1
         val gone = if (fadeAt >= 0) fast + Tok.motion_volumeScrimOut.toLong() else -1

@@ -10,6 +10,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameMillis
+import kotlinx.coroutines.delay
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.motion.Curves
 import net.seilent.funekit.kit.motion.MorphKind
@@ -129,6 +130,8 @@ class PageStack<P : Any>(
 
     internal val due: Boolean get() = replayDue
 
+    internal fun wakeAt(): Long? = overlay?.wakeAt(clock)
+
     private fun ask(a: (Long) -> Unit) {
         asks.addLast(a)
         asked++
@@ -141,16 +144,21 @@ class PageStack<P : Any>(
 
     fun cutPush(page: P, kind: MoveKind, row: Int = -1, album: Long = -1L) = ask { now ->
         if (!cuttable(overlay, now)) return@ask
+        overlay?.drop()
         dropOverlay(show = false)
         start(Turn(kind, top, page, popping = false, row = row, album = album), now, retarget = false)
     }
 
-    fun cut() = ask { now -> if (cuttable(overlay, now)) dropOverlay(show = false) }
+    fun cut() = ask { now ->
+        if (!cuttable(overlay, now)) return@ask
+        overlay?.drop()
+        dropOverlay(show = false)
+    }
 
     private fun cuttable(o: Overlay?, now: Long): Boolean {
         if (o == null) return false
-        if (o.kind != OverKind.Sheet && o.kind != OverKind.Jump) return false
-        if (o.closing || o.moving(now)) return false
+        if (o.kind != OverKind.Sheet && o.kind != OverKind.Jump && o.kind != OverKind.Volume) return false
+        if (o.kind != OverKind.Volume && (o.closing || o.moving(now))) return false
         if (phase != Phase.Rest) return false
         return pending == 0
     }
@@ -212,7 +220,7 @@ class PageStack<P : Any>(
         overlay = null
         hideFocus = false
         covered = false
-        if (show && was != null) top?.let { dropped(it, clock) }
+        if (show && was != null && was.kind != OverKind.Volume) top?.let { dropped(it, clock) }
     }
 
     fun back(popKind: (Turn<P>) -> MoveKind) = back(false, popKind)
@@ -277,7 +285,7 @@ class PageStack<P : Any>(
 
     private fun holdReversible(now: Long): Boolean {
         val o = overlay
-        if (o != null) return !o.closing && o.moving(now) && openSeq == seq
+        if (o != null) return o.kind != OverKind.Volume && !o.closing && o.moving(now) && openSeq == seq
         return reversible()
     }
 
@@ -289,6 +297,7 @@ class PageStack<P : Any>(
 
     fun home(kind: MoveKind) = ask { now ->
         armedLand(now, replay = false)
+        overlay?.drop()
         dropOverlay()
         if (phase != Phase.Rest) land(now)
         if (pages.isEmpty()) return@ask
@@ -557,6 +566,7 @@ class PageStack<P : Any>(
         if (form == OpenForm.Cut) {
             overlay?.let { o ->
                 if (!o.closing) closing(o, now)
+                o.drop()
                 dropOverlay(show = false)
             }
         }
@@ -712,7 +722,12 @@ class PageStack<P : Any>(
 fun <P : Any> PageStackClock(stack: PageStack<P>, popKind: (Turn<P>) -> MoveKind) {
     LaunchedEffect(stack, stack.asked) {
         withFrameMillis { stack.frame(it) }
-        while (stack.moving || stack.due) withFrameMillis { stack.frame(it) }
+        while (true) {
+            while (stack.moving || stack.due) withFrameMillis { stack.frame(it) }
+            val w = stack.wakeAt() ?: break
+            delay(w - stack.clock)
+            withFrameMillis { stack.frame(it) }
+        }
     }
     PredictiveBackHandler(enabled = stack.canBack) { progress ->
         progress.collect {}

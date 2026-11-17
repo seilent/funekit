@@ -51,7 +51,7 @@ fun toastPlace(over: OverKind?, closing: Boolean, nowPlaying: Boolean, holdUp: B
 fun toastOver(over: OverKind?, holdUp: Boolean = false): Boolean = when (over) {
     null, OverKind.Sheet -> true
     OverKind.Dlg -> holdUp
-    OverKind.Jump -> false
+    OverKind.Jump, OverKind.Volume -> false
 }
 
 fun toastSurface(s: Scale, navHere: Boolean): Int = if (navHere) navBand(s).y0 else s.heightPx

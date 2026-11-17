@@ -5,7 +5,12 @@ import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import net.seilent.funekit.kit.motion.MoveEnds
 import net.seilent.funekit.kit.motion.MoveForms
 import net.seilent.funekit.kit.motion.MoveKind
+import net.seilent.funekit.kit.motion.OverKind
+import net.seilent.funekit.kit.motion.Overlay
+import net.seilent.funekit.kit.overlay.VolumeHud
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -44,5 +49,21 @@ class PageStackClockTest {
             assertEquals(listOf("hub"), stack.pages.toList())
             assertEquals(Phase.Rest, stack.phase)
         }
+    }
+
+    @Test
+    fun theClockDropsAVolumeOverlayOnceTheHudFadesOutOnItsOwn() {
+        stack.pages.add("hub")
+        val hud = VolumeHud()
+        rule.mainClock.autoAdvance = false
+        rule.setContent { PageStackClock(stack) { MoveKind.T4 } }
+        rule.runOnIdle {
+            hud.show(stack.clock, 50, true, "artist", "title")
+            stack.open(Overlay(OverKind.Volume, hud))
+        }
+        rule.mainClock.advanceTimeBy(1000, ignoreFrameDuration = true)
+        rule.runOnIdle { assertNotNull(stack.overlay) }
+        rule.mainClock.advanceTimeBy(282L + 2027L + 650L + 267L, ignoreFrameDuration = true)
+        rule.runOnIdle { assertNull(stack.overlay) }
     }
 }
