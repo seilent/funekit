@@ -160,3 +160,10 @@ kit/src/main/kotlin/net/seilent/funekit/kit/np/NpLayout.kt HALF 2f fos player/ui
 kit/src/main/kotlin/net/seilent/funekit/kit/np/NpLayout.kt THIRD 3f fos player/ui/nowplaying.cpp:1574 the next lines part starts a third of npNextDrop under the title baseline (funeOS ui/nowplaying.cpp part_rects)
 kit/src/main/kotlin/net/seilent/funekit/kit/SettingRows.kt HALF 2 fos player/ui/rows.cpp:815 a settings row's title and value block centred in its band and the pad split above and below it (funeOS i1:ui/rows.cpp draw_settings_value, draw_settings_title, i1:ui/settings.cpp measure)
 kit/src/main/kotlin/net/seilent/funekit/kit/SettingRows.kt LINES 2 fos player/ui/settings.cpp:519 a two line value is two value line boxes, and a row with a sub line takes the sub pad twice (funeOS i1:ui/settings.cpp two_value, the 2 x pad)
+kit/src/main/kotlin/net/seilent/funekit/kit/overlay/Volume.kt HALF 2 fos player/ui/hud.cpp:401 the hit boxes are half a vol.hit, vol.ring or adjustExit either side of their centre, the canvas centre is canvasW over 2, the stride rounds by half of it and the seek drag spans 2 overlayGlyphOffset
+kit/src/main/kotlin/net/seilent/funekit/kit/overlay/Volume.kt PAD 10 fos player/ui/hud.h:219 the HUD number pads a percent under 10 to two digits (number_text)
+kit/src/main/kotlin/net/seilent/funekit/kit/overlay/Volume.kt PCT 100 fos player/ui/hud.cpp:556 a volume slide holds the percent to 0 to 100
+kit/src/main/kotlin/net/seilent/funekit/kit/overlay/Volume.kt MS_S 1000 fos player/ui/hud.cpp:26 the seek readout counts whole seconds of a position in ms (seek_text)
+kit/src/main/kotlin/net/seilent/funekit/kit/overlay/Volume.kt MIN_S 60 fos player/ui/hud.cpp:29 the seek readout's minutes and seconds (seek_text)
+kit/src/main/kotlin/net/seilent/funekit/kit/overlay/Volume.kt HOUR_S 3600 fos player/ui/hud.cpp:29 the seek readout's hours (seek_text)
+kit/src/main/kotlin/net/seilent/funekit/kit/overlay/Volume.kt HOUR_MS 3600000L fos player/ui/hud.cpp:28 a track of an hour or more reads h:mm:ss in the seek readout (seek_text)
