@@ -25,6 +25,8 @@ import net.seilent.funekit.kit.ThumbRect
 import net.seilent.funekit.kit.Word
 import net.seilent.funekit.kit.proj.M3
 
+enum class Mark { Glyph, Ring, Text, Glow, Bar }
+
 interface DrawRecord {
     fun move(dx: Float, dy: Float, block: () -> Unit)
 
@@ -57,6 +59,8 @@ interface DrawRecord {
     fun menuRegions(name: String, menu: Menu, ink: MenuInk, plan: MenuPlan, s: Scale, now: Long, w: Int, h: Int, accent: Color, accentOff: Boolean)
 
     fun quad(name: String, a: Float, t: M3, src: Edges?, block: () -> Unit) = block()
+
+    fun box(name: String, kind: Mark, r: Rect, alpha: Float, color: Color = Ink.white) {}
 }
 
 fun DrawScope.shifted(rec: DrawRecord?, dx: Float, dy: Float, block: DrawScope.() -> Unit) = translate(dx, dy) {

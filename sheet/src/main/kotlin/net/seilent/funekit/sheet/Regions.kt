@@ -1,6 +1,7 @@
 package net.seilent.funekit.sheet
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import net.seilent.funekit.core.Section
@@ -34,6 +35,7 @@ import net.seilent.funekit.kit.jumpThumb
 import net.seilent.funekit.kit.motion.OverKind
 import net.seilent.funekit.kit.motion.Overlay
 import net.seilent.funekit.kit.stack.DrawRecord
+import net.seilent.funekit.kit.stack.Mark
 import net.seilent.funekit.kit.navBand
 import net.seilent.funekit.kit.outline
 import net.seilent.funekit.kit.pen64
@@ -256,6 +258,17 @@ class Regions(
         val runs = wd.runs.map { it.layout }
         val line = if (runs.isEmpty()) null else Box(x, runs.minOf { base - it.firstBaseline }, x, runs.maxOf { base - it.firstBaseline + it.size.height })
         add(name, Kind.Text, Box(x + wd.inkLeft, base + wd.inkTop, x + wd.inkRight, base + wd.inkBottom), color, alpha, line = line)
+    }
+
+    override fun box(name: String, kind: Mark, r: Rect, alpha: Float, color: Color) {
+        val k = when (kind) {
+            Mark.Glyph -> Kind.Glyph
+            Mark.Ring -> Kind.Ring
+            Mark.Text -> Kind.Text
+            Mark.Glow -> Kind.Glow
+            Mark.Bar -> Kind.Bar
+        }
+        add(name, k, Box(r.left, r.top, r.right, r.bottom), color, alpha)
     }
 
     override fun ring(name: String, c: Offset, d: Float, alpha: Float) {

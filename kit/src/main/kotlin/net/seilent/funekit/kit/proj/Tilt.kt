@@ -31,3 +31,8 @@ fun tiltMatrix(p: TiltPose, q: Double, cx: Double, cy: Double, d: Double): Doubl
     val turn = doubleArrayOf(d * cb, d * sa * sb, 0.0, 0.0, d * ca, 0.0, -sb, sa * cb, d + dz)
     return mul(back, mul(turn, to))
 }
+
+fun tiltPoint(m: DoubleArray, x: Double, y: Double): Pair<Double, Double> {
+    val v = DoubleArray(N) { i -> m[i * N] * x + m[i * N + 1] * y + m[i * N + N - 1] }
+    return v[0] / v[N - 1] to v[1] / v[N - 1]
+}
