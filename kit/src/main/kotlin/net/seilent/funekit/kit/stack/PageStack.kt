@@ -140,13 +140,19 @@ class PageStack<P : Any>(
     }
 
     fun cutPush(page: P, kind: MoveKind, row: Int = -1, album: Long = -1L) = ask { now ->
-        val o = overlay ?: return@ask
-        if (o.kind != OverKind.Sheet) return@ask
-        if (o.closing || o.moving(now)) return@ask
-        if (phase != Phase.Rest) return@ask
-        if (pending > 0) return@ask
+        if (!cuttable(overlay, now)) return@ask
         dropOverlay(show = false)
         start(Turn(kind, top, page, popping = false, row = row, album = album), now, retarget = false)
+    }
+
+    fun cut() = ask { now -> if (cuttable(overlay, now)) dropOverlay(show = false) }
+
+    private fun cuttable(o: Overlay?, now: Long): Boolean {
+        if (o == null) return false
+        if (o.kind != OverKind.Sheet && o.kind != OverKind.Jump) return false
+        if (o.closing || o.moving(now)) return false
+        if (phase != Phase.Rest) return false
+        return pending == 0
     }
 
     fun pop(kind: MoveKind, album: Long = -1L) = ask { now ->

@@ -1267,6 +1267,133 @@ class PageStackTest {
         assertTrue("nothing entered", c.enters.isEmpty())
     }
 
+    @Test
+    fun aCutPushDropsASettledJumpGridWithNoCloseAndStartsThePushOnItsFrame() {
+        val c = Cuts()
+        val t = c.open(OverKind.Jump)
+        assertTrue(c.stack.jumpSettled)
+        c.stack.cutPush("search", MoveKind.T3)
+        assertNotNull("an ask runs on a later frame", c.stack.overlay)
+        c.stack.frame(t + STEP)
+        assertNull(c.stack.overlay)
+        val turn = requireNotNull(c.stack.turn)
+        assertEquals(MoveKind.T3, turn.kind)
+        assertEquals("hub", turn.from)
+        assertEquals("search", turn.to)
+        assertFalse(turn.popping)
+        assertEquals(t + STEP, turn.at)
+        assertEquals(Phase.Exit, c.stack.phase)
+        assertEquals(listOf(turn), c.starts)
+        assertTrue("no close", c.closings.isEmpty())
+        assertTrue("no dropped", c.dropped.isEmpty())
+        assertFalse(c.stack.jumpSettled)
+        assertEquals(listOf("search"), c.enters)
+    }
+
+    @Test
+    fun aCutDropsASettledJumpGridWithNoCloseAndStartsNoTurn() {
+        val c = Cuts()
+        val t = c.open(OverKind.Jump)
+        val snap = c.stack.snap
+        assertTrue(c.stack.jumpSettled)
+        c.stack.cut()
+        assertNotNull("an ask runs on a later frame", c.stack.overlay)
+        c.stack.frame(t + STEP)
+        assertNull(c.stack.overlay)
+        assertNull("no turn", c.stack.turn)
+        assertEquals(Phase.Rest, c.stack.phase)
+        assertTrue("no start", c.starts.isEmpty())
+        assertTrue("no close", c.closings.isEmpty())
+        assertTrue("no dropped", c.dropped.isEmpty())
+        assertTrue("nothing entered", c.enters.isEmpty())
+        assertFalse(c.stack.jumpSettled)
+        assertEquals("no snapshot", snap, c.stack.snap)
+        c.stack.frame(t + STEP + STEP)
+        assertNull(c.stack.overlay)
+        assertTrue(c.dropped.isEmpty())
+    }
+
+    @Test
+    fun aCutDropsASettledSheetWithNoCloseAndNoTurn() {
+        val c = Cuts()
+        val t = c.open(OverKind.Sheet)
+        assertEquals(1, c.stack.snap)
+        assertTrue(c.stack.covered)
+        c.stack.cut()
+        c.stack.frame(t + STEP)
+        assertNull(c.stack.overlay)
+        assertNull("no turn", c.stack.turn)
+        assertEquals(Phase.Rest, c.stack.phase)
+        assertTrue("no close", c.closings.isEmpty())
+        assertTrue("no dropped", c.dropped.isEmpty())
+        assertTrue("nothing entered", c.enters.isEmpty())
+        assertFalse(c.stack.hideFocus)
+        assertFalse(c.stack.covered)
+        assertEquals("no snapshot", 1, c.stack.snap)
+    }
+
+    @Test
+    fun aCutOverADialogIsRefused() {
+        val c = Cuts()
+        val t = c.open(OverKind.Dlg)
+        val o = c.stack.overlay
+        c.stack.cut()
+        c.stack.frame(t + STEP)
+        c.refused(o)
+        assertFalse(o!!.closing)
+        assertTrue(c.dropped.isEmpty())
+    }
+
+    @Test
+    fun aCutOverAnOpeningJumpGridIsRefused() {
+        val c = Cuts()
+        c.stack.open(Overlay(OverKind.Jump))
+        c.stack.frame(0)
+        val o = c.stack.overlay
+        assertTrue("premise: the grid still opens", o!!.moving(STEP))
+        c.stack.cut()
+        c.stack.frame(STEP)
+        c.refused(o)
+        assertFalse(o.closing)
+    }
+
+    @Test
+    fun aCutPushOnTheLastFrameOfAJumpGridCloseIsRefused() {
+        val c = Cuts()
+        val t = c.open(OverKind.Jump)
+        val o = requireNotNull(c.stack.overlay)
+        c.stack.close()
+        c.stack.frame(t + STEP)
+        val end = o.start + o.dur()
+        assertTrue("premise: the grid closes", o.closing)
+        assertFalse("premise: the close has run its time", o.moving(end))
+        assertTrue("premise: the frame drops it after its asks", o.done(end))
+        c.stack.cutPush("search", MoveKind.T3)
+        c.stack.frame(end)
+        assertNull("no turn", c.stack.turn)
+        assertTrue("nothing entered", c.enters.isEmpty())
+        assertNull("the close dropped it", c.stack.overlay)
+        assertEquals(listOf("hub"), c.dropped)
+        assertEquals(listOf(o), c.closings)
+    }
+
+    @Test
+    fun aCutWhileAMoveRunsIsRefused() {
+        val c = Cuts()
+        c.stack.pages.add("artist")
+        val t = c.open(OverKind.Jump)
+        val o = c.stack.overlay
+        c.stack.pop(MoveKind.T4)
+        c.stack.cut()
+        c.stack.frame(t + STEP)
+        val turn = requireNotNull(c.stack.turn)
+        assertEquals(MoveKind.T4, turn.kind)
+        assertTrue(turn.popping)
+        assertEquals("artist", turn.from)
+        assertSame("the overlay is kept", o, c.stack.overlay)
+        assertTrue(c.dropped.isEmpty())
+    }
+
     companion object {
         private const val STEP = 16L
         private const val RETARGET_MS = 200L
