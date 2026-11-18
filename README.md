@@ -8,4 +8,7 @@ Each app takes it as a submodule at `kit/` and pins one commit in `kit.pin` (`to
 The `player/` files under `tokens/funeos/` are funeOS files, copied unchanged; the `SOURCE` pin beside them is the kit's
 own. Selawik ships with its OFL text (`kit/src/main/assets/OFL-Selawik.txt`).
 
+The AutoEq profiles and index in `core/src/test/resources/autoeq/`, `artist/src/test/resources/autoeq/` and the
+`aeq-*` fixtures are AutoEq's, MIT (`LICENSE-AutoEq`).
+
 GPL-3.0-or-later (`LICENSE`).
