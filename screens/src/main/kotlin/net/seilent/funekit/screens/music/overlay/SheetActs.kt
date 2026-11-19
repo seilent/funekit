@@ -1,6 +1,7 @@
 package net.seilent.funekit.screens.music.overlay
 
 import kotlinx.coroutines.CancellationException
+import net.seilent.funekit.api.Busy
 import net.seilent.funekit.api.Kind
 import net.seilent.funekit.api.Listing
 import net.seilent.funekit.api.Row
@@ -62,6 +63,8 @@ suspend fun runPick(i: Int, p: Picker, t: SheetTarget, src: MusicSource): SheetD
         } catch (e: CancellationException) {
             throw e
         } catch (_: IllegalStateException) {
+            return SheetDone.Toast(NOT_READABLE, name)
+        } catch (_: Busy) {
             return SheetDone.Toast(NOT_READABLE, name)
         }
     }

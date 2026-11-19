@@ -430,6 +430,7 @@ fun HubLayer(
                     val first = pn.track.first
                     val to = m.migrate(v, p, first, src.library.caps)
                     pn.map?.let { place(pn, tt, it.count, to ?: first) }
+                    m.hold(p, src.library.state.value to src.library.scan.value)
                     settle()
                 } else {
                     m.load(v, p)
@@ -437,11 +438,29 @@ fun HubLayer(
                     val to = m.restoreRow(v, p, src.library.caps)
                     val map = pn.map
                     if (map != null && to != null) place(pn, tt, map.count, to, m.anchor?.let { pn.track.topOf(to) + px(it.off, s.ppu) })
+                    m.hold(p, src.library.state.value to src.library.scan.value)
                 }
                 m.songs = v.page(Listing.Songs, 0, 0).total
             }
         }
         m.poke()
+    }
+    LaunchedEffect(m, source, p, pn.pending) {
+        val src = source ?: return@LaunchedEffect
+        val a = pn.pending ?: return@LaunchedEffect
+        val still = {
+            val l = m.lists.getOrNull(p)
+            !frozenNow.value && l?.moving != true && l?.pressed != true
+        }
+        combine(snapshotFlow { still() }, src.library.state, src.library.scan) { at, state, scan -> Triple(at, state, scan) }.collect { (at, state, scan) ->
+            if (!at || !m.kept(p) || pn.heldOn == state to scan) return@collect
+            pn.heldOn = state to scan
+            val to = quiet { src.viewed { v -> m.retry(v, p) } } ?: return@collect
+            val map = pn.map
+            if (map != null && still() && m.kept(p)) place(pn, m.lists.getOrNull(p), map.count, to, pn.track.topOf(to) + px(a.off, s.ppu))
+            pn.pending = null
+            m.poke()
+        }
     }
     LaunchedEffect(m, source, p, pn.map) {
         val src = source ?: return@LaunchedEffect

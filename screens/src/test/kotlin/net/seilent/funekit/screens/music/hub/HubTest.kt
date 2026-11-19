@@ -15,6 +15,7 @@ import net.seilent.funekit.kit.stack.PageKind
 import net.seilent.funekit.kit.touch.RowTrack
 import net.seilent.funekit.px
 import net.seilent.funekit.scale
+import net.seilent.funekit.api.Busy
 import net.seilent.funekit.api.Expired
 import net.seilent.funekit.api.Kind
 import net.seilent.funekit.api.LibraryCaps
@@ -421,17 +422,20 @@ class HubTest {
     }
 
     @Test
-    fun aNewGenerationOnAnUnindexedFoldersPaneKeepsTheOldIndex() = runBlocking {
-        val f = fake()
-        val (m, _) = loaded(f, HUB_FOLDERS)
-        val old = requireNotNull(m.pane.whole).lastIndex
-        val first = m.pane.map!!.rowOfIndex(old)
+    fun aNewGenerationOnTheFoldersPaneFindsTheMovedRowWithNoIndexOf() = runBlocking {
+        val f = fake(FakeSet.Main)
         val g = f.library.generation.value
-        f.library.rescan()
+        f.library.addRoot(EXTRA_ROOT)
         f.library.generation.first { it > g }
-        val to = m.migrate(blind(f.library.view()), HUB_FOLDERS, first, LibraryCaps(unindexed = setOf(Listing.Folder::class)))
-        assertEquals(old, requireNotNull(m.pane.whole).lastIndex)
-        assertEquals(m.pane.map!!.rowOfIndex(old), to)
+        val (m, _) = loaded(f, HUB_FOLDERS)
+        val old = requireNotNull(m.pane.whole)
+        assertEquals(3, old.size)
+        val kept = old[1]
+        val first = m.pane.map!!.rowOfIndex(1)
+        f.library.removeRoot(f.library.roots.value.first().uri)
+        val to = m.migrate(blind(f.library.view()), HUB_FOLDERS, first)
+        assertEquals(0, requireNotNull(m.pane.whole).indexOfFirst { it.id == kept.id })
+        assertEquals(m.pane.map!!.rowOfIndex(0), to)
     }
 
     @Test
@@ -729,6 +733,73 @@ class HubTest {
     }
 
     @Test
+    fun aBusyRestoreTakesTheSavedIndexThenTheAnchorWhenAskedAgain() = runBlocking {
+        val (m, v) = loaded(fake(), HUB_SONGS)
+        val song = v.page(Listing.Songs, FAR_ROW, 1).rows.single()
+        var asks = 0
+        val once = object : LibraryView by v {
+            override suspend fun indexOf(listing: Listing, kind: Kind, id: Long): Int? = if (++asks == 1) throw Busy() else v.indexOf(listing, kind, id)
+        }
+        val a = Anchor(Kind.Song, song.id, 0f, SAVED_INDEX)
+        m.anchor = a
+        val map = m.pane.map!!
+        assertEquals(map.rowOfIndex(SAVED_INDEX), m.restoreRow(once, HUB_SONGS))
+        assertEquals(a, m.pane.pending)
+        m.hold(HUB_SONGS)
+        assertEquals(map.rowOfIndex(FAR_ROW), m.retry(once, HUB_SONGS))
+        assertEquals(2, asks)
+    }
+
+    @Test
+    fun aBusyIndexEveryTimeKeepsTheClampedRowAndAsksOncePerRetry() = runBlocking {
+        val (m, v) = loaded(fake(), HUB_SONGS)
+        var asks = 0
+        val busy = object : LibraryView by v {
+            override suspend fun indexOf(listing: Listing, kind: Kind, id: Long): Int? {
+                asks++
+                throw Busy()
+            }
+        }
+        val first = m.pane.map!!.rowOfIndex(SAVED_INDEX)
+        assertEquals(first, m.migrate(busy, HUB_SONGS, first))
+        m.hold(HUB_SONGS)
+        assertEquals(1, asks)
+        val a = requireNotNull(m.pane.pending)
+        assertEquals(v.page(Listing.Songs, SAVED_INDEX, 1).rows.single().id, a.id)
+        repeat(MOST) { n ->
+            assertEquals(null, m.retry(busy, HUB_SONGS))
+            assertEquals(n + 2, asks)
+            assertEquals(a, m.pane.pending)
+        }
+    }
+
+    @Test
+    fun aNewGenerationDropsTheBusyAnchor() = runBlocking {
+        val (m, v) = loaded(fake(), HUB_SONGS)
+        var asks = 0
+        val busy = object : LibraryView by v {
+            override suspend fun indexOf(listing: Listing, kind: Kind, id: Long): Int? {
+                asks++
+                throw Busy()
+            }
+        }
+        m.migrate(busy, HUB_SONGS, m.pane.map!!.rowOfIndex(SAVED_INDEX))
+        m.hold(HUB_SONGS)
+        assertTrue(m.pane.pending != null)
+        val next = object : LibraryView by v {
+            override val generation: Long = v.generation + 1
+
+            override suspend fun indexOf(listing: Listing, kind: Kind, id: Long): Int? {
+                asks++
+                return v.indexOf(listing, kind, id)
+            }
+        }
+        assertEquals(null, m.retry(next, HUB_SONGS))
+        assertEquals(1, asks)
+        assertEquals(null, m.pane.pending)
+    }
+
+    @Test
     fun aSongsPaneOnThe16Dot16PitchIsReadyOnceItsWindowHoldsTheRowAtItsOffset() = runBlocking {
         val v = fake().library.view()
         val m = HubModel(0L)
@@ -856,6 +927,8 @@ class HubTest {
         private const val FOUND = 12
         private const val SONGS_BEFORE = 30
         private const val FAR_ROW = 800
+        private const val SAVED_INDEX = 3
+        private const val EXTRA_ROOT = "content://com.android.externalstorage.documents/tree/primary%3AExtra"
         private const val FOLDER_ROW = 20
     }
 }

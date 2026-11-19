@@ -27,12 +27,15 @@ import net.seilent.funekit.kit.stack.PageKind
 import net.seilent.funekit.kit.touch.ListTouch
 import net.seilent.funekit.kit.touch.RowTrack
 import net.seilent.funekit.api.ArtRef
+import net.seilent.funekit.api.Busy
 import net.seilent.funekit.api.Kind
 import net.seilent.funekit.api.LibraryCaps
+import net.seilent.funekit.api.LibraryState
 import net.seilent.funekit.api.LibraryView
 import net.seilent.funekit.api.Listing
 import net.seilent.funekit.api.PlayerState
 import net.seilent.funekit.api.Row
+import net.seilent.funekit.api.ScanProgress
 import net.seilent.funekit.api.TrackIds
 import net.seilent.funekit.screens.music.Anchor
 import net.seilent.funekit.screens.music.HUB_ALBUMS
@@ -223,6 +226,9 @@ class HubPane(val pivot: Int, first: Listing = hubListing(pivot, 0L)) {
     var paging: Paging by mutableStateOf(Paging(listing))
         private set
     var whole: List<Row>? by mutableStateOf(null)
+    var pending: Anchor? by mutableStateOf(null)
+    var heldAt = 0
+    var heldOn: Pair<LibraryState, ScanProgress>? = null
     var favorites by mutableIntStateOf(0)
     var folders = 0
     var loads by mutableIntStateOf(0)
@@ -268,6 +274,8 @@ class HubPane(val pivot: Int, first: Listing = hubListing(pivot, 0L)) {
         sections = null
         map = null
         whole = null
+        pending = null
+        heldOn = null
         thumbs.clear()
         firsts.clear()
         counted = null
@@ -746,16 +754,19 @@ class HubModel(entry: Long, page: MusicPage = MusicPage.Hub, private val st: Hub
     suspend fun migrate(v: LibraryView, p: Int, first: Int, caps: LibraryCaps = LibraryCaps()): Int? {
         val pn = panes[p]
         val old = pn.map ?: return null
+        pn.pending = null
         val hit = (max(0, first) until old.count).firstNotNullOfOrNull { row -> old.indexAt(row).takeIf { it >= 0 }?.let { i -> pn.row(i)?.let { i to it } } }
         pn.thumbs.clear()
         pn.firsts.clear()
         load(v, p)
         val (i, r) = hit ?: return null
-        val at = if (pn.whole != null) {
-            val found = if (caps.indexOf(pn.listing)) v.indexOf(pn.listing, r.kind, r.id) else null
-            found ?: i.coerceIn(0, max(0, (pn.whole?.size ?: 0) - 1))
+        val whole = pn.whole
+        val at = if (whole != null) {
+            whole.indexOfFirst { it.kind == r.kind && it.id == r.id }.takeIf { it >= 0 } ?: i.coerceIn(0, max(0, whole.size - 1))
         } else {
-            pn.paging.migrate(v, r.kind, r.id, i, caps)
+            val moved = pn.paging.migrate(v, r.kind, r.id, i, caps)
+            if (moved.busy) pn.pending = Anchor(r.kind, r.id, 0f, moved.at)
+            moved.at
         }
         return pn.map?.rowOfIndex(at)?.takeIf { it >= 0 }
     }
@@ -774,12 +785,50 @@ class HubModel(entry: Long, page: MusicPage = MusicPage.Hub, private val st: Hub
         restoring = false
         val a = anchor ?: return null
         val l = panes[p].listing
+        suspend fun saved(): Int? = a.index.takeIf { it >= 0 }?.coerceAtMost(max(0, v.page(l, 0, 0).total - 1))
         val i = if (caps.indexOf(l)) {
-            v.indexOf(l, a.kind, a.id) ?: return null
+            try {
+                v.indexOf(l, a.kind, a.id) ?: return null
+            } catch (e: Busy) {
+                val at = saved()
+                panes[p].pending = a
+                at ?: return null
+            }
         } else {
-            a.index.takeIf { it >= 0 }?.coerceAtMost(max(0, v.page(l, 0, 0).total - 1)) ?: return null
+            saved() ?: return null
         }
         return panes[p].map?.rowOfIndex(i)?.takeIf { it >= 0 }
+    }
+
+    fun hold(p: Int, on: Pair<LibraryState, ScanProgress>? = null) {
+        val pn = panes[p]
+        if (pn.pending == null) return
+        pn.heldAt = pn.track.q
+        pn.heldOn = on
+    }
+
+    fun kept(p: Int): Boolean {
+        val pn = panes[p]
+        if (pn.track.q != pn.heldAt) pn.pending = null
+        return pn.pending != null
+    }
+
+    suspend fun retry(v: LibraryView, p: Int): Int? {
+        val pn = panes[p]
+        if (!kept(p)) return null
+        val a = pn.pending ?: return null
+        if (v.generation != pn.gen) {
+            pn.pending = null
+            return null
+        }
+        val i = try {
+            v.indexOf(pn.listing, a.kind, a.id)
+        } catch (e: Busy) {
+            return null
+        }
+        val row = i?.let { pn.map?.rowOfIndex(it) }?.takeIf { it >= 0 }
+        if (row == null) pn.pending = null
+        return row
     }
 
     fun regrid(c: Int) {

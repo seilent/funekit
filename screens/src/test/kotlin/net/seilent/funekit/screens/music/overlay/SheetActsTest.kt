@@ -4,9 +4,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import net.seilent.funekit.kit.touch.RowSpec
+import net.seilent.funekit.api.Busy
 import net.seilent.funekit.api.Kind
 import net.seilent.funekit.api.Listing
 import net.seilent.funekit.api.Player
+import net.seilent.funekit.api.Playlists
 import net.seilent.funekit.api.Row
 import net.seilent.funekit.api.TrackSet
 import net.seilent.funekit.fake.Fake
@@ -225,6 +227,19 @@ class SheetActsTest {
         val done = runBlocking { runPick(i, p, albumTarget(a), src) }
         assertEquals(SheetDone.Toast(ADDED_TO + DRIVE, a.title), done)
         assertEquals(before + 8, count(Listing.PlaylistTracks(id)))
+    }
+
+    @Test
+    fun aBusyAddToAListToastsItNotReadable() {
+        val busy = object : Playlists by f.playlists {
+            override suspend fun add(id: Long, tracks: TrackSet) = throw Busy()
+        }
+        val s = MusicSource(f.library, recording, f.quickplay, f.favorites, busy, f.lyrics)
+        val p = runBlocking { picker(s) }
+        val id = lists().first { it.title == DRIVE }.id
+        val before = count(Listing.PlaylistTracks(id))
+        assertEquals(SheetDone.Toast(NOT_READABLE, DRIVE), runBlocking { runPick(p.items.indexOf(DRIVE), p, albumTarget(album()), s) })
+        assertEquals(before, count(Listing.PlaylistTracks(id)))
     }
 
     @Test

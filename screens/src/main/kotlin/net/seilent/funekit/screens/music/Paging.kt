@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.drop
+import net.seilent.funekit.api.Busy
 import net.seilent.funekit.api.Kind
 import net.seilent.funekit.api.LibraryCaps
 import net.seilent.funekit.api.LibraryView
@@ -22,6 +23,8 @@ class Window(val generation: Long, val revision: Long, val offset: Int, val tota
 
     fun has(first: Int, last: Int): Boolean = first >= offset && (last < end || end >= total)
 }
+
+data class Migration(val at: Int, val busy: Boolean = false)
 
 class Paging(val listing: Listing, private val ahead: Int = WINDOW) {
     var window: Window? by mutableStateOf(null)
@@ -85,13 +88,19 @@ class Paging(val listing: Listing, private val ahead: Int = WINDOW) {
         revisions.drop(1).collect { reload(view()) }
     }
 
-    suspend fun migrate(view: LibraryView, kind: Kind, id: Long, index: Int, caps: LibraryCaps = LibraryCaps()): Int {
+    suspend fun migrate(view: LibraryView, kind: Kind, id: Long, index: Int, caps: LibraryCaps = LibraryCaps()): Migration {
         val mine = asked
-        val found = if (caps.indexOf(listing)) view.indexOf(listing, kind, id) else null
+        var busy = false
+        val found = try {
+            if (caps.indexOf(listing)) view.indexOf(listing, kind, id) else null
+        } catch (e: Busy) {
+            busy = true
+            null
+        }
         val at = found ?: index.coerceIn(0, max(0, view.page(listing, 0, 0).total - 1))
-        if (mine != asked) return at
+        if (mine != asked) return Migration(at, busy)
         window = null
         show(view, at, at)
-        return at
+        return Migration(at, busy)
     }
 }

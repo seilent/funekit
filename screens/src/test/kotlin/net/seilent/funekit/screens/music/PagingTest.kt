@@ -63,10 +63,10 @@ class PagingTest {
         val v = fake.library.view()
         val p = Paging(Listing.Songs, AHEAD)
         val id = v.page(Listing.Songs, ROW, 1).rows.first().id
-        assertEquals(ROW, p.migrate(v, Kind.Song, id, 0))
+        assertEquals(ROW, p.migrate(v, Kind.Song, id, 0).at)
         assertEquals(id, requireNotNull(p.window).row(ROW)?.id)
         val total = v.page(Listing.Songs, 0, 1).total
-        assertEquals(total - 1, p.migrate(v, Kind.Song, -1, total + ROW))
+        assertEquals(total - 1, p.migrate(v, Kind.Song, -1, total + ROW).at)
         val w = requireNotNull(p.window)
         assertEquals(total, w.end)
         assertEquals(v.page(Listing.Songs, total - 1, 1).rows.first().id, w.row(total - 1)?.id)
@@ -81,10 +81,10 @@ class PagingTest {
         val caps = LibraryCaps(unindexed = setOf(Listing.Songs::class))
         val p = Paging(Listing.Songs, AHEAD)
         val id = v.page(Listing.Songs, ROW, 1).rows.first().id
-        assertEquals(ROW + 1, p.migrate(blind, Kind.Song, id, ROW + 1, caps))
+        assertEquals(ROW + 1, p.migrate(blind, Kind.Song, id, ROW + 1, caps).at)
         assertEquals(v.page(Listing.Songs, ROW + 1, 1).rows.first().id, requireNotNull(p.window).row(ROW + 1)?.id)
         val total = v.page(Listing.Songs, 0, 1).total
-        assertEquals(total - 1, p.migrate(blind, Kind.Song, id, total + ROW, caps))
+        assertEquals(total - 1, p.migrate(blind, Kind.Song, id, total + ROW, caps).at)
     }
 
     @Test
