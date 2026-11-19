@@ -1,7 +1,8 @@
 # funekit
 
 The UI kit funeplayer and funeCOMP share: scale, tokens, touch, motion, page stack, rows, overlays, Quickplay and the
-now playing layout, in the form funeOS draws them.
+now playing layout, in the form funeOS draws them; the player and library seam (`:api`), a made up library for debug
+and test builds (`:fake`) and the music screens (`:screens`).
 
 Each app takes it as a submodule at `kit/` and pins one commit in `kit.pin` (`tools/kitset.sh`, `funekit.pin`).
 

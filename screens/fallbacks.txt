@@ -1,0 +1,3 @@
+FB-paging pending a music page window asks 64 rows on each side of the shown rows
+FB-countdip pending the queue count line dips over one valueChange and returns over another, absent at v0.4.2
+FB-thumb-reads pending a thumb strip reads at most twice its slots
