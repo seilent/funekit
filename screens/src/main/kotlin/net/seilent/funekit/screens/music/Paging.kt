@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.drop
 import net.seilent.funekit.api.Kind
+import net.seilent.funekit.api.LibraryCaps
 import net.seilent.funekit.api.LibraryView
 import net.seilent.funekit.api.Listing
 import net.seilent.funekit.api.Row
@@ -84,9 +85,10 @@ class Paging(val listing: Listing, private val ahead: Int = WINDOW) {
         revisions.drop(1).collect { reload(view()) }
     }
 
-    suspend fun migrate(view: LibraryView, kind: Kind, id: Long, index: Int): Int {
+    suspend fun migrate(view: LibraryView, kind: Kind, id: Long, index: Int, caps: LibraryCaps = LibraryCaps()): Int {
         val mine = asked
-        val at = view.indexOf(listing, kind, id) ?: index.coerceIn(0, max(0, view.page(listing, 0, 0).total - 1))
+        val found = if (caps.indexOf(listing)) view.indexOf(listing, kind, id) else null
+        val at = found ?: index.coerceIn(0, max(0, view.page(listing, 0, 0).total - 1))
         if (mine != asked) return at
         window = null
         show(view, at, at)

@@ -28,6 +28,7 @@ import net.seilent.funekit.kit.touch.ListTouch
 import net.seilent.funekit.kit.touch.RowTrack
 import net.seilent.funekit.api.ArtRef
 import net.seilent.funekit.api.Kind
+import net.seilent.funekit.api.LibraryCaps
 import net.seilent.funekit.api.LibraryView
 import net.seilent.funekit.api.Listing
 import net.seilent.funekit.api.PlayerState
@@ -742,7 +743,7 @@ class HubModel(entry: Long, page: MusicPage = MusicPage.Hub, private val st: Hub
         pn.gen = v.generation
     }
 
-    suspend fun migrate(v: LibraryView, p: Int, first: Int): Int? {
+    suspend fun migrate(v: LibraryView, p: Int, first: Int, caps: LibraryCaps = LibraryCaps()): Int? {
         val pn = panes[p]
         val old = pn.map ?: return null
         val hit = (max(0, first) until old.count).firstNotNullOfOrNull { row -> old.indexAt(row).takeIf { it >= 0 }?.let { i -> pn.row(i)?.let { i to it } } }
@@ -751,9 +752,10 @@ class HubModel(entry: Long, page: MusicPage = MusicPage.Hub, private val st: Hub
         load(v, p)
         val (i, r) = hit ?: return null
         val at = if (pn.whole != null) {
-            v.indexOf(pn.listing, r.kind, r.id) ?: i.coerceIn(0, max(0, (pn.whole?.size ?: 0) - 1))
+            val found = if (caps.indexOf(pn.listing)) v.indexOf(pn.listing, r.kind, r.id) else null
+            found ?: i.coerceIn(0, max(0, (pn.whole?.size ?: 0) - 1))
         } else {
-            pn.paging.migrate(v, r.kind, r.id, i)
+            pn.paging.migrate(v, r.kind, r.id, i, caps)
         }
         return pn.map?.rowOfIndex(at)?.takeIf { it >= 0 }
     }
@@ -764,14 +766,19 @@ class HubModel(entry: Long, page: MusicPage = MusicPage.Hub, private val st: Hub
         val q = t.q
         val row = (t.rowAt(q) until m.count).firstOrNull { pn.row(m.indexAt(it)) != null } ?: return null
         val r = pn.row(m.indexAt(row)) ?: return null
-        return Anchor(r.kind, r.id, (q - t.topOf(row)) / ppu)
+        return Anchor(r.kind, r.id, (q - t.topOf(row)) / ppu, m.indexAt(row))
     }
 
-    suspend fun restoreRow(v: LibraryView, p: Int): Int? {
+    suspend fun restoreRow(v: LibraryView, p: Int, caps: LibraryCaps = LibraryCaps()): Int? {
         if (!restoring) return null
         restoring = false
         val a = anchor ?: return null
-        val i = v.indexOf(panes[p].listing, a.kind, a.id) ?: return null
+        val l = panes[p].listing
+        val i = if (caps.indexOf(l)) {
+            v.indexOf(l, a.kind, a.id) ?: return null
+        } else {
+            a.index.takeIf { it >= 0 }?.coerceAtMost(max(0, v.page(l, 0, 0).total - 1)) ?: return null
+        }
         return panes[p].map?.rowOfIndex(i)?.takeIf { it >= 0 }
     }
 

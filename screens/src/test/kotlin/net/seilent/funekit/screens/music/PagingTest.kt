@@ -6,6 +6,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.yield
 import net.seilent.funekit.api.Kind
+import net.seilent.funekit.api.LibraryCaps
 import net.seilent.funekit.api.LibraryView
 import net.seilent.funekit.api.Listing
 import net.seilent.funekit.api.Page
@@ -69,6 +70,21 @@ class PagingTest {
         val w = requireNotNull(p.window)
         assertEquals(total, w.end)
         assertEquals(v.page(Listing.Songs, total - 1, 1).rows.first().id, w.row(total - 1)?.id)
+    }
+
+    @Test
+    fun aMigrationOnAnUnindexedListingKeepsTheOldIndexClampedAndNeverAsksIndexOf() = runBlocking {
+        val v = fake.library.view()
+        val blind = object : LibraryView by v {
+            override suspend fun indexOf(listing: Listing, kind: Kind, id: Long): Int? = throw UnsupportedOperationException()
+        }
+        val caps = LibraryCaps(unindexed = setOf(Listing.Songs::class))
+        val p = Paging(Listing.Songs, AHEAD)
+        val id = v.page(Listing.Songs, ROW, 1).rows.first().id
+        assertEquals(ROW + 1, p.migrate(blind, Kind.Song, id, ROW + 1, caps))
+        assertEquals(v.page(Listing.Songs, ROW + 1, 1).rows.first().id, requireNotNull(p.window).row(ROW + 1)?.id)
+        val total = v.page(Listing.Songs, 0, 1).total
+        assertEquals(total - 1, p.migrate(blind, Kind.Song, id, total + ROW, caps))
     }
 
     @Test

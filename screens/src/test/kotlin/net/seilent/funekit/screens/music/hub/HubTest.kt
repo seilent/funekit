@@ -1,6 +1,7 @@
 package net.seilent.funekit.screens.music.hub
 
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import net.seilent.funekit.Insets
 import net.seilent.funekit.Nav
@@ -16,12 +17,14 @@ import net.seilent.funekit.px
 import net.seilent.funekit.scale
 import net.seilent.funekit.api.Expired
 import net.seilent.funekit.api.Kind
+import net.seilent.funekit.api.LibraryCaps
 import net.seilent.funekit.api.LibraryView
 import net.seilent.funekit.api.Listing
 import net.seilent.funekit.api.Page
 import net.seilent.funekit.api.TrackSet
 import net.seilent.funekit.fake.Fake
 import net.seilent.funekit.fake.FakeSet
+import net.seilent.funekit.screens.music.Anchor
 import net.seilent.funekit.screens.music.HUB_ALBUMS
 import net.seilent.funekit.screens.music.MusicSource
 import net.seilent.funekit.screens.music.hub.FAVS_CELL
@@ -66,6 +69,10 @@ class HubTest {
     private fun page(w: Int, h: Int, large: Boolean = false): Scale = scale(Window(w, h, SDK, none, none, none, none, none), Nav.None, Surface.Page, large)
 
     private fun fake(set: FakeSet = FakeSet.Demo) = Fake(CoroutineScope(EmptyCoroutineContext), { 0L }, set, 0L, LEASE_MS)
+
+    private fun blind(v: LibraryView): LibraryView = object : LibraryView by v {
+        override suspend fun indexOf(listing: Listing, kind: Kind, id: Long): Int? = throw UnsupportedOperationException()
+    }
 
     private fun loaded(f: Fake, pivot: Int): Pair<HubModel, LibraryView> = runBlocking {
         val m = HubModel(0L)
@@ -399,6 +406,35 @@ class HubTest {
     }
 
     @Test
+    fun aNewGenerationOnAnUnindexedSongsPaneKeepsTheOldIndexClampedToTheNewTotal() = runBlocking {
+        val f = fake(FakeSet.Main)
+        val (m, v) = loaded(f, HUB_SONGS)
+        val total = v.page(Listing.Songs, 0, 0).total
+        f.library.removeRoot(f.library.roots.value.last().uri)
+        val v2 = f.library.view()
+        val left = v2.page(Listing.Songs, 0, 0).total
+        assertTrue("premise: the root change drops songs", left < total)
+        val first = dividedRow(v.sections(Listing.Songs), total - 1)
+        m.show(v, HUB_SONGS, first, first + WINDOW_ROWS)
+        val to = m.migrate(blind(v2), HUB_SONGS, first, LibraryCaps(unindexed = setOf(Listing.Songs::class)))
+        assertEquals(dividedRow(v2.sections(Listing.Songs), left - 1), to)
+    }
+
+    @Test
+    fun aNewGenerationOnAnUnindexedFoldersPaneKeepsTheOldIndex() = runBlocking {
+        val f = fake()
+        val (m, _) = loaded(f, HUB_FOLDERS)
+        val old = requireNotNull(m.pane.whole).lastIndex
+        val first = m.pane.map!!.rowOfIndex(old)
+        val g = f.library.generation.value
+        f.library.rescan()
+        f.library.generation.first { it > g }
+        val to = m.migrate(blind(f.library.view()), HUB_FOLDERS, first, LibraryCaps(unindexed = setOf(Listing.Folder::class)))
+        assertEquals(old, requireNotNull(m.pane.whole).lastIndex)
+        assertEquals(m.pane.map!!.rowOfIndex(old), to)
+    }
+
+    @Test
     fun aPlayFromAPaneOfAnExpiredGenerationIsDropped() = runBlocking {
         var now = 0L
         val f = Fake(CoroutineScope(EmptyCoroutineContext), { now }, FakeSet.Main, 0L, LEASE_MS)
@@ -674,8 +710,22 @@ class HubTest {
         m.show(v, HUB_SONGS, t.drawFirst, t.rowAt(ANCHOR_Q + t.view - 1))
         val a = requireNotNull(m.anchorAt(HUB_SONGS, t, s.ppu))
         val i = requireNotNull(v.indexOf(Listing.Songs, a.kind, a.id))
+        assertEquals(i, a.index)
         val row = m.pane.map!!.rowOfIndex(i)
         assertEquals(ANCHOR_Q, t.topOf(row) + px(a.off, s.ppu))
+    }
+
+    @Test
+    fun aRestoreOnAnUnindexedPaneTakesTheSavedIndexClampedToTheTotal() = runBlocking {
+        val f = fake()
+        val caps = LibraryCaps(unindexed = setOf(Listing.Songs::class))
+        val total = f.library.view().page(Listing.Songs, 0, 0).total
+        assertTrue("premise: the songs pane holds FAR_ROW", FAR_ROW < total)
+        for ((saved, want) in listOf(FAR_ROW to FAR_ROW, total + FAR_ROW to total - 1, -1 to null)) {
+            val (m, v) = loaded(f, HUB_SONGS)
+            m.anchor = Anchor(Kind.Song, -1, 0f, saved)
+            assertEquals("$saved", want?.let { m.pane.map!!.rowOfIndex(it) }, m.restoreRow(blind(v), HUB_SONGS, caps))
+        }
     }
 
     @Test

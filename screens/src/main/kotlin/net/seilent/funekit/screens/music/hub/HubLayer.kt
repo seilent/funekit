@@ -428,13 +428,13 @@ fun HubLayer(
                 }
                 if (stale) {
                     val first = pn.track.first
-                    val to = m.migrate(v, p, first)
+                    val to = m.migrate(v, p, first, src.library.caps)
                     pn.map?.let { place(pn, tt, it.count, to ?: first) }
                     settle()
                 } else {
                     m.load(v, p)
                     settle()
-                    val to = m.restoreRow(v, p)
+                    val to = m.restoreRow(v, p, src.library.caps)
                     val map = pn.map
                     if (map != null && to != null) place(pn, tt, map.count, to, m.anchor?.let { pn.track.topOf(to) + px(it.off, s.ppu) })
                 }

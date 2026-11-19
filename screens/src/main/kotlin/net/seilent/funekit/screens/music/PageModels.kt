@@ -9,7 +9,7 @@ import net.seilent.funekit.api.Kind
 
 const val HUB_ALBUMS = 0
 
-data class Anchor(val kind: Kind, val id: Long, val off: Float)
+data class Anchor(val kind: Kind, val id: Long, val off: Float, val index: Int = -1)
 
 interface PageId
 
