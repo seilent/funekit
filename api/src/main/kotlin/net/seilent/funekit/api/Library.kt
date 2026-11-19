@@ -2,6 +2,7 @@ package net.seilent.funekit.api
 
 import kotlinx.coroutines.flow.StateFlow
 import net.seilent.funekit.api.engine.Root
+import kotlin.reflect.KClass
 
 enum class Kind { Artist, Album, Song, Genre, Folder, Playlist }
 
@@ -66,6 +67,15 @@ class Stale(val revision: Long) : Exception("revision $revision stale")
 
 class Disconnected : Exception("player disconnected")
 
+data class LibraryCaps(
+    val genreAlbums: Boolean = true,
+    val folderTracks: Boolean = true,
+    val trackSetIds: Boolean = true,
+    val unindexed: Set<KClass<out Listing>> = emptySet(),
+) {
+    fun indexOf(listing: Listing): Boolean = listing::class !in unindexed
+}
+
 interface LibraryView {
     val generation: Long
 
@@ -84,6 +94,7 @@ interface Library {
     val generation: StateFlow<Long>
     val roots: StateFlow<List<Root>>
     val scan: StateFlow<ScanProgress>
+    val caps: LibraryCaps get() = LibraryCaps()
 
     fun view(): LibraryView
     fun view(generation: Long): LibraryView

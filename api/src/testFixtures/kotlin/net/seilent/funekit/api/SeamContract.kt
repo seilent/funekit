@@ -3,6 +3,7 @@ package net.seilent.funekit.api
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -23,6 +24,16 @@ import org.junit.Test
 
 enum class Edge { Main, Empty, Huge, Unavailable }
 
+data class Caps(
+    val lease: Boolean = true,
+    val scanProgress: Boolean = true,
+    val scanFailed: Boolean = true,
+    val rowFields: Boolean = true,
+    val trackGenre: Boolean = true,
+    val artRefs: Boolean = true,
+    val fetchDefault: Boolean = false,
+)
+
 class Subject(
     val player: Player,
     val library: Library,
@@ -32,18 +43,21 @@ class Subject(
     val lyrics: Lyrics,
     val leaseMs: Long,
     val elapsedNanos: () -> Long,
-    val failNextScan: suspend () -> Unit,
+    val failNextScan: (suspend () -> Unit)? = null,
     val built: () -> Long,
     val loads: () -> Long,
     val imageSide: (ByteArray) -> Int,
     private val wait: Wait,
+    val caps: Caps = Caps(),
     val change: suspend () -> Unit = {},
     val dropSome: suspend (Long) -> Unit = { folder -> library.removeRoot(library.roots.value.single { it.id == folder }.uri) },
     val engine: EngineSubject? = null,
     val eq: Eq? = null,
     val scrobbling: Scrobbling? = null,
 ) {
-    suspend fun <T> until(flow: StateFlow<T>, p: (T) -> Boolean): T = wait.within { flow.first(p) }
+    suspend fun <T> within(block: suspend () -> T): T = wait.within(block)
+
+    suspend fun <T> until(flow: StateFlow<T>, p: (T) -> Boolean): T = within { flow.first(p) }
 
     suspend fun saw(events: StateFlow<List<EngineEvent>>, p: (EngineEvent) -> Boolean): List<EngineEvent> = until(events) { list -> list.any(p) }
 }
@@ -89,6 +103,24 @@ abstract class SeamContract {
     }
 
     private suspend fun playing(s: Subject, track: Long): PlayerState = s.until(s.player.state) { it.playing && it.track == track && (s.engine == null || it.input != null) }
+
+    private suspend fun unsupported(block: suspend () -> Unit) {
+        val e = runCatching { block() }.exceptionOrNull()
+        assertTrue("$e", e is UnsupportedOperationException)
+    }
+
+    private suspend fun walk(view: LibraryView, folder: Long): List<Long> {
+        val rows = view.allRows(Listing.Folder(folder))
+        val kinds = rows.map { it.kind }
+        assertEquals(kinds.sortedBy { it != Kind.Folder }, kinds)
+        return rows.flatMap { if (it.kind == Kind.Folder) walk(view, it.id) else listOf(it.id) }
+    }
+
+    private suspend fun noArt(view: LibraryView) {
+        assertTrue(view.allRows(Listing.Albums).all { it.art == null })
+        assertTrue(view.page(Listing.Songs, 0, 10).rows.all { it.art == null && view.artRef(it.id) == null })
+        assertNull(view.art(ArtRef.Cover(-1, "cover.jpg"), SIDE))
+    }
 
     private suspend fun pagesWhole(view: LibraryView, listing: Listing, kind: Kind): List<Row> {
         val p = view.page(listing, 0, 2)
@@ -144,7 +176,11 @@ abstract class SeamContract {
         val s = open(Edge.Main)
         val view = s.library.view()
         val genre = view.page(Listing.Genres, 0, 1).rows.single()
-        pagesWhole(view, Listing.GenreAlbums(genre.id), Kind.Album)
+        if (s.library.caps.genreAlbums) {
+            pagesWhole(view, Listing.GenreAlbums(genre.id), Kind.Album)
+        } else {
+            unsupported { view.page(Listing.GenreAlbums(genre.id), 0, 2) }
+        }
     }
 
     @Test
@@ -176,10 +212,12 @@ abstract class SeamContract {
         s.until(s.library.generation) { it > g }
         val old = s.library.view(g)
         assertEquals(g, old.generation)
-        val page = old.page(Listing.Songs, 0, 3)
-        assertEquals(g, page.generation)
-        assertEquals(first.rows, page.rows)
-        advanceTimeBy(s.leaseMs)
+        if (s.caps.lease) {
+            val page = old.page(Listing.Songs, 0, 3)
+            assertEquals(g, page.generation)
+            assertEquals(first.rows, page.rows)
+            advanceTimeBy(s.leaseMs)
+        }
         assertTrue(runCatching { s.library.view(g).page(Listing.Songs, 0, 3) }.exceptionOrNull() is Expired)
     }
 
@@ -188,14 +226,16 @@ abstract class SeamContract {
         val s = open(Edge.Main)
         val old = s.library.view()
         val g = old.generation
-        val ref = checkNotNull(old.page(Listing.Albums, 0, 50).rows.firstNotNullOfOrNull { it.art })
+        val ref = if (s.caps.artRefs) checkNotNull(old.page(Listing.Albums, 0, 50).rows.firstNotNullOfOrNull { it.art }) else ArtRef.Cover(-1, "cover.jpg")
         s.change()
         s.library.rescan()
         s.until(s.library.generation) { it > g }
-        val early = runCatching { old.page(Listing.Albums, 0, 5) }
-        assertTrue(early.isSuccess || early.exceptionOrNull() is Expired)
-        early.getOrNull()?.let { assertEquals(g, it.generation) }
-        advanceTimeBy(s.leaseMs)
+        if (s.caps.lease) {
+            val early = runCatching { old.page(Listing.Albums, 0, 5) }
+            assertTrue(early.isSuccess || early.exceptionOrNull() is Expired)
+            early.getOrNull()?.let { assertEquals(g, it.generation) }
+            advanceTimeBy(s.leaseMs)
+        }
         val page = runCatching { old.page(Listing.Albums, 0, 5) }.exceptionOrNull()
         assertTrue(page is Expired)
         assertEquals(g, (page as Expired).generation)
@@ -220,20 +260,29 @@ abstract class SeamContract {
         s.until(s.library.generation) { it > g }
         val done = s.until(s.library.scan) { !it.running && seen.any { p -> p.running } }
         assertFalse(done.failed)
-        assertTrue(done.found > 0)
-        val running = seen.filter { it.running }.map { it.found }
-        assertEquals(running.sorted(), running)
+        if (s.caps.scanProgress) {
+            assertTrue(done.found > 0)
+            val running = seen.filter { it.running }.map { it.found }
+            assertEquals(running.sorted(), running)
+        }
     }
 
     @Test
     fun failedScanKeepsTheGeneration() = runTest {
         val s = open(Edge.Main)
         val g = s.library.generation.value
-        s.change()
-        s.failNextScan()
-        s.library.rescan()
-        val done = s.until(s.library.scan) { it.failed }
-        assertFalse(done.running)
+        if (s.caps.scanFailed) {
+            s.change()
+            checkNotNull(s.failNextScan)()
+            s.library.rescan()
+            val done = s.until(s.library.scan) { it.failed }
+            assertFalse(done.running)
+        } else {
+            val seen = mutableListOf<ScanProgress>()
+            backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { s.library.scan.toList(seen) }
+            s.library.rescan()
+            assertFalse(s.until(s.library.scan) { !it.running && seen.any { p -> p.running } }.failed)
+        }
         assertEquals(g, s.library.generation.value)
     }
 
@@ -599,17 +648,22 @@ abstract class SeamContract {
     @Test
     fun lyricsFetchIsOffUntilSwitchedOn() = runTest {
         val s = open(Edge.Main)
-        assertFalse(s.lyrics.fetch.value)
-        s.lyrics.setFetch(true)
-        assertTrue(s.until(s.lyrics.fetch) { it })
-        s.lyrics.setFetch(false)
-        assertFalse(s.until(s.lyrics.fetch) { !it })
+        val start = s.caps.fetchDefault
+        assertEquals(start, s.lyrics.fetch.value)
+        s.lyrics.setFetch(!start)
+        assertEquals(!start, s.until(s.lyrics.fetch) { it != start })
+        s.lyrics.setFetch(start)
+        assertEquals(start, s.until(s.lyrics.fetch) { it == start })
     }
 
     @Test
     fun artBytesForRowRefs() = runTest {
         val s = open(Edge.Main)
         val view = s.library.view()
+        if (!s.caps.artRefs) {
+            noArt(view)
+            return@runTest
+        }
         val refs = view.allRows(Listing.Albums).mapNotNull { it.art }
         assertTrue(refs.any { it is ArtRef.Embedded } && refs.any { it is ArtRef.Cover })
         for (ref in refs.take(5)) assertTrue(checkNotNull(view.art(ref, SIDE)).isNotEmpty())
@@ -637,12 +691,18 @@ abstract class SeamContract {
         val album = view.allRows(Listing.Albums).first { (it.count ?: 0) > 2 }
         val tracks = view.allRows(Listing.AlbumTracks(album.id))
         assertEquals(album.count, tracks.size)
-        assertEquals((1..tracks.size).toList(), tracks.map { it.no })
-        assertTrue(tracks.all { (it.durationMs ?: 0) > 0 })
-        assertTrue(tracks.all { it.album == album.title && it.year == album.year })
-        assertTrue(album.year != null)
+        if (s.caps.rowFields) {
+            assertEquals((1..tracks.size).toList(), tracks.map { it.no })
+            assertTrue(tracks.all { (it.durationMs ?: 0) > 0 })
+            assertTrue(tracks.all { it.album == album.title && it.year == album.year })
+            assertTrue(album.year != null)
+        } else {
+            assertTrue(tracks.all { it.no == null && it.durationMs == null && it.year == null })
+            assertNull(album.year)
+        }
         for (artist in view.allRows(Listing.Artists)) {
-            assertEquals(artist.title, view.page(Listing.ArtistAlbums(artist.id), 0, 1).total, artist.count)
+            val albums = view.page(Listing.ArtistAlbums(artist.id), 0, 1).total
+            if (s.caps.rowFields) assertEquals(artist.title, albums, artist.count) else assertNull(artist.title, artist.count)
             assertEquals(artist.title, view.page(Listing.ArtistTracks(artist.id), 0, 1).total, artist.count2)
         }
         for (list in view.allRows(Listing.Playlists)) assertEquals(view.page(Listing.PlaylistTracks(list.id), 0, 1).total, list.count)
@@ -654,8 +714,12 @@ abstract class SeamContract {
         val view = s.library.view()
         for (artist in view.allRows(Listing.Artists)) {
             val albums = view.allRows(Listing.ArtistAlbums(artist.id))
-            val years = albums.map { checkNotNull(it.year) }
-            assertEquals(artist.title, years.sorted(), years)
+            if (s.caps.rowFields) {
+                val years = albums.map { checkNotNull(it.year) }
+                assertEquals(artist.title, years.sorted(), years)
+            } else {
+                assertTrue(artist.title, albums.all { it.year == null })
+            }
             val want = albums.flatMap { a -> view.allRows(Listing.AlbumTracks(a.id)).map { it.id } }
             assertEquals(artist.title, want, view.allRows(Listing.ArtistTracks(artist.id)).map { it.id })
         }
@@ -667,8 +731,14 @@ abstract class SeamContract {
         val view = s.library.view()
         val songs = view.allRows(Listing.Songs).map { it.id }
         for (genre in view.allRows(Listing.Genres)) {
-            val mine = view.allRows(Listing.GenreAlbums(genre.id)).flatMap { a -> view.allRows(Listing.AlbumTracks(a.id)).map { it.id } }.toSet()
-            assertEquals(genre.title, songs.filter { it in mine }, view.allRows(Listing.GenreTracks(genre.id)).map { it.id })
+            val tracks = view.allRows(Listing.GenreTracks(genre.id)).map { it.id }
+            val mine = if (s.library.caps.genreAlbums) {
+                view.allRows(Listing.GenreAlbums(genre.id)).flatMap { a -> view.allRows(Listing.AlbumTracks(a.id)).map { it.id } }.toSet()
+            } else {
+                assertTrue(genre.title, tracks.isNotEmpty())
+                tracks.toSet()
+            }
+            assertEquals(genre.title, songs.filter { it in mine }, tracks)
         }
     }
 
@@ -676,16 +746,16 @@ abstract class SeamContract {
     fun folderTracksAreDepthFirstWithSubfoldersFirst() = runTest {
         val s = open(Edge.Main)
         val view = s.library.view()
-        suspend fun walk(folder: Long): List<Long> {
-            val rows = view.allRows(Listing.Folder(folder))
-            val kinds = rows.map { it.kind }
-            assertEquals(kinds.sortedBy { it != Kind.Folder }, kinds)
-            return rows.flatMap { if (it.kind == Kind.Folder) walk(it.id) else listOf(it.id) }
-        }
         for (root in view.allRows(Listing.Folder())) {
-            val want = walk(root.id)
+            val want = walk(view, root.id)
             assertTrue(want.isNotEmpty())
-            assertEquals(want, view.allRows(Listing.FolderTracks(root.id)).map { it.id })
+            if (s.library.caps.folderTracks) {
+                assertEquals(want, view.allRows(Listing.FolderTracks(root.id)).map { it.id })
+            } else {
+                unsupported { view.page(Listing.FolderTracks(root.id), 0, 1) }
+                edit(s) { s.player.play(Listing.FolderTracks(root.id), view.generation, 0, 0) }
+                assertEquals(want, queue(s))
+            }
             assertEquals(want.size, root.count)
         }
     }
@@ -694,16 +764,28 @@ abstract class SeamContract {
     fun trackIdsNameTheGroupsOfATrack() = runTest {
         val s = open(Edge.Main)
         val view = s.library.view()
+        val caps = s.library.caps
         val artist = view.page(Listing.Artists, 0, 1).rows.single()
         val album = view.page(Listing.ArtistAlbums(artist.id), 0, 1).rows.single()
         val song = view.page(Listing.AlbumTracks(album.id), 0, 1).rows.single()
         val ids = checkNotNull(view.trackIds(song.id))
         assertEquals(album.id, ids.album)
         assertTrue(artist.id in ids.artists)
-        val genre = checkNotNull(ids.genre)
-        assertTrue(view.allRows(Listing.GenreAlbums(genre)).any { it.id == album.id })
+        if (s.caps.trackGenre) {
+            val genre = checkNotNull(ids.genre)
+            if (caps.genreAlbums) {
+                assertTrue(view.allRows(Listing.GenreAlbums(genre)).any { it.id == album.id })
+            } else {
+                assertTrue(view.allRows(Listing.GenreTracks(genre)).any { it.id == song.id })
+            }
+        } else {
+            assertNull(ids.genre)
+        }
         assertTrue(ids.folders.isNotEmpty())
-        for (f in ids.folders) assertTrue(view.allRows(Listing.FolderTracks(f)).any { it.id == song.id })
+        for (f in ids.folders) {
+            val under = if (caps.folderTracks) view.allRows(Listing.FolderTracks(f)).map { it.id } else walk(view, f)
+            assertTrue(song.id in under)
+        }
         assertNull(view.trackIds(-1))
     }
 
@@ -1098,19 +1180,23 @@ abstract class SeamContract {
     fun indexOfFindsAnAnchorAcrossGenerations() = runTest {
         val s = open(Edge.Main)
         val old = s.library.view()
-        val songs = old.allRows(Listing.Songs)
+        val caps = s.library.caps
+        for (l in listOf(Listing.Songs, Listing.Search("a"))) if (!caps.indexOf(l)) unsupported { old.indexOf(l, Kind.Song, 0) }
+        val (listing, kind, other) = if (caps.indexOf(Listing.Songs)) Triple(Listing.Songs, Kind.Song, Kind.Album) else Triple(Listing.Albums, Kind.Album, Kind.Song)
+        val rows = old.allRows(listing)
         val gone = old.allRows(Listing.Folder()).last { it.kind == Kind.Folder }
-        val anchor = songs.last { row -> old.trackIds(row.id)?.folders?.contains(gone.id) != true }
-        assertEquals(songs.indexOf(anchor), old.indexOf(Listing.Songs, Kind.Song, anchor.id))
+        suspend fun track(row: Row) = if (row.kind == Kind.Song) row.id else old.page(Listing.AlbumTracks(row.id), 0, 1).rows.single().id
+        val anchor = rows.last { row -> old.trackIds(track(row))?.folders?.contains(gone.id) != true }
+        assertEquals(rows.indexOf(anchor), old.indexOf(listing, kind, anchor.id))
         val g = s.library.generation.value
         s.dropSome(gone.id)
         s.until(s.library.generation) { it > g }
         val fresh = s.library.view()
-        val now = fresh.allRows(Listing.Songs)
-        assertTrue(now.size < songs.size)
-        assertEquals(now.indexOfFirst { it.id == anchor.id }, fresh.indexOf(Listing.Songs, Kind.Song, anchor.id))
-        assertNull(fresh.indexOf(Listing.Songs, Kind.Song, -1))
-        assertNull(fresh.indexOf(Listing.Songs, Kind.Album, anchor.id))
+        val now = fresh.allRows(listing)
+        assertTrue(now.size < rows.size)
+        assertEquals(now.indexOfFirst { it.id == anchor.id }, fresh.indexOf(listing, kind, anchor.id))
+        assertNull(fresh.indexOf(listing, kind, -1))
+        assertNull(fresh.indexOf(listing, other, anchor.id))
     }
 
     @Test
@@ -1171,6 +1257,10 @@ abstract class SeamContract {
     fun artComesWithinMaxSideFolderCoversIncluded() = runTest {
         val s = open(Edge.Main)
         val view = s.library.view()
+        if (!s.caps.artRefs) {
+            noArt(view)
+            return@runTest
+        }
         val refs = view.allRows(Listing.Albums).mapNotNull { it.art }
         for (ref in listOf(refs.first { it is ArtRef.Embedded }, refs.first { it is ArtRef.Cover })) {
             assertTrue(s.imageSide(checkNotNull(view.art(ref, SIDE))) <= SIDE)
@@ -1263,6 +1353,62 @@ abstract class SeamContract {
         assertTrue(runCatching { s.playlists.add(made, TrackSet.Listed(Listing.AlbumTracks(album.id), g)) }.exceptionOrNull() is Expired)
         assertTrue(runCatching { s.playlists.create(TrackSet.Listed(Listing.AlbumTracks(album.id), g)) }.exceptionOrNull() is Expired)
         assertTrue(runCatching { s.favorites.add(TrackSet.Listed(Listing.AlbumTracks(album.id), g)) }.exceptionOrNull() is Expired)
+    }
+
+    @Test
+    fun anIdsSetWithAnUnknownIdTakesItsKnownIdsOrIsRefusedWhole() = runTest {
+        val s = open(Edge.Main)
+        val view = s.library.view()
+        val (a, b, c) = songs(s, 3)
+        val f = songs(s, 20).first { !s.favorites.has(it) }
+        var r = s.playlists.revision.value
+        if (s.library.caps.trackSetIds) {
+            val id = checkNotNull(s.playlists.create(TrackSet.Ids(listOf(a, -1, b))))
+            r = s.until(s.playlists.revision) { it > r }
+            assertEquals(listOf(a, b), view.allRows(Listing.PlaylistTracks(id)).map { it.id })
+            s.playlists.add(id, TrackSet.Ids(listOf(-1, c)))
+            s.until(s.playlists.revision) { it > r }
+            assertEquals(listOf(a, b, c), view.allRows(Listing.PlaylistTracks(id)).map { it.id })
+            val fr = s.favorites.revision.value
+            assertEquals(1, s.favorites.add(TrackSet.Ids(listOf(-1, f))))
+            s.until(s.favorites.revision) { it > fr }
+            assertTrue(s.favorites.has(f))
+        } else {
+            val before = view.allRows(Listing.Playlists)
+            assertNull(s.playlists.create(TrackSet.Ids(listOf(a, -1, b))))
+            assertEquals(r, s.playlists.revision.value)
+            assertEquals(before, view.allRows(Listing.Playlists))
+            val id = checkNotNull(s.playlists.create(TrackSet.Ids(listOf(a))))
+            s.until(s.playlists.revision) { it > r }
+            val add = runCatching { s.playlists.add(id, TrackSet.Ids(listOf(-1, c))) }.exceptionOrNull()
+            assertTrue("$add", add is IllegalArgumentException)
+            assertEquals(listOf(a), view.allRows(Listing.PlaylistTracks(id)).map { it.id })
+            val fav = runCatching { s.favorites.add(TrackSet.Ids(listOf(-1, f))) }.exceptionOrNull()
+            assertTrue("$fav", fav is IllegalArgumentException)
+            assertFalse(s.favorites.has(f))
+        }
+    }
+
+    @Test
+    fun aViewAfterAnExpiredGenerationReadsAboveIt() = runTest {
+        val s = open(Edge.Main)
+        val g = s.library.generation.value
+        s.change()
+        s.library.rescan()
+        var floor: Long? = null
+        var read: Page? = null
+        s.within {
+            while (read == null) {
+                val view = s.library.view()
+                floor?.let { assertTrue("view ${view.generation} after Expired($it)", view.generation > it) }
+                val got = runCatching { view.page(Listing.Albums, 0, 5) }
+                val e = got.exceptionOrNull()
+                if (e is Expired) floor = e.generation else read = got.getOrThrow().takeIf { it.generation > g }
+                delay(1)
+            }
+        }
+        assertTrue(checkNotNull(read).generation > g)
+        floor?.let { assertTrue(it >= g) }
     }
 
     private companion object {
