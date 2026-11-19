@@ -67,6 +67,14 @@ class Stale(val revision: Long) : Exception("revision $revision stale")
 
 class Disconnected : Exception("player disconnected")
 
+class Busy(val text: String = "") : Exception(text.ifEmpty { "busy" })
+
+class Refused(val text: String = "") : Exception(text.ifEmpty { "refused" })
+
+class NoCard : Exception("card not available")
+
+class NoSpace : Exception("no space")
+
 data class LibraryCaps(
     val genreAlbums: Boolean = true,
     val folderTracks: Boolean = true,

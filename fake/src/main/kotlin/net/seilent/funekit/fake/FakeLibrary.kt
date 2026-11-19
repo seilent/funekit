@@ -12,6 +12,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import net.seilent.funekit.core.Section
 import net.seilent.funekit.api.ArtRef
+import net.seilent.funekit.api.Busy
 import net.seilent.funekit.api.EngineEvent
 import net.seilent.funekit.api.Expired
 import net.seilent.funekit.api.Kind
@@ -26,6 +27,7 @@ import net.seilent.funekit.api.TrackSet
 import net.seilent.funekit.api.engine.Root
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 
 class FakeLibrary internal constructor(
     private val scope: CoroutineScope,
@@ -67,6 +69,7 @@ class FakeLibrary internal constructor(
     private var failNext = false
     private val built = AtomicLong()
     private val loads = AtomicLong()
+    private val busy = AtomicReference<String?>()
 
     internal var dropped: suspend (Set<Long>) -> Unit = {}
 
@@ -134,6 +137,10 @@ class FakeLibrary internal constructor(
         failNext = true
     }
 
+    internal fun busyNext(text: String) {
+        busy.set(text)
+    }
+
     internal fun track(id: Long): Track? = current.catalog.track(id)
 
     internal fun resolves(pin: Pin): Boolean = current.catalog.resolve(pin) != null
@@ -194,6 +201,7 @@ class FakeLibrary internal constructor(
 
         private suspend fun answer() {
             delay(latencyMs)
+            busy.getAndSet(null)?.let { throw Busy(it) }
             if (expired(snap)) throw Expired(snap.generation)
         }
 
@@ -203,6 +211,7 @@ class FakeLibrary internal constructor(
                 return snap
             }
             delay(latencyMs)
+            busy.getAndSet(null)?.let { throw Busy(it) }
             return current
         }
 

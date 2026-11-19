@@ -32,6 +32,8 @@ data class Caps(
     val trackGenre: Boolean = true,
     val artRefs: Boolean = true,
     val fetchDefault: Boolean = false,
+    val outcomes: Boolean = false,
+    val pinCap: Int? = null,
 )
 
 class Subject(
@@ -54,6 +56,7 @@ class Subject(
     val engine: EngineSubject? = null,
     val eq: Eq? = null,
     val scrobbling: Scrobbling? = null,
+    val busy: (suspend (String) -> Unit)? = null,
 ) {
     suspend fun <T> within(block: suspend () -> T): T = wait.within(block)
 
@@ -107,6 +110,11 @@ abstract class SeamContract {
     private suspend fun unsupported(block: suspend () -> Unit) {
         val e = runCatching { block() }.exceptionOrNull()
         assertTrue("$e", e is UnsupportedOperationException)
+    }
+
+    private suspend fun outcome(s: Subject, typed: (Throwable?) -> Boolean, block: suspend () -> Unit) {
+        val e = runCatching { block() }.exceptionOrNull()
+        assertTrue("$e", if (s.caps.outcomes) typed(e) else e !is Expired && e !is Stale && e !is Disconnected)
     }
 
     private suspend fun walk(view: LibraryView, folder: Long): List<Long> {
@@ -1454,6 +1462,79 @@ abstract class SeamContract {
             assertEquals(l.toString(), 0, view.sections(l).size)
             assertEquals(l.toString(), 0, view.jump(l, 1, 10)?.total ?: 0)
             if (caps.indexOf(l)) assertNull(l.toString(), view.indexOf(l, Kind.Song, song))
+        }
+    }
+
+    @Test
+    fun aListThatIsNotWritableRefusesItsEdits() = runTest {
+        val s = open(Edge.Main)
+        val view = s.library.view()
+        val lists = view.allRows(Listing.Playlists)
+        val list = lists.first { !it.writable }
+        val listing = Listing.PlaylistTracks(list.id)
+        val page = view.page(listing, 0, 2)
+        assertEquals(2, page.rows.size)
+        val tracks = view.allRows(listing)
+        val r = s.playlists.revision.value
+        outcome(s, { it is Refused }) { s.playlists.add(list.id, TrackSet.Ids(songs(s, 1))) }
+        outcome(s, { it is Refused }) { s.playlists.remove(list.id, 0, page.revision) }
+        outcome(s, { it is Refused }) { s.playlists.move(list.id, 0, 1, page.revision) }
+        outcome(s, { it is Refused }) { s.playlists.delete(list.id) }
+        assertEquals(r, s.playlists.revision.value)
+        assertEquals(tracks, view.allRows(listing))
+        assertEquals(lists, view.allRows(Listing.Playlists))
+    }
+
+    @Test
+    fun aPinPastTheCapAnswersNoSpace() = runTest {
+        val s = open(Edge.Main)
+        val view = s.library.view()
+        val free = view.allRows(Listing.Songs).map { it.id }.filter { !view.pinned(Kind.Song, it) }
+        var r = s.quickplay.revision.value
+        val cap = s.caps.pinCap
+        if (cap == null) {
+            s.quickplay.pin(Kind.Song, free.first())
+            s.until(s.quickplay.revision) { it > r }
+            assertTrue(view.pinned(Kind.Song, free.first()))
+            return@runTest
+        }
+        val fill = free.take(cap - view.pins(0, 0).total)
+        for (id in fill) s.quickplay.pin(Kind.Song, id)
+        if (fill.isNotEmpty()) s.until(s.quickplay.revision) { it > r }
+        val full = view.pins(0, cap)
+        assertEquals(cap, full.total)
+        val extra = free[fill.size]
+        r = s.quickplay.revision.value
+        outcome(s, { it is NoSpace }) { s.quickplay.pin(Kind.Song, extra) }
+        assertEquals(r, s.quickplay.revision.value)
+        assertEquals(full.rows, view.pins(0, cap).rows)
+        assertFalse(view.pinned(Kind.Song, extra))
+        val held = full.rows.first()
+        s.quickplay.pin(held.kind, held.id)
+        assertEquals(r, s.quickplay.revision.value)
+        assertEquals(full.rows, view.pins(0, cap).rows)
+        s.quickplay.unpin(held.kind, held.id)
+        r = s.until(s.quickplay.revision) { it > r }
+        s.quickplay.pin(Kind.Song, extra)
+        s.until(s.quickplay.revision) { it > r }
+        assertTrue(view.pinned(Kind.Song, extra))
+        assertEquals(cap, view.pins(0, 0).total)
+    }
+
+    @Test
+    fun aBusyReadChangesNothingAndTheNextAskAnswers() = runTest {
+        val s = open(Edge.Main)
+        val view = s.library.view()
+        val album = view.page(Listing.Albums, 2, 1).rows.single().id
+        val text = "index busy"
+        val reads = listOf<suspend () -> Any?>({ view.page(Listing.Songs, 0, 5) }, { view.indexOf(Listing.Albums, Kind.Album, album) })
+        for (read in reads) {
+            val want = read()
+            s.busy?.let { busy ->
+                busy(text)
+                outcome(s, { it is Busy && it.text == text }) { read() }
+            }
+            assertEquals(want, read())
         }
     }
 

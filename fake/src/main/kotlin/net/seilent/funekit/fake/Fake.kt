@@ -6,14 +6,14 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import net.seilent.funekit.api.EngineEvent
 import net.seilent.funekit.api.engine.Dac
 
-class Fake(scope: CoroutineScope, clock: () -> Long, set: FakeSet, latencyMs: Long, leaseMs: Long) {
+class Fake(scope: CoroutineScope, clock: () -> Long, set: FakeSet, latencyMs: Long, leaseMs: Long, val pinCap: Int? = null) {
     private val bus = MutableSharedFlow<EngineEvent>(extraBufferCapacity = EVENTS, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     private val store = Store(set)
     private val shelf = Fixture.shelf(set)
 
     val library = FakeLibrary(scope, clock, set, latencyMs, leaseMs, store, bus)
     val player = FakePlayer(scope, clock, library, store, bus)
-    val quickplay = FakeQuickplay(store, library)
+    val quickplay = FakeQuickplay(store, library, pinCap)
     val favorites = FakeFavorites(store, library, latencyMs)
     val playlists = FakePlaylists(store, library)
     val settings = FakeSettings(player)
@@ -37,6 +37,8 @@ class Fake(scope: CoroutineScope, clock: () -> Long, set: FakeSet, latencyMs: Lo
     suspend fun detachDac() = settings.detachDac()
 
     fun failNextScan() = library.failNextScan()
+
+    fun busyNext(text: String) = library.busyNext(text)
 
     fun lyricTrack(shape: String): Long? = shelf.lyricShapes[shape]
 

@@ -5,6 +5,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import net.seilent.funekit.api.Listing
 import net.seilent.funekit.api.Playlists
+import net.seilent.funekit.api.Refused
 import net.seilent.funekit.api.Stale
 import net.seilent.funekit.api.TrackSet
 
@@ -28,16 +29,19 @@ class FakePlaylists internal constructor(private val store: Store, private val l
     }
 
     override suspend fun add(id: Long, tracks: TrackSet) = lock.withLock {
+        writable(id)
         val ids = library.ids(tracks)
         if (ids.isNotEmpty()) edit(id) { it + ids }
     }
 
     override suspend fun remove(id: Long, index: Int, revision: Long) = lock.withLock {
+        writable(id)
         val at = shown(id, revision)
         if (index in at.indices) edit(id) { it.filterIndexed { i, _ -> i != at[index] } }
     }
 
     override suspend fun move(id: Long, from: Int, to: Int, revision: Long) = lock.withLock {
+        writable(id)
         val at = shown(id, revision)
         if (from in at.indices && to in at.indices && from != to) {
             edit(id) { tracks ->
@@ -52,11 +56,16 @@ class FakePlaylists internal constructor(private val store: Store, private val l
 
     override suspend fun delete(id: Long) {
         val gone = lock.withLock {
+            writable(id)
             val before = store.playlists
-            store.updatePlaylists { docs, _ -> docs.filterNot { it.id == id && it.writable } }
+            store.updatePlaylists { docs, _ -> docs.filterNot { it.id == id } }
             store.playlists != before
         }
         if (gone) deleted(Listing.PlaylistTracks(id))
+    }
+
+    private fun writable(id: Long) {
+        if (store.playlists.firstOrNull { it.id == id }?.writable == false) throw Refused()
     }
 
     private fun shown(id: Long, revision: Long): List<Int> {
@@ -66,7 +75,7 @@ class FakePlaylists internal constructor(private val store: Store, private val l
     }
 
     private fun edit(id: Long, f: (List<Long>) -> List<Long>) {
-        store.updatePlaylists { docs, r -> docs.map { if (it.id == id && it.writable) it.copy(tracks = f(it.tracks), revision = r) else it } }
+        store.updatePlaylists { docs, r -> docs.map { if (it.id == id) it.copy(tracks = f(it.tracks), revision = r) else it } }
     }
 
     private companion object {

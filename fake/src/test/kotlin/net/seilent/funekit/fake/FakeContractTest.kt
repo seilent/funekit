@@ -4,6 +4,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.withTimeout
 import net.seilent.funekit.api.ApiContract
+import net.seilent.funekit.api.Caps
 import net.seilent.funekit.api.Edge
 import net.seilent.funekit.api.EngineSubject
 import net.seilent.funekit.api.Subject
@@ -14,7 +15,7 @@ import java.nio.ByteBuffer
 class FakeContractTest : ApiContract() {
     override fun TestScope.open(edge: Edge): Subject {
         val clock = { testScheduler.currentTime * MILLI }
-        val f = Fake(backgroundScope, clock, FakeSet.valueOf(edge.name), LATENCY, LEASE)
+        val f = Fake(backgroundScope, clock, FakeSet.valueOf(edge.name), LATENCY, LEASE, PIN_CAP)
         val tracks = Fixture.ALBUMS.flatMap { it.tracks }
         return Subject(
             player = f.player,
@@ -30,6 +31,7 @@ class FakeContractTest : ApiContract() {
             loads = { f.library.pageLoads },
             imageSide = { pngSide(it) },
             wait = VIRTUAL,
+            caps = Caps(outcomes = true, pinCap = f.pinCap),
             engine = EngineSubject(
                 settings = f.settings,
                 brokenTrack = tracks.first { it.broken }.id,
@@ -44,6 +46,7 @@ class FakeContractTest : ApiContract() {
             ),
             eq = f.eq,
             scrobbling = f.scrobbling,
+            busy = { f.busyNext(it) },
         )
     }
 
@@ -60,6 +63,7 @@ class FakeContractTest : ApiContract() {
         }
         const val WAIT_MS = 60_000L
         const val LATENCY = 40L
+        const val PIN_CAP = 8
         const val LEASE = 5_000L
         const val MILLI = 1_000_000L
     }
