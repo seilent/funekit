@@ -122,6 +122,10 @@ abstract class SeamContract {
         assertNull(view.art(ArtRef.Cover(-1, "cover.jpg"), SIDE))
     }
 
+    private suspend fun albumUnder(view: LibraryView, folder: Long): Row = view.allRows(Listing.Albums).first { a ->
+        view.page(Listing.AlbumTracks(a.id), 0, 1).rows.single().let { view.trackIds(it.id)?.folders?.contains(folder) == true }
+    }
+
     private suspend fun pagesWhole(view: LibraryView, listing: Listing, kind: Kind): List<Row> {
         val p = view.page(listing, 0, 2)
         assertEquals(view.generation, p.generation)
@@ -1230,13 +1234,10 @@ abstract class SeamContract {
         val view = s.library.view()
         val folders = view.allRows(Listing.Folder()).filter { it.kind == Kind.Folder }
         val gone = folders.last()
-        suspend fun under(folder: Row) = view.allRows(Listing.Albums).first { a ->
-            view.page(Listing.AlbumTracks(a.id), 0, 1).rows.single().let { view.trackIds(it.id)?.folders?.contains(folder.id) == true }
-        }
         var r = s.playlists.revision.value
-        val id = checkNotNull(s.playlists.create(TrackSet.Listed(Listing.AlbumTracks(under(gone).id), view.generation)))
+        val id = checkNotNull(s.playlists.create(TrackSet.Listed(Listing.AlbumTracks(albumUnder(view, gone.id).id), view.generation)))
         r = s.until(s.playlists.revision) { it > r }
-        s.playlists.add(id, TrackSet.Listed(Listing.AlbumTracks(under(folders.first()).id), view.generation))
+        s.playlists.add(id, TrackSet.Listed(Listing.AlbumTracks(albumUnder(view, folders.first().id).id), view.generation))
         s.until(s.playlists.revision) { it > r }
         val listing = Listing.PlaylistTracks(id)
         val before = view.allRows(listing)
@@ -1409,6 +1410,74 @@ abstract class SeamContract {
         }
         assertTrue(checkNotNull(read).generation > g)
         floor?.let { assertTrue(it >= g) }
+    }
+
+    @Test
+    fun aGoneParentAtTheCurrentGenerationAnswersAnEmptyPage() = runTest {
+        val s = open(Edge.Main)
+        val view = s.library.view()
+        val gone = view.allRows(Listing.Folder()).last { it.kind == Kind.Folder }
+        val album = albumUnder(view, gone.id)
+        val song = view.page(Listing.AlbumTracks(album.id), 0, 1).rows.single().id
+        val g = s.library.generation.value
+        s.dropSome(gone.id)
+        s.until(s.library.generation) { it > g }
+        val fresh = s.library.view()
+        val caps = s.library.caps
+        for (l in listOf(Listing.AlbumTracks(album.id), Listing.Folder(gone.id))) {
+            val p = fresh.page(l, 0, 10)
+            assertEquals(l.toString(), fresh.generation, p.generation)
+            assertEquals(l.toString(), 0, p.total)
+            assertTrue(l.toString(), p.rows.isEmpty())
+            assertEquals(l.toString(), 0, fresh.sections(l).size)
+            assertEquals(l.toString(), 0, fresh.jump(l, 1, 10)?.total ?: 0)
+            if (caps.indexOf(l)) assertNull(l.toString(), fresh.indexOf(l, Kind.Song, song))
+        }
+    }
+
+    @Test
+    fun anIdMissAnswersAnEmptyPageAndNeverExpired() = runTest {
+        val s = open(Edge.Main)
+        val view = s.library.view()
+        val caps = s.library.caps
+        val song = songs(s, 1).single()
+        val listings = listOfNotNull(
+            Listing.ArtistAlbums(-1), Listing.ArtistTracks(-1), Listing.AlbumTracks(-1), Listing.GenreTracks(-1),
+            Listing.PlaylistTracks(-1), Listing.Folder(-1), Listing.GenreAlbums(-1).takeIf { caps.genreAlbums },
+            Listing.FolderTracks(-1).takeIf { caps.folderTracks },
+        )
+        for (l in listings) {
+            val p = view.page(l, 0, 10)
+            assertEquals(l.toString(), view.generation, p.generation)
+            assertEquals(l.toString(), 0, p.total)
+            assertTrue(l.toString(), p.rows.isEmpty())
+            assertEquals(l.toString(), 0, view.sections(l).size)
+            assertEquals(l.toString(), 0, view.jump(l, 1, 10)?.total ?: 0)
+            if (caps.indexOf(l)) assertNull(l.toString(), view.indexOf(l, Kind.Song, song))
+        }
+    }
+
+    @Test
+    fun indexOfAnswersNullOnlyForAnAbsentRow() = runTest {
+        val s = open(Edge.Main)
+        val view = s.library.view()
+        val last = view.page(Listing.Songs, view.page(Listing.Songs, 0, 1).total - 1, 1).rows.single()
+        val ids = checkNotNull(view.trackIds(last.id))
+        val album = checkNotNull(ids.album)
+        val artist = ids.artists.first()
+        val albumAt = view.indexOf(Listing.Albums, Kind.Album, album)
+        val artistAt = view.indexOf(Listing.Artists, Kind.Artist, artist)
+        val albums = view.allRows(Listing.Albums)
+        assertEquals(albums.indexOfFirst { it.id == album }, checkNotNull(albumAt))
+        assertEquals(view.allRows(Listing.Artists).indexOfFirst { it.id == artist }, checkNotNull(artistAt))
+        if (s.library.caps.indexOf(Listing.Songs)) {
+            val song = view.page(Listing.AlbumTracks(albums.last().id), 0, 1).rows.single().id
+            val songAt = view.indexOf(Listing.Songs, Kind.Song, song)
+            assertEquals(view.allRows(Listing.Songs).indexOfFirst { it.id == song }, checkNotNull(songAt))
+        }
+        assertNull(view.indexOf(Listing.Albums, Kind.Album, -1))
+        assertNull(view.indexOf(Listing.Albums, Kind.Song, album))
+        assertNull(view.indexOf(Listing.Artists, Kind.Artist, -1))
     }
 
     private companion object {
