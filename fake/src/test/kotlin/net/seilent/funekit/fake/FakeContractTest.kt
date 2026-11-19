@@ -31,7 +31,7 @@ class FakeContractTest : ApiContract() {
             loads = { f.library.pageLoads },
             imageSide = { pngSide(it) },
             wait = VIRTUAL,
-            caps = Caps(outcomes = true, pinCap = f.pinCap),
+            caps = Caps(outcomes = true, pinCap = f.pinCap, firstIndex = true),
             engine = EngineSubject(
                 settings = f.settings,
                 brokenTrack = tracks.first { it.broken }.id,
@@ -47,6 +47,7 @@ class FakeContractTest : ApiContract() {
             eq = f.eq,
             scrobbling = f.scrobbling,
             busy = { f.busyNext(it) },
+            card = { f.card(it) },
         )
     }
 

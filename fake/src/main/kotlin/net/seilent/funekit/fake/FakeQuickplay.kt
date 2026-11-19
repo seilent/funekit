@@ -13,6 +13,7 @@ class FakeQuickplay internal constructor(private val store: Store, private val l
     override val revision: StateFlow<Long> = store.revision
 
     override suspend fun pin(kind: Kind, id: Long) = lock.withLock {
+        library.present()
         require(kind == Kind.Album || kind == Kind.Artist || kind == Kind.Song) { "$kind cannot be pinned" }
         val pin = Pin(kind, id)
         store.updatePins {
@@ -24,5 +25,8 @@ class FakeQuickplay internal constructor(private val store: Store, private val l
         }
     }
 
-    override suspend fun unpin(kind: Kind, id: Long) = lock.withLock { store.updatePins { it - Pin(kind, id) } }
+    override suspend fun unpin(kind: Kind, id: Long) = lock.withLock {
+        library.present()
+        store.updatePins { it - Pin(kind, id) }
+    }
 }

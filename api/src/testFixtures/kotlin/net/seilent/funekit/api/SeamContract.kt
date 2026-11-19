@@ -34,6 +34,7 @@ data class Caps(
     val fetchDefault: Boolean = false,
     val outcomes: Boolean = false,
     val pinCap: Int? = null,
+    val firstIndex: Boolean = false,
 )
 
 class Subject(
@@ -57,6 +58,7 @@ class Subject(
     val eq: Eq? = null,
     val scrobbling: Scrobbling? = null,
     val busy: (suspend (String) -> Unit)? = null,
+    val card: (suspend (Card) -> Unit)? = null,
 ) {
     suspend fun <T> within(block: suspend () -> T): T = wait.within(block)
 
@@ -1536,6 +1538,93 @@ abstract class SeamContract {
             }
             assertEquals(want, read())
         }
+    }
+
+    @Test
+    fun aCardNotPresentRefusesPlaysAndEditsWithNoCard() = runTest {
+        val s = open(Edge.Main)
+        val view = s.library.view()
+        val (a, b) = songs(s, 2)
+        val album = Listing.AlbumTracks(view.page(Listing.Albums, 0, 1).rows.single().id)
+        val lists = view.allRows(Listing.Playlists)
+        val list = lists.first { it.writable }
+        val listing = Listing.PlaylistTracks(list.id)
+        val tracks = view.allRows(listing).map { it.id }
+        val favorites = view.allRows(Listing.Favorites).map { it.id }
+        val queued = queue(s)
+        val pins = view.pins(0, 100).rows
+        val held = pins.first()
+        val free = songs(s, 20).first { id -> pins.none { it.kind == Kind.Song && it.id == id } }
+        val g = view.generation
+        val q = s.player.state.value.queueRevision
+        val lr = view.page(listing, 0, 1).revision
+        val fr = view.page(Listing.Favorites, 0, 1).revision
+        val guarded = listOf<suspend () -> Unit>(
+            { s.player.play(listOf(a, b), 0, 0) },
+            { s.player.play(album, g, 0, 0) },
+            { s.player.enqueue(listOf(a)) },
+            { s.player.enqueue(album, g) },
+            { s.player.playNext(listOf(a)) },
+            { s.player.playNext(album, g) },
+            { s.player.playAt(0, q) },
+            { s.playlists.create(TrackSet.Ids(listOf(a))) },
+            { s.playlists.add(list.id, TrackSet.Ids(listOf(a))) },
+            { s.playlists.remove(list.id, 0, lr) },
+            { s.playlists.move(list.id, 0, 1, lr) },
+            { s.playlists.delete(list.id) },
+            { s.favorites.toggle(a) },
+            { s.favorites.add(TrackSet.Ids(listOf(b))) },
+            { s.favorites.remove(0, fr) },
+            { s.favorites.move(0, 1, fr) },
+            { s.quickplay.pin(Kind.Song, free) },
+            { s.quickplay.unpin(held.kind, held.id) },
+        )
+        s.card?.let { card ->
+            for (c in listOf(Card.Out, Card.Error, Card.Held)) {
+                card(c)
+                s.until(s.library.state) { it.card == c }
+                for (call in guarded) outcome(s, { it is NoCard }) { call() }
+            }
+            card(Card.Present)
+        }
+        s.until(s.library.state) { it.card == Card.Present }
+        assertEquals(queued, queue(s))
+        assertEquals(lists, view.allRows(Listing.Playlists))
+        assertEquals(tracks, view.allRows(listing).map { it.id })
+        assertEquals(favorites, view.allRows(Listing.Favorites).map { it.id })
+        assertEquals(pins, view.pins(0, 100).rows)
+        val r = s.playlists.revision.value
+        s.playlists.add(list.id, TrackSet.Ids(listOf(a)))
+        s.until(s.playlists.revision) { it > r }
+        assertEquals(tracks + a, view.allRows(listing).map { it.id })
+    }
+
+    @Test
+    fun aRescanOfALibraryWithTracksIsNoFirstIndex() = runTest {
+        val s = open(Edge.Main)
+        val states = mutableListOf<LibraryState>()
+        val scans = mutableListOf<ScanProgress>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { s.library.state.toList(states) }
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { s.library.scan.toList(scans) }
+        s.change()
+        s.library.rescan()
+        s.until(s.library.scan) { !it.running && scans.any { p -> p.running } }
+        assertTrue("$states", states.none { it.first })
+        assertEquals(Card.Present, s.library.state.value.card)
+    }
+
+    @Test
+    fun theFirstIndexOfAnEmptyLibraryIsMarked() = runTest {
+        val s = open(Edge.Empty)
+        val states = mutableListOf<LibraryState>()
+        val scans = mutableListOf<ScanProgress>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { s.library.state.toList(states) }
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { s.library.scan.toList(scans) }
+        assertFalse(s.library.state.value.first)
+        s.library.rescan()
+        s.until(s.library.scan) { !it.running && scans.any { p -> p.running } }
+        s.until(s.library.state) { !it.first }
+        assertEquals("$states", s.caps.firstIndex, states.any { it.first })
     }
 
     @Test

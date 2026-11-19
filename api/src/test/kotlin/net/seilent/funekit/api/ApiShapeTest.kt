@@ -38,6 +38,7 @@ class ApiShapeTest {
         assertEquals("Tube", listOf("Off", "Low", "Mid", "High"), Tube.entries.map { it.name })
         assertEquals("Output", listOf("System", "BitPerfect", "Usb"), Output.entries.map { it.name })
         assertEquals("ScrobbleService", listOf("LastFm", "ListenBrainz"), ScrobbleService.entries.map { it.name })
+        assertEquals("Card", listOf("Present", "Out", "Error", "Held"), Card.entries.map { it.name })
     }
 
     @Test
@@ -82,6 +83,7 @@ class ApiShapeTest {
             TrackIds::class.java to listOf("artists", "album", "genre", "folders"),
             Root::class.java to listOf("id", "uri", "available"),
             ScanProgress::class.java to listOf("running", "found", "failed"),
+            LibraryState::class.java to listOf("card", "first"),
             Outputs::class.java to listOf("offered", "dac", "held", "asks", "usbWhy", "dop"),
             ScrobbleView::class.java to listOf(
                 "lastFm", "lastFmUser", "listenBrainz", "listenBrainzUser", "queued", "lastFmNote", "listenBrainzNote", "signingIn",

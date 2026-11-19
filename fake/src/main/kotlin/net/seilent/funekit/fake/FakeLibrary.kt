@@ -7,18 +7,22 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import net.seilent.funekit.core.Section
 import net.seilent.funekit.api.ArtRef
 import net.seilent.funekit.api.Busy
+import net.seilent.funekit.api.Card
 import net.seilent.funekit.api.EngineEvent
 import net.seilent.funekit.api.Expired
 import net.seilent.funekit.api.Kind
 import net.seilent.funekit.api.Library
+import net.seilent.funekit.api.LibraryState
 import net.seilent.funekit.api.LibraryView
 import net.seilent.funekit.api.Listing
+import net.seilent.funekit.api.NoCard
 import net.seilent.funekit.api.Page
 import net.seilent.funekit.api.ScanProgress
 import net.seilent.funekit.api.TrackIds
@@ -63,6 +67,7 @@ class FakeLibrary internal constructor(
     private val _generation = MutableStateFlow(current.generation)
     private val _roots = MutableStateFlow(rootsOf(rootList))
     private val _scan = MutableStateFlow(ScanProgress(false, current.catalog.trackCount, false))
+    private val _state = MutableStateFlow(LibraryState())
     private var scanJob: Job? = null
 
     @Volatile
@@ -76,6 +81,7 @@ class FakeLibrary internal constructor(
     override val generation: StateFlow<Long> = _generation.asStateFlow()
     override val roots: StateFlow<List<Root>> = _roots.asStateFlow()
     override val scan: StateFlow<ScanProgress> = _scan.asStateFlow()
+    override val state: StateFlow<LibraryState> = _state.asStateFlow()
 
     val rowsBuilt: Long get() = built.get()
     val pageLoads: Long get() = loads.get()
@@ -116,6 +122,8 @@ class FakeLibrary internal constructor(
 
     private suspend fun scan() {
         val total = lock.withLock { Catalog(set, rootList).trackCount }
+        val first = current.catalog.trackCount == 0
+        _state.update { it.copy(first = first) }
         progress(ScanProgress(true, 0, false))
         for (step in 1..SCAN_STEPS) {
             delay(latencyMs)
@@ -130,6 +138,7 @@ class FakeLibrary internal constructor(
                 current.catalog.trackCount
             }
         }
+        _state.update { it.copy(first = false) }
         progress(ScanProgress(false, found ?: total, found == null))
     }
 
@@ -139,6 +148,14 @@ class FakeLibrary internal constructor(
 
     internal fun busyNext(text: String) {
         busy.set(text)
+    }
+
+    internal fun card(card: Card) {
+        _state.update { it.copy(card = card) }
+    }
+
+    internal fun present() {
+        if (_state.value.card != Card.Present) throw NoCard()
     }
 
     internal fun track(id: Long): Track? = current.catalog.track(id)

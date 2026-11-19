@@ -40,9 +40,13 @@ class FakePlayer internal constructor(
     override val state: StateFlow<PlayerState> = _state.asStateFlow()
     override val events: SharedFlow<EngineEvent> = bus.asSharedFlow()
 
-    override suspend fun play(ids: List<Long>, index: Int, posMs: Long) = lock.withLock { start(ids, index, posMs, null, false) }
+    override suspend fun play(ids: List<Long>, index: Int, posMs: Long) = lock.withLock {
+        library.present()
+        start(ids, index, posMs, null, false)
+    }
 
     override suspend fun play(listing: Listing, generation: Long, index: Int, posMs: Long, shuffle: Boolean) = lock.withLock {
+        library.present()
         start(library.ids(listing, generation), index, posMs, listing, shuffle)
     }
 
@@ -87,16 +91,24 @@ class FakePlayer internal constructor(
         publish(s.copy(playing = false, anchor = at))
     }
 
-    override suspend fun enqueue(ids: List<Long>) = lock.withLock { add(ids) { queue.enqueue(ids) } }
+    override suspend fun enqueue(ids: List<Long>) = lock.withLock {
+        library.present()
+        add(ids) { queue.enqueue(ids) }
+    }
 
     override suspend fun enqueue(listing: Listing, generation: Long) = lock.withLock {
+        library.present()
         val ids = library.ids(listing, generation)
         add(ids) { queue.enqueue(ids) }
     }
 
-    override suspend fun playNext(ids: List<Long>) = lock.withLock { add(ids) { queue.playNext(ids) } }
+    override suspend fun playNext(ids: List<Long>) = lock.withLock {
+        library.present()
+        add(ids) { queue.playNext(ids) }
+    }
 
     override suspend fun playNext(listing: Listing, generation: Long) = lock.withLock {
+        library.present()
         val ids = library.ids(listing, generation)
         add(ids) { queue.playNext(ids) }
     }
@@ -126,6 +138,7 @@ class FakePlayer internal constructor(
     }
 
     override suspend fun playAt(index: Int, revision: Long) = lock.withLock {
+        library.present()
         fresh(revision)
         if (index !in 0 until queue.size) return@withLock
         queue.select(index)

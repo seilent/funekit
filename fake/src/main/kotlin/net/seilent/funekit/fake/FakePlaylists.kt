@@ -17,6 +17,7 @@ class FakePlaylists internal constructor(private val store: Store, private val l
     internal var deleted: suspend (Listing) -> Unit = {}
 
     override suspend fun create(tracks: TrackSet): Long? = lock.withLock {
+        library.present()
         val ids = library.ids(tracks)
         if (ids.isEmpty()) return@withLock null
         val id = store.newPlaylist()
@@ -29,18 +30,21 @@ class FakePlaylists internal constructor(private val store: Store, private val l
     }
 
     override suspend fun add(id: Long, tracks: TrackSet) = lock.withLock {
+        library.present()
         writable(id)
         val ids = library.ids(tracks)
         if (ids.isNotEmpty()) edit(id) { it + ids }
     }
 
     override suspend fun remove(id: Long, index: Int, revision: Long) = lock.withLock {
+        library.present()
         writable(id)
         val at = shown(id, revision)
         if (index in at.indices) edit(id) { it.filterIndexed { i, _ -> i != at[index] } }
     }
 
     override suspend fun move(id: Long, from: Int, to: Int, revision: Long) = lock.withLock {
+        library.present()
         writable(id)
         val at = shown(id, revision)
         if (from in at.indices && to in at.indices && from != to) {
@@ -56,6 +60,7 @@ class FakePlaylists internal constructor(private val store: Store, private val l
 
     override suspend fun delete(id: Long) {
         val gone = lock.withLock {
+            library.present()
             writable(id)
             val before = store.playlists
             store.updatePlaylists { docs, _ -> docs.filterNot { it.id == id } }

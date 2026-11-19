@@ -1,6 +1,8 @@
 package net.seilent.funekit.api
 
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import net.seilent.funekit.api.engine.Root
 import kotlin.reflect.KClass
 
@@ -75,6 +77,12 @@ class NoCard : Exception("card not available")
 
 class NoSpace : Exception("no space")
 
+enum class Card { Present, Out, Error, Held }
+
+data class LibraryState(val card: Card = Card.Present, val first: Boolean = false)
+
+private val present: StateFlow<LibraryState> = MutableStateFlow(LibraryState()).asStateFlow()
+
 data class LibraryCaps(
     val genreAlbums: Boolean = true,
     val folderTracks: Boolean = true,
@@ -103,6 +111,7 @@ interface Library {
     val roots: StateFlow<List<Root>>
     val scan: StateFlow<ScanProgress>
     val caps: LibraryCaps get() = LibraryCaps()
+    val state: StateFlow<LibraryState> get() = present
 
     fun view(): LibraryView
     fun view(generation: Long): LibraryView

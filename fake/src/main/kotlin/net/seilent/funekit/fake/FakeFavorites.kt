@@ -16,12 +16,14 @@ class FakeFavorites internal constructor(private val store: Store, private val l
 
     override suspend fun toggle(track: Long): Boolean {
         delay(latencyMs)
+        library.present()
         if (track !in store.favorites && library.track(track) == null) return false
         return store.toggleFavorite(track)
     }
 
     override suspend fun add(tracks: TrackSet): Int {
         delay(latencyMs)
+        library.present()
         val ids = library.ids(tracks)
         return store.updateFavorites { old ->
             val batch = ids.distinct().filter { it !in old }
@@ -31,6 +33,7 @@ class FakeFavorites internal constructor(private val store: Store, private val l
 
     override suspend fun remove(index: Int, revision: Long) {
         delay(latencyMs)
+        library.present()
         store.updateFavorites { old ->
             val at = shown(old, revision)
             if (index in at.indices) old.filterIndexed { i, _ -> i != at[index] } else old
@@ -39,6 +42,7 @@ class FakeFavorites internal constructor(private val store: Store, private val l
 
     override suspend fun move(from: Int, to: Int, revision: Long) {
         delay(latencyMs)
+        library.present()
         store.updateFavorites { old ->
             val at = shown(old, revision)
             if (from !in at.indices || to !in at.indices || from == to) return@updateFavorites old

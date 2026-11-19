@@ -3,6 +3,7 @@ package net.seilent.funekit.fake
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import net.seilent.funekit.api.Card
 import net.seilent.funekit.api.EngineEvent
 import net.seilent.funekit.api.engine.Dac
 
@@ -39,6 +40,8 @@ class Fake(scope: CoroutineScope, clock: () -> Long, set: FakeSet, latencyMs: Lo
     fun failNextScan() = library.failNextScan()
 
     fun busyNext(text: String) = library.busyNext(text)
+
+    fun card(card: Card) = library.card(card)
 
     fun lyricTrack(shape: String): Long? = shelf.lyricShapes[shape]
 
