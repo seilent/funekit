@@ -34,6 +34,19 @@ class FenceTest {
     }
 
     @Test
+    fun theMadeUpLibraryIsNamedOnlyInItsOwnModule() {
+        val f = listOf(File(dir, "Fake.kt"))
+        assertEquals(listOf("Fake.kt:3: names net.seilent.funekit.fake"), Fence.scan(f, denied = Fence.deniedIn(":screens")))
+        assertEquals(emptyList<String>(), Fence.scan(f, denied = Fence.deniedIn(":fake")))
+    }
+
+    @Test
+    fun aTestFixtureTakesJunitBesideTheAllowList() {
+        assertEquals(listOf("Fixture.kt:3: import org.junit.Test is outside the kit allow list"), scan("Fixture.kt"))
+        assertEquals(emptyList<String>(), Fence.scan(listOf(File(dir, "Fixture.kt")), Fence.allowed + Fence.fixtureAllowed))
+    }
+
+    @Test
     fun theKitSourcesPassTheFence() {
         val repo = File("..").canonicalFile
         val files = listOf("core", "kit", "sheet").flatMap { m ->

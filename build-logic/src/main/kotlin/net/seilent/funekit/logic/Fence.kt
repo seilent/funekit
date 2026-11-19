@@ -9,6 +9,10 @@ object Fence {
         "androidx.activity", "androidx.core", "androidx.lifecycle", "androidx.window",
     )
     val denied = listOf("androidx.compose.material", "net.seilent.funeplayer", "net.seilent.funecomp")
+    val fixtureAllowed = listOf("org.junit")
+    const val FAKE = "net.seilent.funekit.fake"
+
+    fun deniedIn(path: String): List<String> = if (path == ":fake") denied else denied + FAKE
 
     private val importLine = Regex("^import\\s+([A-Za-z0-9_.]+)")
 

@@ -5,6 +5,7 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 plugins {
     id("org.jetbrains.kotlin.jvm")
     id("funekit.gen")
+    id("funekit.fence")
 }
 
 group = "net.seilent.funekit"

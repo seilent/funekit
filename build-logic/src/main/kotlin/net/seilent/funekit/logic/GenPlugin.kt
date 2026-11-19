@@ -4,6 +4,7 @@ import org.gradle.api.DefaultTask
 import org.gradle.api.GradleException
 import org.gradle.api.Plugin
 import org.gradle.api.Project
+import org.gradle.api.artifacts.component.ProjectComponentIdentifier
 import org.gradle.api.attributes.Bundling
 import org.gradle.api.attributes.Category
 import org.gradle.api.attributes.LibraryElements
@@ -13,6 +14,8 @@ import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.ListProperty
+import org.gradle.api.provider.MapProperty
+import org.gradle.api.provider.Property
 import org.gradle.api.tasks.CacheableTask
 import org.gradle.api.tasks.Classpath
 import org.gradle.api.tasks.Input
@@ -201,6 +204,10 @@ abstract class CheckKitImportsTask : DefaultTask() {
     @get:PathSensitive(PathSensitivity.RELATIVE)
     abstract val sources: ConfigurableFileCollection
 
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val fixtures: ConfigurableFileCollection
+
     @get:Input
     abstract val allowed: ListProperty<String>
 
@@ -213,8 +220,28 @@ abstract class CheckKitImportsTask : DefaultTask() {
     @TaskAction
     fun run() {
         val files = sources.asFileTree.matching { include("**/*.kt") }.files.toList()
-        val hits = Fence.scan(files, allowed.get(), denied.get())
+        val fixed = fixtures.asFileTree.matching { include("**/*.kt") }.files.toList()
+        val hits = Fence.scan(files, allowed.get(), denied.get()) + Fence.scan(fixed, allowed.get() + Fence.fixtureAllowed, denied.get())
         if (hits.isNotEmpty()) throw GradleException("checkKitImports:\n" + hits.joinToString("\n"))
+        stamp.get().asFile.writeText("ok\n")
+    }
+}
+
+@CacheableTask
+abstract class CheckKitDepsTask : DefaultTask() {
+    @get:Input
+    abstract val owner: Property<String>
+
+    @get:Input
+    abstract val projects: MapProperty<String, Set<String>>
+
+    @get:OutputFile
+    abstract val stamp: RegularFileProperty
+
+    @TaskAction
+    fun run() {
+        val bad = projects.get().filterValues { ":fake" in it }.keys.sorted()
+        if (bad.isNotEmpty()) throw GradleException(bad.joinToString("\n") { "checkKitDeps: ${owner.get()} $it has project :fake" })
         stamp.get().asFile.writeText("ok\n")
     }
 }
@@ -355,11 +382,27 @@ class FencePlugin : Plugin<Project> {
     override fun apply(project: Project) {
         val checkKitImports = project.tasks.register("checkKitImports", CheckKitImportsTask::class.java) {
             group = "verification"
-            sources.from(project.layout.projectDirectory.dir("src/main"))
+            sources.from(project.fileTree("src") { exclude("test*/**", "androidTest*/**") })
+            if (project.path == ":api") fixtures.from(project.layout.projectDirectory.dir("src/testFixtures"))
             allowed.set(Fence.allowed)
-            denied.set(Fence.denied)
+            denied.set(Fence.deniedIn(project.path))
             stamp.set(project.layout.buildDirectory.file("checks/checkKitImports"))
         }
-        project.tasks.matching { it.name == "check" }.configureEach { dependsOn(checkKitImports) }
+        val path = project.path
+        val runtimes = project.provider {
+            listOf("debugRuntimeClasspath", "releaseRuntimeClasspath").filter { project.configurations.findByName(it) != null }.ifEmpty { listOf("runtimeClasspath") }
+        }
+        val checkKitDeps = project.tasks.register("checkKitDeps", CheckKitDepsTask::class.java) {
+            group = "verification"
+            owner.set(path)
+            projects.set(runtimes.map { names ->
+                names.associateWith { c ->
+                    project.configurations.getByName(c).incoming.resolutionResult.allComponents
+                        .mapNotNull { (it.id as? ProjectComponentIdentifier)?.projectPath }.filter { it != path }.toSet()
+                }
+            })
+            stamp.set(project.layout.buildDirectory.file("checks/checkKitDeps"))
+        }
+        project.tasks.matching { it.name == "check" }.configureEach { dependsOn(checkKitImports, checkKitDeps) }
     }
 }
