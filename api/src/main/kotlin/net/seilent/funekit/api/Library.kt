@@ -1,6 +1,7 @@
 package net.seilent.funekit.api
 
 import kotlinx.coroutines.flow.StateFlow
+import net.seilent.funekit.api.engine.Root
 
 enum class Kind { Artist, Album, Song, Genre, Folder, Playlist }
 
@@ -56,8 +57,6 @@ sealed interface TrackSet {
 data class TrackInfo(val path: String, val lines: List<String>)
 
 data class TrackIds(val artists: List<Long>, val album: Long?, val genre: Long?, val folders: List<Long>)
-
-data class Root(val id: Long, val uri: String, val available: Boolean)
 
 data class ScanProgress(val running: Boolean, val found: Int, val failed: Boolean)
 

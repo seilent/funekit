@@ -5,6 +5,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.withTimeout
 import net.seilent.funekit.api.ApiContract
 import net.seilent.funekit.api.Edge
+import net.seilent.funekit.api.EngineSubject
 import net.seilent.funekit.api.Subject
 import net.seilent.funekit.api.Wait
 import java.nio.ByteBuffer
@@ -21,26 +22,28 @@ class FakeContractTest : ApiContract() {
             quickplay = f.quickplay,
             favorites = f.favorites,
             playlists = f.playlists,
-            settings = f.settings,
-            eq = f.eq,
             lyrics = f.lyrics,
-            scrobbling = f.scrobbling,
             leaseMs = LEASE,
             elapsedNanos = clock,
-            brokenTrack = tracks.first { it.broken }.id,
-            resampledTrack = tracks.first { it.title == "Room 1" }.id,
-            plainTrack = tracks.first { it.title == "Lantern One" }.id,
-            loseOutput = { f.loseOutput() },
-            routeTimeout = { f.routeTimeout() },
-            xrun = { f.xrun() },
             failNextScan = { f.failNextScan() },
-            attachDac = { f.attachDac(it) },
             built = { f.library.rowsBuilt },
             loads = { f.library.pageLoads },
             imageSide = { pngSide(it) },
             wait = VIRTUAL,
-            detachDac = { f.detachDac() },
-            attachDopDac = { f.attachDac(it, true) },
+            engine = EngineSubject(
+                settings = f.settings,
+                brokenTrack = tracks.first { it.broken }.id,
+                resampledTrack = tracks.first { it.title == "Room 1" }.id,
+                plainTrack = tracks.first { it.title == "Lantern One" }.id,
+                loseOutput = { f.loseOutput() },
+                routeTimeout = { f.routeTimeout() },
+                xrun = { f.xrun() },
+                attachDac = { f.attachDac(it) },
+                detachDac = { f.detachDac() },
+                attachDopDac = { f.attachDac(it, true) },
+            ),
+            eq = f.eq,
+            scrobbling = f.scrobbling,
         )
     }
 

@@ -3,6 +3,14 @@ package net.seilent.funekit.api
 import kotlin.metadata.KmClass
 import kotlin.metadata.isSecondary
 import kotlin.metadata.jvm.KotlinClassMetadata
+import net.seilent.funekit.api.engine.Crossfeed
+import net.seilent.funekit.api.engine.Format
+import net.seilent.funekit.api.engine.Output
+import net.seilent.funekit.api.engine.Outputs
+import net.seilent.funekit.api.engine.ReplayGain
+import net.seilent.funekit.api.engine.Root
+import net.seilent.funekit.api.engine.Sound
+import net.seilent.funekit.api.engine.Tube
 import org.junit.Assert.assertEquals
 import org.junit.Test
 

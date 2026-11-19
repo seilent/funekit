@@ -14,13 +14,13 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import net.seilent.funekit.api.Anchor
 import net.seilent.funekit.api.EngineEvent
-import net.seilent.funekit.api.Format
 import net.seilent.funekit.api.Listing
-import net.seilent.funekit.api.Output
 import net.seilent.funekit.api.Player
 import net.seilent.funekit.api.PlayerState
 import net.seilent.funekit.api.Repeat
 import net.seilent.funekit.api.Stale
+import net.seilent.funekit.api.engine.Format
+import net.seilent.funekit.api.engine.Output
 import kotlin.random.Random
 
 class FakePlayer internal constructor(

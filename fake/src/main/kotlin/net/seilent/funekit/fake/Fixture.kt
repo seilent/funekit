@@ -2,8 +2,8 @@ package net.seilent.funekit.fake
 
 import net.seilent.funekit.core.Section
 import net.seilent.funekit.api.ArtRef
-import net.seilent.funekit.api.Format
 import net.seilent.funekit.api.Kind
+import net.seilent.funekit.api.engine.Format
 
 enum class FakeSet { Main, Empty, Huge, Unavailable, Demo, DemoProps, DemoNoPlaylists }
 

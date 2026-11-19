@@ -1,5 +1,8 @@
 package net.seilent.funekit.api
 
+import net.seilent.funekit.api.engine.Format
+import net.seilent.funekit.api.engine.Output
+
 sealed interface EngineEvent {
     data class Started(val track: Long) : EngineEvent
     data class Ended(val track: Long) : EngineEvent

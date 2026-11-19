@@ -1,10 +1,7 @@
 package net.seilent.funekit.api
 
-enum class Output { System, BitPerfect, Usb }
-
-data class Dac(val vendor: Int, val product: Int, val serial: String)
-
-data class Format(val rate: Int, val bits: Int, val channels: Int)
+import net.seilent.funekit.api.engine.Format
+import net.seilent.funekit.api.engine.Output
 
 data class Anchor(val frame: Long, val rate: Int, val elapsedNanos: Long, val running: Boolean, val durationMs: Long) {
     fun ms(nowElapsedNanos: Long): Long {

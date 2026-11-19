@@ -3,8 +3,8 @@ package net.seilent.funekit.fake
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
-import net.seilent.funekit.api.Dac
 import net.seilent.funekit.api.EngineEvent
+import net.seilent.funekit.api.engine.Dac
 
 class Fake(scope: CoroutineScope, clock: () -> Long, set: FakeSet, latencyMs: Long, leaseMs: Long) {
     private val bus = MutableSharedFlow<EngineEvent>(extraBufferCapacity = EVENTS, onBufferOverflow = BufferOverflow.DROP_OLDEST)

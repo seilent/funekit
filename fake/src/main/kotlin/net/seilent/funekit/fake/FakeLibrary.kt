@@ -19,11 +19,11 @@ import net.seilent.funekit.api.Library
 import net.seilent.funekit.api.LibraryView
 import net.seilent.funekit.api.Listing
 import net.seilent.funekit.api.Page
-import net.seilent.funekit.api.Root
 import net.seilent.funekit.api.ScanProgress
 import net.seilent.funekit.api.TrackIds
 import net.seilent.funekit.api.TrackInfo
 import net.seilent.funekit.api.TrackSet
+import net.seilent.funekit.api.engine.Root
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 

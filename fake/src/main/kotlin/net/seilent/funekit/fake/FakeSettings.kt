@@ -5,14 +5,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import net.seilent.funekit.api.Crossfeed
-import net.seilent.funekit.api.Dac
-import net.seilent.funekit.api.Output
-import net.seilent.funekit.api.Outputs
-import net.seilent.funekit.api.ReplayGain
 import net.seilent.funekit.api.Settings
-import net.seilent.funekit.api.Sound
-import net.seilent.funekit.api.Tube
+import net.seilent.funekit.api.engine.Crossfeed
+import net.seilent.funekit.api.engine.Dac
+import net.seilent.funekit.api.engine.Output
+import net.seilent.funekit.api.engine.Outputs
+import net.seilent.funekit.api.engine.ReplayGain
+import net.seilent.funekit.api.engine.Sound
+import net.seilent.funekit.api.engine.Tube
 
 class FakeSettings internal constructor(private val player: FakePlayer) : Settings {
     private val lock = Mutex()

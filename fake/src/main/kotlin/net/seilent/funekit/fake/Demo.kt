@@ -1,7 +1,7 @@
 package net.seilent.funekit.fake
 
-import net.seilent.funekit.api.Format
 import net.seilent.funekit.api.Kind
+import net.seilent.funekit.api.engine.Format
 
 internal object Demo {
     const val ARTISTS = 40
