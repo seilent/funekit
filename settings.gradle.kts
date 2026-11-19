@@ -22,4 +22,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "funekit"
-include(":tokens", ":core", ":artist", ":kit", ":sheet")
+include(":tokens", ":core", ":artist", ":kit", ":sheet", ":api", ":fake")
