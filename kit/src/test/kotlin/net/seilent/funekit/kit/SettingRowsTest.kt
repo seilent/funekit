@@ -129,7 +129,7 @@ class SettingRowsTest {
     @Test
     fun theCorrectionEqRowSizesForTwoLinesWithOneLineDrawn() {
         val a = measure(a105).size(listOf("correction eq"), listOf("off"), true, false, tall = true)
-        assertEquals("A105: two title lines 120 + gap 3 + sub 40 + pad 36, as funeOS `block` for EarEq (i1:ui/settings.cpp:525)", 199, a.px)
+        assertEquals("A105: two title lines 120 + gap 3 + sub 40 + pad 36, as funeOS `block` for EarEq (ui/settings.cpp:525)", 199, a.px)
         assertEquals(43, a.pad)
         assertEquals(69, a.band)
         assertEquals(115, a.subY)
