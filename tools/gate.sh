@@ -169,7 +169,8 @@ probe_fp_leg() {
         return 1
     fi
     printf 'commit %s\nset %s\n' "$PROBE_FP_KIT" "$(cd "$dir" && bash kit/tools/kitset.sh --set kit)" > "$dir/kit.pin"
-    gradlew "$dir" -PnoLastFm :ui:compileDebugUnitTestKotlin :app:compileFdroidDebugUnitTestKotlin > "$log" 2>&1 || r=$?
+    gradlew "$dir" -PnoLastFm :ui:compileDebugUnitTestKotlin :app:compileFdroidDebugUnitTestKotlin \
+        :wire:compileDebugUnitTestKotlin :client:compileDebugUnitTestKotlin :engine:compileDebugUnitTestKotlin > "$log" 2>&1 || r=$?
     echo "probe-fp: compile rc=$r"
     if [ "$r" -ne 0 ]; then
         grep -m 20 '^e: \|error:' "$log" | sed 's/^/probe-fp: compile: /' || true
