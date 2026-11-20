@@ -76,7 +76,7 @@ import net.seilent.funekit.screens.music.queue.QueueModel
 import net.seilent.funekit.screens.music.queue.QueuePaint
 import net.seilent.funekit.screens.music.queue.queueDraw
 
-class MusicEnv(
+data class MusicEnv(
     val page: Scale,
     val np: Scale,
     val measurer: TextMeasurer,

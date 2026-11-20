@@ -5,6 +5,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.view.View
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.State
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
@@ -362,6 +363,27 @@ class HostTest {
         tap(page.widthPx / 2f, TOP_Y)
         frames(OPEN_FRAMES)
         assertTrue("premise: the same tap closes the host's sheet", app.stack.overlay.let { it == null || it.closing })
+    }
+
+    @Test
+    fun aRecompositionWithEqualEnvInputsWritesNoNewEnv() {
+        val app = app(Level(START, null))
+        frames(OPEN_FRAMES)
+        val envs = mutableListOf<MusicEnv>()
+        val watch = Snapshot.registerApplyObserver { changed, _ -> changed.forEach { (it as? State<*>)?.value?.let { v -> if (v is MusicEnv) envs += v } } }
+        try {
+            val track = PhoneTrack("Radio", "Song", "Artist", "Album", true, false, DURATION, 0L, 0L, 1f, false, PhoneRepeat.Off, 0, 0, null)
+            rule.runOnIdle { app.phone.value = PhoneSession(track, {}, {}) }
+            frames(OPEN_FRAMES)
+            rule.runOnIdle { assertTrue("premise: the phone session recomposed the host", app.music.np.variant) }
+            assertTrue("the recomposition writes no env, ${envs.size}", envs.isEmpty())
+            val shorter = scale(Window(W, H_SHORT, SDK, none, none, none, none, none), Nav.None, Surface.Page, false)
+            rule.runOnIdle { app.page = shorter }
+            frames(RESIZE_FRAMES)
+            assertTrue("premise: a page change writes the new env", envs.any { it.page === shorter })
+        } finally {
+            watch.dispose()
+        }
     }
 
     companion object {

@@ -100,7 +100,9 @@ class TestApp(page: Scale, np: Scale, private val src: MusicSource?, private val
                 val menuHost = remember { MenuHost() }
                 val move = remember { PageMove() }
                 val movePaint = remember { MovePaint(move) }
-                val env = MusicEnv(page, np, m, fonts, density, covers, groundBands(page.heightPx, true), Accent.color(Accent.defaultHue, true), true, a, now, { pokes++ }, page.kept())
+                val bands = remember(page.heightPx) { groundBands(page.heightPx, true) }
+                val grid = remember(page) { page.kept() }
+                val env = MusicEnv(page, np, m, fonts, density, covers, bands, Accent.color(Accent.defaultHue, true), true, a, now, { pokes++ }, grid)
                 val h = rememberMusicHost(this@TestApp, music, models, env, src, null, level, toast, jump, menuHost, movePaint)
                 host = h
                 stack = remember {
