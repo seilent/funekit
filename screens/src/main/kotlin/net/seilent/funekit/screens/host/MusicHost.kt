@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -270,7 +269,7 @@ class MusicHost<S : Any> internal constructor(
         hud.h = env.np.h
     }
 
-    internal fun applied() {
+    fun applied() {
         types.retain(models)
         val key = scaleKey(env.page)
         if (scaleAt != key) {
@@ -1116,6 +1115,5 @@ fun <S : Any> rememberMusicHost(
     val navGround = remember(env.bands, env.accent) { NavGround(env.bands, env.accent) }
     val host = remember { MusicHost(music, models, toast, jump, menuHost, movePaint, scope, app, env, src, volume, types, npGeo, npHalves, npHalfInks, navGround, split, view) }
     host.update(app, env, src, volume, types, phone, feed, npGeo, npHalves, npHalfInks, navGround, split, view)
-    SideEffect { host.applied() }
     return host
 }

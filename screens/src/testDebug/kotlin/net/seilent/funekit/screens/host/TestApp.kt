@@ -1,6 +1,7 @@
 package net.seilent.funekit.screens.host
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -125,6 +126,7 @@ class TestApp(page: Scale, np: Scale, private val src: MusicSource?, private val
                         movePaint.ends(t, HomeSide(page, home, 0f), t.from?.let { s -> h.side(s)?.let { PageSide(if (h.isNp(s)) np else page, it) } }, t.to?.let { s -> h.side(s)?.let { PageSide(if (h.isNp(s)) np else page, it) } }, MoveForms.board(page.board))
                     }.also { h.stack = it }
                 }
+                SideEffect { h.applied() }
                 h.StackClock { MoveKind.T4n }
                 Box(Modifier.pxSize(page.widthPx, page.heightPx).arbiter(a, Swipes(false, false, false, { false }, { _, _ -> }))) {
                     h.MusicPages(emptyMap(), StatusState("", -1, false, Play.None, false, -1, -1))
