@@ -55,6 +55,19 @@ class FakeTest {
     }
 
     @Test
+    fun aDefaultFakeTakesPinsWithNoCap() = runTest {
+        val f = fake()
+        assertNull(f.pinCap)
+        val view = f.library.view()
+        val before = view.pins(0, 0).total
+        val free = view.allRows(Listing.Songs).map { it.id }.filter { !view.pinned(Kind.Song, it) }.take(9)
+        assertEquals(9, free.size)
+        for (id in free) f.quickplay.pin(Kind.Song, id)
+        assertTrue(free.all { view.pinned(Kind.Song, it) })
+        assertEquals(before + 9, view.pins(0, 0).total)
+    }
+
+    @Test
     fun viewIsCachedPerSnapshot() = runTest {
         val f = fake()
         val view = f.library.view()
