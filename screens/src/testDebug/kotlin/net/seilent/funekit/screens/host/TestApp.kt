@@ -37,6 +37,8 @@ import net.seilent.funekit.kit.stack.PageKind
 import net.seilent.funekit.kit.stack.PageSide
 import net.seilent.funekit.kit.stack.PageStack
 import net.seilent.funekit.kit.touch.Arbiter
+import net.seilent.funekit.kit.touch.Swipes
+import net.seilent.funekit.kit.touch.arbiter
 import net.seilent.funekit.screens.music.MusicPage
 import net.seilent.funekit.screens.music.MusicSource
 import net.seilent.funekit.screens.music.PageModels
@@ -122,8 +124,9 @@ class TestApp(page: Scale, np: Scale, private val src: MusicSource?, private val
                     }.also { h.stack = it }
                 }
                 h.StackClock { MoveKind.T4n }
-                Box(Modifier.pxSize(page.widthPx, page.heightPx)) {
+                Box(Modifier.pxSize(page.widthPx, page.heightPx).arbiter(a, Swipes(false, false, false, { false }, { _, _ -> }))) {
                     h.MusicPages(emptyMap(), StatusState("", -1, false, Play.None, false, -1, -1))
+                    h.MenuOverlayHost()
                     h.ToastHost(false)
                     h.VolumeHost()
                 }

@@ -16,8 +16,10 @@ import net.seilent.funekit.Scale
 import net.seilent.funekit.Surface
 import net.seilent.funekit.Window
 import net.seilent.funekit.gen.Tok
+import net.seilent.funekit.kit.MenuForm
 import net.seilent.funekit.kit.motion.MoveKind
 import net.seilent.funekit.kit.motion.OverKind
+import net.seilent.funekit.kit.motion.Overlay
 import net.seilent.funekit.kit.stack.Phase
 import net.seilent.funekit.px
 import net.seilent.funekit.scale
@@ -30,6 +32,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -243,6 +246,51 @@ class HostTest {
         assertTrue("the reset pokes the page", app.pokes > pokes)
     }
 
+    private fun tap(x: Float, y: Float) {
+        rule.onRoot().performTouchInput {
+            down(Offset(x, y))
+            up()
+        }
+    }
+
+    @Test
+    fun twoMenuOpensBeforeAFrameDrawTheMenuOfTheOverlayTheStackOpened() {
+        val app = app(Level(START, null))
+        rule.runOnIdle {
+            app.host.openMenu(MenuForm.Sheet, "first", listOf("one", "two"), false, -1, 0, false, { true })
+            app.host.openMenu(MenuForm.Sheet, "second", listOf("one", "two"), false, -1, 0, false, { true })
+        }
+        frames(OPEN_FRAMES)
+        val o = app.stack.overlay
+        assertTrue("premise: a sheet is open, $o", o != null && o.kind == OverKind.Sheet && !o.closing)
+        tap(page.widthPx / 2f, TOP_Y)
+        frames(OPEN_FRAMES)
+        assertTrue("the open sheet has its kit menu, so the scrim tap closes it", app.stack.overlay.let { it == null || it.closing })
+    }
+
+    @Test
+    fun anAppSheetOverlayGetsNoKitMenuAndAHostMenuSheetDoes() {
+        val app = app(Level(START, null))
+        val own = Overlay(OverKind.Sheet)
+        rule.runOnIdle { app.stack.open(own) }
+        frames(OPEN_FRAMES)
+        assertSame("premise: the app's sheet is open", own, app.stack.overlay)
+        tap(page.widthPx / 2f, TOP_Y)
+        frames(OPEN_FRAMES)
+        assertSame("a tap over the app's sheet meets no kit menu, the sheet stays", own, app.stack.overlay)
+        assertFalse("the app's sheet is not closing", own.closing)
+        rule.runOnIdle { app.stack.cut() }
+        frames(OPEN_FRAMES)
+        assertNull("premise: the app's sheet is cut", app.stack.overlay)
+        rule.runOnIdle { app.host.openMenu(MenuForm.Sheet, "title", listOf("one", "two"), false, -1, 0, false, { true }) }
+        frames(OPEN_FRAMES)
+        val menu = app.stack.overlay
+        assertTrue("premise: the host's sheet is open, $menu", menu != null && menu !== own && menu.kind == OverKind.Sheet)
+        tap(page.widthPx / 2f, TOP_Y)
+        frames(OPEN_FRAMES)
+        assertTrue("premise: the same tap closes the host's sheet", app.stack.overlay.let { it == null || it.closing })
+    }
+
     companion object {
         private const val W = 720
         private const val H = 1280
@@ -264,5 +312,6 @@ class HostTest {
         private const val TOAST_FRAMES = 20
         private const val ALBUM = 20L
         private const val STALE = 7L
+        private const val TOP_Y = 40f
     }
 }

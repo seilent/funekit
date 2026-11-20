@@ -225,6 +225,7 @@ class MusicHost<S : Any> internal constructor(
         private set
     val hud = VolumeHud(env.np.board, env.np.w, env.np.h)
     private val volumeOverlay = Overlay(OverKind.Volume, hud) { if (hud.pendingSeek() != null) volSeek() }
+    private val menuOvers = ArrayList<Pair<Overlay, Long>>()
     private val infoRole = Role(Roles.dialogItem.size, Roles.dialogItem.weight, Case.Mixed, Roles.dialogItem.alpha, Roles.dialogItem.tracking)
     val popKind: (Turn<S>) -> MoveKind = { t -> pop(t) ?: appPop(t) }
 
@@ -447,7 +448,11 @@ class MusicHost<S : Any> internal constructor(
         menuHost.lift = lift
         frameMenu(menu, env.page, lift) { app.liftRow(stack.top) }
         menuHost.act = act
-        stack.open(Overlay(if (form == MenuForm.Sheet) OverKind.Sheet else OverKind.Dlg))
+        val o = Overlay(if (form == MenuForm.Sheet) OverKind.Sheet else OverKind.Dlg)
+        val at = stack.clock
+        menuOvers.retainAll { it.first === stack.overlay || it.second == at }
+        menuOvers += o to at
+        stack.open(o)
     }
 
     fun openJump(owner: S) {
@@ -996,7 +1001,7 @@ class MusicHost<S : Any> internal constructor(
     @Composable
     fun MenuOverlayHost() {
         val over = stack.overlay
-        if (over == null || !(over.kind == OverKind.Sheet || over.kind == OverKind.Dlg)) return
+        if (over == null || menuOvers.none { it.first === over }) return
         MenuOverlay(
             menuHost.menu, over, env.page, env.a, env.now,
             onPick = { i ->
