@@ -882,6 +882,88 @@ class PageStackTest {
         assertTrue(m.held.isEmpty())
     }
 
+    @Test
+    fun aResetEntersOnlyThePagesItAddsAndStartsNoTurn() {
+        val m = Models()
+        val t = m.pushAll(listOf("hub", "album5"))
+        val hub = m.stack.pages[0]
+        val np = m.open("np")
+        m.stack.reset(listOf(hub, np))
+        m.stack.frame(t)
+        assertEquals(listOf(hub.entry, np.entry), m.stack.pages.map { it.entry })
+        assertEquals("only the added page enters", listOf(0L, 1L, np.entry), m.entered)
+        assertEquals("no turn starts", listOf(MoveKind.T3, MoveKind.T3), m.turns)
+        assertNull(m.stack.turn)
+        assertEquals(Phase.Rest, m.stack.phase)
+        assertFalse(m.stack.move.live)
+    }
+
+    @Test
+    fun aResetDropsOnlyThePagesItRemoves() {
+        val m = Models()
+        val t = m.pushAll(listOf("hub", "album5", "artist"))
+        m.stack.reset(listOf(m.stack.pages[0]))
+        m.stack.frame(t)
+        assertEquals(listOf(0L), m.stack.pages.map { it.entry })
+        assertEquals(listOf(1L, 2L), m.dropped)
+        assertEquals(setOf(0L), m.held.keys)
+    }
+
+    @Test
+    fun aResetDropsAnOpenSheetWithNoCloseAndShowsThePageItWasOver() {
+        val c = Cuts()
+        val t = c.open(OverKind.Sheet)
+        assertTrue("premise: the sheet covers the page", c.stack.covered)
+        c.stack.reset(listOf("hub", "np"))
+        c.stack.frame(t + STEP)
+        assertNull(c.stack.overlay)
+        assertFalse(c.stack.covered)
+        assertTrue("no close", c.closings.isEmpty())
+        assertEquals("the page under the sheet is shown, as a home shows it", listOf("hub"), c.dropped)
+        assertEquals(listOf("hub", "np"), c.stack.pages.toList())
+        assertEquals(listOf("np"), c.enters)
+        assertTrue("no turn", c.starts.isEmpty())
+    }
+
+    @Test
+    fun aBackHeldAcrossAResetLandsNothingAndPopsNoPage() {
+        val s = stack()
+        s.push("album", MoveKind.T3)
+        s.frame(0)
+        assertTrue("premise: the back target holds the push", s.hold(50, target = true, band = Gesture.Edge.None))
+        s.reset(listOf("hub", "np"))
+        s.frame(60)
+        s.heldBack(pop)
+        s.frame(70)
+        assertNull("no turn", s.turn)
+        assertEquals(Phase.Rest, s.phase)
+        assertEquals(listOf("hub", "np"), s.pages.toList())
+        s.back(pop)
+        s.frame(90)
+        assertEquals("premise: a back after the reset pops the new top", "np", s.turn?.from)
+    }
+
+    @Test
+    fun aResetDuringAPushLandsItFirstAndDropsThePushedPageOnce() {
+        val enters = mutableListOf<String>()
+        val drops = mutableListOf<String>()
+        val swaps = mutableListOf<String>()
+        val s = PageStack<String>(MoveForms(), { PageKind.Grid }, enter = { enters += it }, drop = { drops += it }, swapped = { p, _ -> swaps += p }) { ends }
+            .also { it.pages.add("hub") }
+        s.push("album", MoveKind.T3)
+        s.frame(0)
+        assertEquals("premise: the push is before its swap", Phase.Exit, s.phase)
+        s.reset(listOf("hub", "np"))
+        s.frame(STEP)
+        assertEquals(Phase.Rest, s.phase)
+        assertNull(s.turn)
+        assertFalse(s.move.live)
+        assertEquals(listOf("hub", "np"), s.pages.toList())
+        assertEquals("the land swaps the push in once", listOf("album"), swaps)
+        assertEquals(listOf("album", "np"), enters)
+        assertEquals("the pushed page drops once", listOf("album"), drops)
+    }
+
     private fun settle(s: PageStack<String>, from: Long): Long = from + requireNotNull(s.overlay).dur().toLong()
 
     @Test

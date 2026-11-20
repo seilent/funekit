@@ -84,6 +84,7 @@ class PageStack<P : Any>(
     private var moveEnds = MoveEnds()
     private var seq = 0
     private var openSeq = -1
+    private var cutSeq = -1
     private var swapHeld = false
     private var waiting = false
     private var landAt = -1L
@@ -276,6 +277,7 @@ class PageStack<P : Any>(
     private fun heldBack(h: Held?, now: Long, popKind: (Turn<P>) -> MoveKind) {
         val o = overlay
         when {
+            h != null && h.seq <= cutSeq -> touch(now)
             h != null && h.seq == seq && holdReversible(now) && o != null -> closeOverlay(o, now)
             h != null && h.seq == seq && holdReversible(now) -> reverse(now)
             h != null && h.dev -> touch(now)
@@ -302,6 +304,20 @@ class PageStack<P : Any>(
         if (phase != Phase.Rest) land(now)
         if (pages.isEmpty()) return@ask
         start(Turn(kind, top, null, popping = true, morph = false), now, retarget = false)
+    }
+
+    fun reset(to: List<P>) = ask { now ->
+        armedLand(now, replay = false)
+        overlay?.drop()
+        dropOverlay()
+        if (phase != Phase.Rest) land(now)
+        cutSeq = seq++
+        val was = pages.toList()
+        to.filter { it !in was }.forEach(enter)
+        pages.clear()
+        pages.addAll(to)
+        while (pushRows.size > pages.size) pushRows.removeAt(pushRows.lastIndex)
+        was.filter { it !in to }.forEach(drop)
     }
 
     fun touch() {
