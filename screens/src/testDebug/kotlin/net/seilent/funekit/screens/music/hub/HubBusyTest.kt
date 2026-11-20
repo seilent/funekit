@@ -11,7 +11,6 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.text.rememberTextMeasurer
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.runBlocking
 import net.seilent.funekit.Insets
@@ -26,7 +25,6 @@ import net.seilent.funekit.api.LibraryState
 import net.seilent.funekit.api.LibraryView
 import net.seilent.funekit.api.Listing
 import net.seilent.funekit.fake.Fake
-import net.seilent.funekit.fake.FakeSet
 import net.seilent.funekit.kit.Accent
 import net.seilent.funekit.kit.rememberChrome
 import net.seilent.funekit.kit.touch.Arbiter
@@ -37,6 +35,7 @@ import net.seilent.funekit.screens.music.Anchor
 import net.seilent.funekit.screens.music.MusicPage
 import net.seilent.funekit.screens.music.MusicSource
 import net.seilent.funekit.screens.music.pivots
+import net.seilent.funekit.screens.music.testFake
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -44,7 +43,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
-import kotlin.coroutines.EmptyCoroutineContext
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], qualifiers = "w720dp-h1280dp-mdpi")
@@ -65,7 +63,7 @@ class HubBusyTest {
     }
 
     private fun compose(): Rig {
-        val f = Fake(CoroutineScope(EmptyCoroutineContext), { 0L }, FakeSet.Demo, 0L, LEASE_MS)
+        val f = testFake()
         val song = runBlocking { f.library.view().page(Listing.Songs, FAR_ROW, 1).rows.single() }
         val r = Rig(f, HubModel(0L))
         fun busyOnce(v: LibraryView): LibraryView = object : LibraryView by v {
@@ -136,7 +134,6 @@ class HubBusyTest {
     }
 
     private companion object {
-        const val LEASE_MS = 60_000L
         const val FAR_ROW = 800
         const val SAVED_INDEX = 3
         const val SETTLE_FRAMES = 120

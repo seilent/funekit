@@ -1,6 +1,5 @@
 package net.seilent.funekit.screens.music.search
 
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -11,7 +10,6 @@ import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.api.Kind
 import net.seilent.funekit.api.LibraryView
 import net.seilent.funekit.api.Listing
-import net.seilent.funekit.fake.Fake
 import net.seilent.funekit.fake.FakeSet
 import net.seilent.funekit.screens.music.MusicPage
 import net.seilent.funekit.screens.music.hub.HubModel
@@ -20,16 +18,16 @@ import net.seilent.funekit.screens.music.hub.SEARCH_ARTISTS
 import net.seilent.funekit.screens.music.hub.musicModel
 import net.seilent.funekit.screens.music.search.NO_RESULTS
 import net.seilent.funekit.screens.music.search.searchWord
+import net.seilent.funekit.screens.music.testFake
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import kotlin.coroutines.EmptyCoroutineContext
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SearchTest {
-    private val fake = Fake(CoroutineScope(EmptyCoroutineContext), { 0L }, FakeSet.Demo, 0L, LEASE_MS)
+    private val fake = testFake()
 
     private fun search(query: String): HubModel = musicModel(0L, MusicPage.Search(query)) as HubModel
 
@@ -198,7 +196,6 @@ class SearchTest {
         const val ROWS = 20
         const val T = 1_000L
         const val MIN_WORD = 4
-        const val LEASE_MS = 60_000L
         val DEBOUNCE = Tok.input_searchDebounceMs.toLong()
     }
 }

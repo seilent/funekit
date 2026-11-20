@@ -1,6 +1,5 @@
 package net.seilent.funekit.screens.music.lists
 
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.runBlocking
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.touch.RowSpec
@@ -12,22 +11,21 @@ import net.seilent.funekit.api.Page
 import net.seilent.funekit.api.Playlists
 import net.seilent.funekit.api.Row
 import net.seilent.funekit.api.TrackSet
-import net.seilent.funekit.fake.Fake
 import net.seilent.funekit.fake.FakeSet
 import net.seilent.funekit.screens.music.MusicSource
 import net.seilent.funekit.screens.music.lists.ListViewModel
 import net.seilent.funekit.screens.music.lists.ViewKey
 import net.seilent.funekit.screens.music.overlay.MOVE_DOWN
 import net.seilent.funekit.screens.music.overlay.REMOVE
+import net.seilent.funekit.screens.music.testFake
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import kotlin.coroutines.EmptyCoroutineContext
 
 class ListViewTest {
-    private val f = Fake(CoroutineScope(EmptyCoroutineContext), { 0L }, FakeSet.Demo, 0L, LEASE_MS)
+    private val f = testFake()
     private val src = MusicSource(f.library, f.player, f.quickplay, f.favorites, f.playlists, f.lyrics)
 
     private fun lists(): List<Row> = runBlocking {
@@ -226,7 +224,6 @@ class ListViewTest {
     }
 
     private companion object {
-        const val LEASE_MS = 60_000L
         const val PITCH = 120
         const val VIEW = 920
         const val ROWS = 20

@@ -1,6 +1,5 @@
 package net.seilent.funekit.screens.music
 
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.runBlocking
 import net.seilent.funekit.Insets
 import net.seilent.funekit.Nav
@@ -25,14 +24,13 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import kotlin.coroutines.EmptyCoroutineContext
 
 class PageStateTest {
     private val none = Insets(0, 0, 0, 0)
 
     private fun page(large: Boolean): Scale = scale(Window(W, H, SDK, none, none, none, none, none), Nav.None, Surface.Page, large)
 
-    private fun fake(set: FakeSet) = Fake(CoroutineScope(EmptyCoroutineContext), { 0L }, set, 0L, LEASE_MS)
+    private fun fake(set: FakeSet) = testFake(set)
 
     private fun album(f: Fake, s: Scale, saved: List<*>? = null): AlbumModel = runBlocking {
         val v = f.library.view()
@@ -159,7 +157,6 @@ class PageStateTest {
         private const val SDK = 35
         private const val W = 720
         private const val H = 1280
-        private const val LEASE_MS = 60_000L
         private const val COBALT = "Cobalt Rooms"
         private const val Q = 600
         private const val FOCUS = 5

@@ -1,7 +1,6 @@
 package net.seilent.funekit.screens.music.hub
 
 import androidx.compose.ui.graphics.ImageBitmap
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.runBlocking
 import net.seilent.funekit.Insets
 import net.seilent.funekit.Nav
@@ -15,7 +14,6 @@ import net.seilent.funekit.kit.art.ArtKey
 import net.seilent.funekit.kit.stack.TileHide
 import net.seilent.funekit.kit.stack.WordSide
 import net.seilent.funekit.scale
-import net.seilent.funekit.fake.Fake
 import net.seilent.funekit.fake.FakeSet
 import net.seilent.funekit.screens.music.HUB_ALBUMS
 import net.seilent.funekit.screens.music.MusicPage
@@ -26,6 +24,7 @@ import net.seilent.funekit.screens.music.hub.HubModel
 import net.seilent.funekit.screens.music.hub.HubPaint
 import net.seilent.funekit.screens.music.hub.HubState
 import net.seilent.funekit.screens.music.pivots
+import net.seilent.funekit.screens.music.testFake
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
@@ -35,7 +34,6 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
-import kotlin.coroutines.EmptyCoroutineContext
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -44,7 +42,7 @@ class HubPaintTest {
     private val none = Insets(0, 0, 0, 0)
     private val s = scale(Window(W, H, SDK, none, none, none, none, none), Nav.None, Surface.Page, false)
     private val geo = HubGeo(s)
-    private val fake = Fake(CoroutineScope(EmptyCoroutineContext), { 0L }, FakeSet.Demo, 0L, LEASE_MS)
+    private val fake = testFake()
     private val pivot = WordSide("artists", 1f, 1f, 0f, 0f, HUB_ARTISTS, false, Word.none)
     private val header = WordSide("music", 1f, 1f, 0f, 0f, -1, true, Word.none)
 
@@ -123,7 +121,6 @@ class HubPaintTest {
         private const val SDK = 35
         private const val W = 720
         private const val H = 1280
-        private const val LEASE_MS = 60_000L
         private const val THUMBS = 20
         private const val ALBUM = 9L
     }

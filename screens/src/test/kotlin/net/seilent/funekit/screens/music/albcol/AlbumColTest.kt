@@ -2,9 +2,8 @@ package net.seilent.funekit.screens.music.albcol
 
 import net.seilent.funekit.screens.music.overlay.SheetFrom
 import net.seilent.funekit.screens.music.overlay.SheetKind
+import net.seilent.funekit.screens.music.testFake
 import org.junit.Assert.assertNull
-import kotlin.coroutines.EmptyCoroutineContext
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.runBlocking
 import net.seilent.funekit.Insets
 import net.seilent.funekit.Nav
@@ -33,7 +32,7 @@ class AlbumColTest {
     private val none = Insets(0, 0, 0, 0)
     private val s = scale(Window(W, H, SDK, none, none, none, none, none), Nav.None, Surface.Page, false)
 
-    private fun fake(set: FakeSet = FakeSet.Demo) = Fake(CoroutineScope(EmptyCoroutineContext), { 0L }, set, 0L, LEASE_MS)
+    private fun fake(set: FakeSet = FakeSet.Demo) = testFake(set)
 
     private fun model(f: Fake, letter: Int = 0): AlbumColModel = runBlocking {
         val m = AlbumColModel(0L, letter)
@@ -213,7 +212,6 @@ class AlbumColTest {
         private const val SDK = 35
         private const val W = 720
         private const val H = 1280
-        private const val LEASE_MS = 60_000L
         private const val GRID_COLS = 3
         private const val COBALT = "Cobalt Rooms"
         private const val WINDOW_ROWS = 4

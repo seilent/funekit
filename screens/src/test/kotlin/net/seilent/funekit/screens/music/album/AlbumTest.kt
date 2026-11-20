@@ -1,12 +1,12 @@
 package net.seilent.funekit.screens.music.album
 
+import kotlinx.coroutines.test.TestCoroutineScheduler
 import net.seilent.funekit.screens.music.overlay.GO_TO_ALBUM
 import net.seilent.funekit.screens.music.overlay.SheetFrom
 import net.seilent.funekit.screens.music.overlay.SheetKind
 import net.seilent.funekit.screens.music.overlay.sheetItems
+import net.seilent.funekit.screens.music.testFake
 import org.junit.Assert.assertNull
-import kotlin.coroutines.EmptyCoroutineContext
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.runBlocking
 import net.seilent.funekit.Insets
 import net.seilent.funekit.Nav
@@ -49,7 +49,7 @@ class AlbumTest {
 
     private val a105 = page(A105_W, A105_H)
 
-    private fun fake(set: FakeSet) = Fake(CoroutineScope(EmptyCoroutineContext), { 0L }, set, 0L, LEASE_MS)
+    private fun fake(set: FakeSet) = testFake(set)
 
     private fun albumId(v: LibraryView, title: String): Long = runBlocking {
         val n = v.page(Listing.Albums, 0, 0).total
@@ -193,7 +193,8 @@ class AlbumTest {
 
     @Test
     fun anAlbumOfARootRemovedThenAddedBackComesBack() {
-        val f = fake(FakeSet.Main)
+        val scheduler = TestCoroutineScheduler()
+        val f = testFake(FakeSet.Main, scheduler)
         val m = loaded(f, SALT_LAKE)
         val rows = m.count
         val uri = f.library.roots.value.last().uri
@@ -202,8 +203,7 @@ class AlbumTest {
         assertTrue(m.gone)
         val g0 = f.library.generation.value
         runBlocking { f.library.addRoot(uri) }
-        val end = System.currentTimeMillis() + SCAN_WAIT_MS
-        while (f.library.generation.value == g0 && System.currentTimeMillis() < end) Thread.sleep(SCAN_STEP_MS)
+        scheduler.advanceUntilIdle()
         assertTrue("premise: the scan of the root added back published", f.library.generation.value != g0)
         val v = runBlocking { f.library.view() }
         assertTrue(runBlocking { m.migrate(v, 0L) })
@@ -265,7 +265,6 @@ class AlbumTest {
 
     companion object {
         private const val SDK = 35
-        private const val LEASE_MS = 60_000L
         private const val A105_W = 720
         private const val A105_H = 1280
         private const val R1_W = 480
@@ -286,7 +285,5 @@ class AlbumTest {
         private const val ALBUM_TOP = -41.3f
         private const val ALBUM_BOTTOM = 12.2f
         private const val MID = 280
-        private const val SCAN_WAIT_MS = 5_000L
-        private const val SCAN_STEP_MS = 10L
     }
 }

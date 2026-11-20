@@ -1,7 +1,7 @@
 package net.seilent.funekit.screens.music.artist
 
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.TestCoroutineScheduler
 import net.seilent.funekit.Insets
 import net.seilent.funekit.Nav
 import net.seilent.funekit.Surface
@@ -10,22 +10,22 @@ import net.seilent.funekit.scale
 import net.seilent.funekit.api.Kind
 import net.seilent.funekit.api.LibraryView
 import net.seilent.funekit.api.Listing
-import net.seilent.funekit.fake.Fake
 import net.seilent.funekit.fake.FakeSet
 import net.seilent.funekit.screens.music.artist.ARTIST_ALBUMS
 import net.seilent.funekit.screens.music.artist.ARTIST_SONGS
 import net.seilent.funekit.screens.music.artist.ArtistGeo
 import net.seilent.funekit.screens.music.artist.ArtistModel
+import net.seilent.funekit.screens.music.testFake
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import kotlin.coroutines.EmptyCoroutineContext
 
 class ArtistRestTest {
     private val none = Insets(0, 0, 0, 0)
     private val a105 = scale(Window(W, H, SDK, none, none, none, none, none), Nav.None, Surface.Page, false)
-    private val fake = Fake(CoroutineScope(EmptyCoroutineContext), { 0L }, FakeSet.Main, 0L, LEASE_MS)
+    private val scheduler = TestCoroutineScheduler()
+    private val fake = testFake(FakeSet.Main, scheduler)
 
     private fun loaded(): ArtistModel = runBlocking {
         val v = fake.library.view()
@@ -55,7 +55,10 @@ class ArtistRestTest {
         val albums = m.panes[ARTIST_ALBUMS]
         albums.focus.set(1, albums.count, 0L, false)
         val key = albums.row(1)!!.id
+        val g = fake.library.generation.value
         runBlocking { fake.library.rescan() }
+        scheduler.advanceUntilIdle()
+        assertTrue(fake.library.generation.value > g)
         val v = runBlocking { fake.library.view() }
         runBlocking { m.migrate(v, 0L) }
         assertEquals(v.generation, m.gen)
@@ -92,6 +95,5 @@ class ArtistRestTest {
         private const val SDK = 35
         private const val W = 720
         private const val H = 1280
-        private const val LEASE_MS = 60_000L
     }
 }

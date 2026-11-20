@@ -4,8 +4,6 @@ import net.seilent.funekit.screens.music.overlay.GO_TO_ALBUM
 import net.seilent.funekit.screens.music.overlay.SheetFrom
 import net.seilent.funekit.screens.music.overlay.SheetKind
 import net.seilent.funekit.screens.music.overlay.sheetItems
-import kotlin.coroutines.EmptyCoroutineContext
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.runBlocking
 import net.seilent.funekit.Insets
 import net.seilent.funekit.Nav
@@ -34,6 +32,7 @@ import net.seilent.funekit.screens.music.artist.artistAdd
 import net.seilent.funekit.screens.music.artist.artistPlay
 import net.seilent.funekit.screens.music.overlay.SONGS_ADDED
 import net.seilent.funekit.screens.music.overlay.SONG_ADDED
+import net.seilent.funekit.screens.music.testFake
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -44,7 +43,7 @@ class ArtistTest {
     private val none = Insets(0, 0, 0, 0)
     private val a105 = scale(Window(W, H, SDK, none, none, none, none, none), Nav.None, Surface.Page, false)
 
-    private fun fake(set: FakeSet = FakeSet.Demo) = Fake(CoroutineScope(EmptyCoroutineContext), { 0L }, set, 0L, LEASE_MS)
+    private fun fake(set: FakeSet = FakeSet.Demo) = testFake(set)
 
     private fun artist(v: LibraryView, pick: (Int) -> Boolean): Long = runBlocking {
         val n = v.page(Listing.Artists, 0, 0).total
@@ -266,7 +265,6 @@ class ArtistTest {
         private const val SDK = 35
         private const val W = 720
         private const val H = 1280
-        private const val LEASE_MS = 60_000L
         private const val U = 3f
         private const val RING0_CX = 45f
         private const val RING2_CX = 195f

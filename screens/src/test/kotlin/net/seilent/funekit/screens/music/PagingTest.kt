@@ -1,7 +1,6 @@
 package net.seilent.funekit.screens.music
 
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.yield
@@ -10,7 +9,6 @@ import net.seilent.funekit.api.LibraryCaps
 import net.seilent.funekit.api.LibraryView
 import net.seilent.funekit.api.Listing
 import net.seilent.funekit.api.Page
-import net.seilent.funekit.fake.Fake
 import net.seilent.funekit.fake.FakeSet
 import net.seilent.funekit.screens.music.MusicSource
 import net.seilent.funekit.screens.music.Paging
@@ -19,10 +17,9 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import kotlin.coroutines.EmptyCoroutineContext
 
 class PagingTest {
-    private val fake = Fake(CoroutineScope(EmptyCoroutineContext), { 0L }, FakeSet.Demo, 0L, LEASE_MS)
+    private val fake = testFake()
 
     @Test
     fun aWindowGrowsByTheMissingRowsOfOneRevision() = runBlocking {
@@ -212,7 +209,6 @@ class PagingTest {
     companion object {
         private const val AHEAD = 4
         private const val ROW = 40
-        private const val LEASE_MS = 60_000L
         private const val SPINS = 100
     }
 }

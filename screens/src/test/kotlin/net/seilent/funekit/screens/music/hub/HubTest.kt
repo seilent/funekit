@@ -1,8 +1,7 @@
 package net.seilent.funekit.screens.music.hub
 
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.TestCoroutineScheduler
 import net.seilent.funekit.Insets
 import net.seilent.funekit.Nav
 import net.seilent.funekit.Scale
@@ -57,11 +56,11 @@ import net.seilent.funekit.screens.music.hub.hubScrollInto
 import net.seilent.funekit.screens.music.hub.letterOf
 import net.seilent.funekit.screens.music.hub.rowModel
 import net.seilent.funekit.screens.music.overlay.SheetKind
+import net.seilent.funekit.screens.music.testFake
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.math.abs
 
 class HubTest {
@@ -69,7 +68,7 @@ class HubTest {
 
     private fun page(w: Int, h: Int, large: Boolean = false): Scale = scale(Window(w, h, SDK, none, none, none, none, none), Nav.None, Surface.Page, large)
 
-    private fun fake(set: FakeSet = FakeSet.Demo) = Fake(CoroutineScope(EmptyCoroutineContext), { 0L }, set, 0L, LEASE_MS)
+    private fun fake(set: FakeSet = FakeSet.Demo) = testFake(set)
 
     private fun blind(v: LibraryView): LibraryView = object : LibraryView by v {
         override suspend fun indexOf(listing: Listing, kind: Kind, id: Long): Int? = throw UnsupportedOperationException()
@@ -423,10 +422,12 @@ class HubTest {
 
     @Test
     fun aNewGenerationOnTheFoldersPaneFindsTheMovedRowWithNoIndexOf() = runBlocking {
-        val f = fake(FakeSet.Main)
+        val scheduler = TestCoroutineScheduler()
+        val f = testFake(FakeSet.Main, scheduler)
         val g = f.library.generation.value
         f.library.addRoot(EXTRA_ROOT)
-        f.library.generation.first { it > g }
+        scheduler.advanceUntilIdle()
+        assertTrue(f.library.generation.value > g)
         val (m, _) = loaded(f, HUB_FOLDERS)
         val old = requireNotNull(m.pane.whole)
         assertEquals(3, old.size)
@@ -441,7 +442,7 @@ class HubTest {
     @Test
     fun aPlayFromAPaneOfAnExpiredGenerationIsDropped() = runBlocking {
         var now = 0L
-        val f = Fake(CoroutineScope(EmptyCoroutineContext), { now }, FakeSet.Main, 0L, LEASE_MS)
+        val f = testFake(FakeSet.Main) { now }
         val src = MusicSource(f.library, f.player, f.quickplay, f.favorites, f.playlists, f.lyrics)
         val (m, v) = loaded(f, HUB_SONGS)
         val act = m.act(HUB_SONGS, PICKED, 0, false) as HubAct.Play

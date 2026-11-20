@@ -1,6 +1,5 @@
 package net.seilent.funekit.screens.music.lists
 
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.runBlocking
 import net.seilent.funekit.Insets
 import net.seilent.funekit.Nav
@@ -18,16 +17,16 @@ import net.seilent.funekit.screens.music.lists.PlaylistsKey
 import net.seilent.funekit.screens.music.lists.PlaylistsModel
 import net.seilent.funekit.screens.music.overlay.SheetFrom
 import net.seilent.funekit.screens.music.overlay.SheetKind
+import net.seilent.funekit.screens.music.testFake
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import kotlin.coroutines.EmptyCoroutineContext
 
 class PlaylistsTest {
     private val none = Insets(0, 0, 0, 0)
 
-    private fun fake(set: FakeSet = FakeSet.Demo) = Fake(CoroutineScope(EmptyCoroutineContext), { 0L }, set, 0L, LEASE_MS)
+    private fun fake(set: FakeSet = FakeSet.Demo) = testFake(set)
 
     private fun src(f: Fake) = MusicSource(f.library, f.player, f.quickplay, f.favorites, f.playlists, f.lyrics)
 
@@ -208,7 +207,6 @@ class PlaylistsTest {
     }
 
     private companion object {
-        const val LEASE_MS = 60_000L
         const val PITCH = 165
         const val VIEW = 920
         const val SHORT = 3

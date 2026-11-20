@@ -1,11 +1,9 @@
 package net.seilent.funekit.screens.music.hub
 
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.runBlocking
 import net.seilent.funekit.kit.stack.PageKind
 import net.seilent.funekit.api.Kind
 import net.seilent.funekit.api.Listing
-import net.seilent.funekit.fake.Fake
 import net.seilent.funekit.fake.FakeSet
 import net.seilent.funekit.screens.music.HUB_ALBUMS
 import net.seilent.funekit.screens.music.MusicPage
@@ -35,11 +33,11 @@ import net.seilent.funekit.screens.music.hub.letterCell
 import net.seilent.funekit.screens.music.hub.letterOf
 import net.seilent.funekit.screens.music.hub.rowModel
 import net.seilent.funekit.screens.music.overlay.SheetFrom
+import net.seilent.funekit.screens.music.testFake
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import kotlin.coroutines.EmptyCoroutineContext
 
 class HubSetTest {
     private val search = HubSet.Search(QUERY)
@@ -173,7 +171,7 @@ class HubSetTest {
     }
 
     private fun loaded(p: Int): HubModel = runBlocking {
-        val f = Fake(CoroutineScope(EmptyCoroutineContext), { 0L }, FakeSet.Demo, 0L, LEASE_MS)
+        val f = testFake()
         val m = searchHub()
         m.select(p)
         m.cols = GRID
@@ -188,6 +186,5 @@ class HubSetTest {
         const val FOLDER = 7L
         const val GRID = 3
         const val ROWS = 20
-        const val LEASE_MS = 60_000L
     }
 }

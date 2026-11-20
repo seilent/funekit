@@ -1,26 +1,24 @@
 package net.seilent.funekit.screens.music.queue
 
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.runBlocking
 import net.seilent.funekit.kit.touch.RowSpec
 import net.seilent.funekit.api.Listing
 import net.seilent.funekit.api.PlayerState
-import net.seilent.funekit.fake.Fake
 import net.seilent.funekit.fake.FakeSet
 import net.seilent.funekit.screens.music.MusicSource
 import net.seilent.funekit.screens.music.overlay.MOVE_UP
 import net.seilent.funekit.screens.music.overlay.PLAY_NEXT
 import net.seilent.funekit.screens.music.overlay.REMOVE
 import net.seilent.funekit.screens.music.queue.QueueModel
+import net.seilent.funekit.screens.music.testFake
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import kotlin.coroutines.EmptyCoroutineContext
 
 class QueueModelTest {
-    private val f = Fake(CoroutineScope(EmptyCoroutineContext), { 0L }, FakeSet.Demo, 0L, LEASE_MS)
+    private val f = testFake()
     private val src = MusicSource(f.library, f.player, f.quickplay, f.favorites, f.playlists, f.lyrics)
 
     private fun songs(n: Int): List<Long> = runBlocking { f.library.view().page(Listing.Songs, 0, n).rows.map { it.id } }
@@ -205,7 +203,6 @@ class QueueModelTest {
     companion object {
         private const val PRESS_AT = 10_000L
         private const val PRESS_STEP = 10L
-        private const val LEASE_MS = 60_000L
         private const val PITCH = 120
         private const val VIEW = 920
         private const val LONG = 800

@@ -1,21 +1,19 @@
 package net.seilent.funekit.screens.music.lists
 
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.runBlocking
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.touch.RowSpec
-import net.seilent.funekit.fake.Fake
 import net.seilent.funekit.fake.FakeSet
 import net.seilent.funekit.screens.music.MusicSource
 import net.seilent.funekit.screens.music.lists.PlaylistsKey
 import net.seilent.funekit.screens.music.lists.PlaylistsModel
+import net.seilent.funekit.screens.music.testFake
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Test
-import kotlin.coroutines.EmptyCoroutineContext
 
 class PlaylistsDrawTest {
-    private val f = Fake(CoroutineScope(EmptyCoroutineContext), { 0L }, FakeSet.Demo, 0L, LEASE_MS)
+    private val f = testFake()
     private val src = MusicSource(f.library, f.player, f.quickplay, f.favorites, f.playlists, f.lyrics)
 
     private fun model(): PlaylistsModel {
@@ -48,7 +46,6 @@ class PlaylistsDrawTest {
     }
 
     private companion object {
-        const val LEASE_MS = 60_000L
         const val PITCH = 165
         const val VIEW = 920
         const val AT = 1_000L

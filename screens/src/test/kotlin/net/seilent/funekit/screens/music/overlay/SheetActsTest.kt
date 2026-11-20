@@ -1,8 +1,7 @@
 package net.seilent.funekit.screens.music.overlay
 
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.TestCoroutineScheduler
 import net.seilent.funekit.kit.touch.RowSpec
 import net.seilent.funekit.api.Busy
 import net.seilent.funekit.api.Kind
@@ -11,7 +10,6 @@ import net.seilent.funekit.api.Player
 import net.seilent.funekit.api.Playlists
 import net.seilent.funekit.api.Row
 import net.seilent.funekit.api.TrackSet
-import net.seilent.funekit.fake.Fake
 import net.seilent.funekit.fake.FakeSet
 import net.seilent.funekit.screens.music.MusicSource
 import net.seilent.funekit.screens.music.lists.HistoryModel
@@ -40,16 +38,17 @@ import net.seilent.funekit.screens.music.overlay.picker
 import net.seilent.funekit.screens.music.overlay.runEntry
 import net.seilent.funekit.screens.music.overlay.runPick
 import net.seilent.funekit.screens.music.overlay.runSheet
+import net.seilent.funekit.screens.music.testFake
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import kotlin.coroutines.EmptyCoroutineContext
 
 class SheetActsTest {
     private var clock = 0L
-    private val f = Fake(CoroutineScope(EmptyCoroutineContext), { clock }, FakeSet.Demo, 0L, LEASE_MS)
+    private val scheduler = TestCoroutineScheduler()
+    private val f = testFake(FakeSet.Demo, scheduler) { clock }
     private val calls = mutableListOf<Int>()
 
     private val recording = object : Player by f.player {
@@ -174,10 +173,9 @@ class SheetActsTest {
         runBlocking { f.player.play(Listing.AlbumTracks(a.id), gen(), 0, 0) }
         val old = gen()
         val row = runBlocking { f.library.view().page(Listing.Queue, 0, 1).rows.single() }
-        runBlocking {
-            f.library.rescan()
-            f.library.generation.first { it > old }
-        }
+        runBlocking { f.library.rescan() }
+        scheduler.runCurrent()
+        assertTrue(f.library.generation.value > old)
         clock += LEASE_MS * NANOS
         val t = SheetTarget(SheetKind.Queue, row.title, Listing.Queue, old, track = row.id, slot = 0, cur = 0, size = 8)
         val done = runBlocking { runSheet(INFO, t, src) }
