@@ -18,14 +18,18 @@ import net.seilent.funekit.Window
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.motion.MoveKind
 import net.seilent.funekit.kit.motion.OverKind
+import net.seilent.funekit.kit.stack.Phase
 import net.seilent.funekit.px
 import net.seilent.funekit.scale
 import net.seilent.funekit.screens.music.MusicPage
 import net.seilent.funekit.screens.music.album.AlbumModel
+import net.seilent.funekit.screens.music.nowplaying.NowPlayingModel
 import net.seilent.funekit.screens.music.nowplaying.PhoneRepeat
 import net.seilent.funekit.screens.music.nowplaying.PhoneTrack
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -200,6 +204,45 @@ class HostTest {
         rule.runOnIdle { assertTrue("the late session shows as the variant", app.music.np.variant) }
     }
 
+    @Test
+    fun aResetUnderNowPlayingRefusesUnderPagesThatHoldNowPlaying() {
+        val app = app(Level(START, null))
+        val kept = MusicEntry(app.stack.entry(), MusicPage.NowPlaying)
+        val refused = rule.runOnIdle { runCatching { app.host.resetNp(listOf(kept)) }.exceptionOrNull() }
+        assertTrue("the reset refuses, $refused", refused is IllegalArgumentException)
+    }
+
+    @Test
+    fun aResetUnderNowPlayingLandsTheAppPagesUnderANewNowPlayingWithNoTurnAndSetsItUp() {
+        val app = app(Level(START, null))
+        val hub = MusicEntry(app.stack.entry(), MusicPage.Hub)
+        val album = MusicEntry(app.stack.entry(), MusicPage.Album(ALBUM))
+        rule.runOnIdle { app.stack.reset(listOf(hub, album)) }
+        frames(OPEN_FRAMES)
+        assertEquals("premise: the hub and the album are up", listOf(hub, album), app.stack.pages.toList())
+        val np = app.music.np
+        rule.runOnIdle {
+            np.slide.start = STALE
+            np.slide.target = STALE + 1
+        }
+        val pokes = app.pokes
+        val wake = np.idleWake()
+        val at = rule.runOnIdle { rule.mainClock.currentTime.also { app.host.resetNp(listOf(hub)) } }
+        assertTrue("premise: the focus was last reset before the reset, wake $wake at $at", wake < at + NowPlayingModel.IDLE)
+        frames(OPEN_FRAMES)
+        val pages = app.stack.pages.toList()
+        assertEquals(2, pages.size)
+        assertEquals(hub, pages[0])
+        assertTrue("now playing is on top", app.host.isNp(pages[1]))
+        assertNull("no turn", app.stack.turn)
+        assertEquals(Phase.Rest, app.stack.phase)
+        assertNull("the album's model is dropped", app.models[album.entry])
+        assertNotNull("the new now playing has its model", app.models[pages[1].entry])
+        assertEquals("the focus is reset at the reset", at + NowPlayingModel.IDLE, np.idleWake())
+        assertNull("a stale slide is cleared", np.slide.target)
+        assertTrue("the reset pokes the page", app.pokes > pokes)
+    }
+
     companion object {
         private const val W = 720
         private const val H = 1280
@@ -220,5 +263,6 @@ class HostTest {
         private const val RESIZE_FRAMES = 2
         private const val TOAST_FRAMES = 20
         private const val ALBUM = 20L
+        private const val STALE = 7L
     }
 }

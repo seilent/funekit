@@ -475,6 +475,15 @@ class MusicHost<S : Any> internal constructor(
         stack.push(at(MusicPage.NowPlaying, MoveKind.T7), MoveKind.T7)
     }
 
+    fun resetNp(under: List<S>) {
+        require(under.none(::isNp)) { "a reset under now playing takes no now playing page" }
+        val t = now()
+        np.sync(np.shown, t)
+        np.resetFocus(t)
+        env.poke()
+        stack.reset(under + app.screen(musicEntry(stack.entry(), MusicPage.NowPlaying, MoveKind.T7, entryOf(under.lastOrNull()), models)))
+    }
+
     fun openVolume(t: Long) {
         if (stack.phase != Phase.Rest || homeBusy(t)) {
             volDue = true

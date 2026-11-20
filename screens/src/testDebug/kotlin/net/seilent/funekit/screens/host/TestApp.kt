@@ -50,6 +50,7 @@ class TestApp(page: Scale, np: Scale, private val src: MusicSource?, private val
     lateinit var host: MusicHost<MusicEntry>
     lateinit var stack: PageStack<MusicEntry>
     lateinit var toast: Toast
+    var pokes = 0
 
     override fun music(s: MusicEntry): MusicEntry = s
 
@@ -97,7 +98,7 @@ class TestApp(page: Scale, np: Scale, private val src: MusicSource?, private val
                 val menuHost = remember { MenuHost() }
                 val move = remember { PageMove() }
                 val movePaint = remember { MovePaint(move) }
-                val env = MusicEnv(page, np, m, fonts, density, covers, groundBands(page.heightPx, true), Accent.color(Accent.defaultHue, true), true, a, now, {}, page.kept())
+                val env = MusicEnv(page, np, m, fonts, density, covers, groundBands(page.heightPx, true), Accent.color(Accent.defaultHue, true), true, a, now, { pokes++ }, page.kept())
                 val h = rememberMusicHost(this@TestApp, music, models, env, src, null, level, toast, jump, menuHost, movePaint)
                 host = h
                 stack = remember {
