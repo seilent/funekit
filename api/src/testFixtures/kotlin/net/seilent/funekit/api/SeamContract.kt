@@ -21,6 +21,7 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.concurrent.CopyOnWriteArrayList
 
 enum class Edge { Main, Empty, Huge, Unavailable }
 
@@ -266,7 +267,7 @@ abstract class SeamContract {
     @Test
     fun scanReportsProgressThenPublishes() = runTest {
         val s = open(Edge.Main)
-        val seen = mutableListOf<ScanProgress>()
+        val seen = CopyOnWriteArrayList<ScanProgress>()
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { s.library.scan.toList(seen) }
         val g = s.library.generation.value
         s.change()
@@ -292,7 +293,7 @@ abstract class SeamContract {
             val done = s.until(s.library.scan) { it.failed }
             assertFalse(done.running)
         } else {
-            val seen = mutableListOf<ScanProgress>()
+            val seen = CopyOnWriteArrayList<ScanProgress>()
             backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { s.library.scan.toList(seen) }
             s.library.rescan()
             assertFalse(s.until(s.library.scan) { !it.running && seen.any { p -> p.running } }.failed)
@@ -1602,8 +1603,8 @@ abstract class SeamContract {
     @Test
     fun aRescanOfALibraryWithTracksIsNoFirstIndex() = runTest {
         val s = open(Edge.Main)
-        val states = mutableListOf<LibraryState>()
-        val scans = mutableListOf<ScanProgress>()
+        val states = CopyOnWriteArrayList<LibraryState>()
+        val scans = CopyOnWriteArrayList<ScanProgress>()
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { s.library.state.toList(states) }
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { s.library.scan.toList(scans) }
         s.change()
@@ -1616,8 +1617,8 @@ abstract class SeamContract {
     @Test
     fun theFirstIndexOfAnEmptyLibraryIsMarked() = runTest {
         val s = open(Edge.Empty)
-        val states = mutableListOf<LibraryState>()
-        val scans = mutableListOf<ScanProgress>()
+        val states = CopyOnWriteArrayList<LibraryState>()
+        val scans = CopyOnWriteArrayList<ScanProgress>()
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { s.library.state.toList(states) }
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { s.library.scan.toList(scans) }
         assertFalse(s.library.state.value.first)
