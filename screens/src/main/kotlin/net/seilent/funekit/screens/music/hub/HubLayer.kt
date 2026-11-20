@@ -416,6 +416,7 @@ fun HubLayer(
         val stale = pn.map != null
         if (stale) rest()
         m.revisions = src.playlists.revision.value to src.favorites.revision.value
+        val mark = LibraryMark(src.library.state.value, src.library.scan.value)
         quiet {
             src.viewed { v ->
                 val tt = m.lists.getOrNull(p)
@@ -430,7 +431,7 @@ fun HubLayer(
                     val first = pn.track.first
                     val to = m.migrate(v, p, first, src.library.caps)
                     pn.map?.let { place(pn, tt, it.count, to ?: first) }
-                    m.hold(p, src.library.state.value to src.library.scan.value)
+                    m.hold(p, mark)
                     settle()
                 } else {
                     m.load(v, p)
@@ -438,7 +439,7 @@ fun HubLayer(
                     val to = m.restoreRow(v, p, src.library.caps)
                     val map = pn.map
                     if (map != null && to != null) place(pn, tt, map.count, to, m.anchor?.let { pn.track.topOf(to) + px(it.off, s.ppu) })
-                    m.hold(p, src.library.state.value to src.library.scan.value)
+                    m.hold(p, mark)
                 }
                 m.songs = v.page(Listing.Songs, 0, 0).total
             }
@@ -452,12 +453,13 @@ fun HubLayer(
             val l = m.lists.getOrNull(p)
             !frozenNow.value && l?.moving != true && l?.pressed != true
         }
-        combine(snapshotFlow { still() }, src.library.state, src.library.scan) { at, state, scan -> Triple(at, state, scan) }.collect { (at, state, scan) ->
-            if (!at || !m.kept(p) || pn.heldOn == state to scan) return@collect
-            pn.heldOn = state to scan
+        combine(snapshotFlow { still() }, src.library.state, src.library.scan) { at, state, scan -> at to LibraryMark(state, scan) }.collect { (at, mark) ->
+            if (!at || !m.kept(p) || pn.heldOn == mark) return@collect
+            pn.heldOn = mark
             val to = quiet { src.viewed { v -> m.retry(v, p) } } ?: return@collect
-            val map = pn.map
-            if (map != null && still() && m.kept(p)) place(pn, m.lists.getOrNull(p), map.count, to, pn.track.topOf(to) + px(a.off, s.ppu))
+            val map = pn.map ?: return@collect
+            if (!still() || !m.kept(p)) return@collect
+            place(pn, m.lists.getOrNull(p), map.count, to, pn.track.topOf(to) + px(a.off, s.ppu))
             pn.pending = null
             m.poke()
         }

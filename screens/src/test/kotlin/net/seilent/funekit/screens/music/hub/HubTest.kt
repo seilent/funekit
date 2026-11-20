@@ -15,12 +15,15 @@ import net.seilent.funekit.kit.touch.RowTrack
 import net.seilent.funekit.px
 import net.seilent.funekit.scale
 import net.seilent.funekit.api.Busy
+import net.seilent.funekit.api.Card
 import net.seilent.funekit.api.Expired
 import net.seilent.funekit.api.Kind
 import net.seilent.funekit.api.LibraryCaps
+import net.seilent.funekit.api.LibraryState
 import net.seilent.funekit.api.LibraryView
 import net.seilent.funekit.api.Listing
 import net.seilent.funekit.api.Page
+import net.seilent.funekit.api.ScanProgress
 import net.seilent.funekit.api.TrackSet
 import net.seilent.funekit.fake.Fake
 import net.seilent.funekit.fake.FakeSet
@@ -41,6 +44,7 @@ import net.seilent.funekit.screens.music.hub.HubModel
 import net.seilent.funekit.screens.music.hub.HubPick
 import net.seilent.funekit.screens.music.hub.HubPlaying
 import net.seilent.funekit.screens.music.hub.LABEL_CELL
+import net.seilent.funekit.screens.music.hub.LibraryMark
 import net.seilent.funekit.screens.music.hub.NOW_CELL
 import net.seilent.funekit.screens.music.hub.NO_CELL
 import net.seilent.funekit.screens.music.hub.PATH_DOTS
@@ -798,6 +802,52 @@ class HubTest {
         assertEquals(null, m.retry(next, HUB_SONGS))
         assertEquals(1, asks)
         assertEquals(null, m.pane.pending)
+    }
+
+    @Test
+    fun aRetryAnsweringNullDropsTheAnchor() = runBlocking {
+        val (m, v) = loaded(fake(), HUB_SONGS)
+        var asks = 0
+        val gone = object : LibraryView by v {
+            override suspend fun indexOf(listing: Listing, kind: Kind, id: Long): Int? {
+                if (++asks == 1) throw Busy()
+                return null
+            }
+        }
+        m.migrate(gone, HUB_SONGS, m.pane.map!!.rowOfIndex(SAVED_INDEX))
+        m.hold(HUB_SONGS)
+        assertTrue(m.pane.pending != null)
+        assertEquals(null, m.retry(gone, HUB_SONGS))
+        assertEquals(2, asks)
+        assertEquals(null, m.pane.pending)
+    }
+
+    @Test
+    fun aRetryWhoseAnchorChangedDuringTheAskPlacesNothing() = runBlocking {
+        val (m, v) = loaded(fake(), HUB_SONGS)
+        var asks = 0
+        val other = Anchor(Kind.Song, -1, 0f, 0)
+        val swap = object : LibraryView by v {
+            override suspend fun indexOf(listing: Listing, kind: Kind, id: Long): Int? {
+                if (++asks == 1) throw Busy()
+                m.pane.pending = other
+                return v.indexOf(listing, kind, id)
+            }
+        }
+        m.migrate(swap, HUB_SONGS, m.pane.map!!.rowOfIndex(SAVED_INDEX))
+        m.hold(HUB_SONGS)
+        assertEquals(null, m.retry(swap, HUB_SONGS))
+        assertEquals(2, asks)
+        assertEquals(other, m.pane.pending)
+    }
+
+    @Test
+    fun aScanCountChangeIsNoLibraryChange() {
+        val state = LibraryState()
+        assertEquals(LibraryMark(state, ScanProgress(true, 1, false)), LibraryMark(state, ScanProgress(true, FOUND, false)))
+        assertTrue(LibraryMark(state, ScanProgress(true, 1, false)) != LibraryMark(state, ScanProgress(false, 1, false)))
+        assertTrue(LibraryMark(state, ScanProgress(false, 1, false)) != LibraryMark(state, ScanProgress(false, 1, true)))
+        assertTrue(LibraryMark(state, ScanProgress(false, 1, false)) != LibraryMark(LibraryState(Card.Held), ScanProgress(false, 1, false)))
     }
 
     @Test

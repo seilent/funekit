@@ -11,6 +11,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.text.rememberTextMeasurer
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.runBlocking
 import net.seilent.funekit.Insets
@@ -62,13 +63,18 @@ class HubBusyTest {
         var asks = 0
     }
 
-    private fun compose(): Rig {
+    private fun frame() {
+        rule.mainClock.advanceTimeByFrame()
+        rule.waitForIdle()
+    }
+
+    private fun compose(premise: Boolean = true, ask: suspend Rig.(Int) -> Unit = { if (it == 1) throw Busy() }): Rig {
         val f = testFake()
         val song = runBlocking { f.library.view().page(Listing.Songs, FAR_ROW, 1).rows.single() }
         val r = Rig(f, HubModel(0L))
         fun busyOnce(v: LibraryView): LibraryView = object : LibraryView by v {
             override suspend fun indexOf(listing: Listing, kind: Kind, id: Long): Int? {
-                if (id == song.id && ++r.asks == 1) throw Busy()
+                if (id == song.id) r.ask(++r.asks)
                 return v.indexOf(listing, kind, id)
             }
         }
@@ -98,6 +104,7 @@ class HubBusyTest {
         }
         rule.mainClock.autoAdvance = false
         settle()
+        if (!premise) return r
         val pn = r.m.pane
         assertEquals(1, r.asks)
         assertEquals(pn.map!!.rowOfIndex(SAVED_INDEX), pn.track.first)
@@ -131,6 +138,91 @@ class HubBusyTest {
         assertEquals(2, r.asks)
         assertEquals(pn.map!!.rowOfIndex(FAR_ROW), pn.track.first)
         assertEquals(null, pn.pending)
+    }
+
+    @Test
+    fun aLibraryChangeDuringTheBusyRestoreStillAsksAgain() {
+        val r = compose(premise = false) {
+            if (it == 1) {
+                f.card(Card.Held)
+                throw Busy()
+            }
+        }
+        val pn = r.m.pane
+        assertEquals(2, r.asks)
+        assertEquals(pn.map!!.rowOfIndex(FAR_ROW), pn.track.first)
+        assertEquals(null, pn.pending)
+    }
+
+    @Test
+    fun aSecondBusyAskWaitsForTheNextChangeAndATapAsksNothing() {
+        val r = compose { if (it <= 2) throw Busy() }
+        val pn = r.m.pane
+        r.f.card(Card.Held)
+        settle()
+        assertEquals(2, r.asks)
+        assertTrue(pn.pending != null)
+        rule.onRoot().performTouchInput { down(center) }
+        frame()
+        rule.onRoot().performTouchInput { up() }
+        settle()
+        assertEquals(2, r.asks)
+        assertTrue(pn.pending != null)
+        r.f.card(Card.Present)
+        settle()
+        assertEquals(3, r.asks)
+        assertEquals(pn.map!!.rowOfIndex(FAR_ROW), pn.track.first)
+        assertEquals(null, pn.pending)
+    }
+
+    @Test
+    fun anAnswerThatLandsWhileTheListIsPressedPlacesNothingAndKeepsTheAnchor() {
+        val gate = CompletableDeferred<Unit>()
+        val r = compose {
+            if (it == 1) throw Busy()
+            if (it == 2) gate.await()
+        }
+        val pn = r.m.pane
+        val saved = pn.map!!.rowOfIndex(SAVED_INDEX)
+        r.f.card(Card.Held)
+        settle()
+        assertEquals(2, r.asks)
+        rule.onRoot().performTouchInput { down(center) }
+        frame()
+        gate.complete(Unit)
+        frame()
+        assertEquals(saved, pn.track.first)
+        assertTrue(pn.pending != null)
+        rule.onRoot().performTouchInput { up() }
+        settle()
+        assertEquals(2, r.asks)
+        r.f.card(Card.Present)
+        settle()
+        assertEquals(3, r.asks)
+        assertEquals(pn.map!!.rowOfIndex(FAR_ROW), pn.track.first)
+        assertEquals(null, pn.pending)
+    }
+
+    @Test
+    fun anAnswerThatLandsAfterASwipeHasRestedPlacesNothingAndDropsTheAnchor() {
+        val gate = CompletableDeferred<Unit>()
+        val r = compose {
+            if (it == 1) throw Busy()
+            if (it == 2) gate.await()
+        }
+        val pn = r.m.pane
+        r.f.card(Card.Held)
+        settle()
+        assertEquals(2, r.asks)
+        rule.onRoot().performTouchInput { swipeUp() }
+        settle()
+        val rest = pn.track.first
+        assertTrue("premise: the swipe moved the list", rest != pn.map!!.rowOfIndex(SAVED_INDEX))
+        gate.complete(Unit)
+        settle()
+        assertEquals(rest, pn.track.first)
+        assertEquals(null, pn.pending)
+        assertEquals(2, r.asks)
     }
 
     private companion object {

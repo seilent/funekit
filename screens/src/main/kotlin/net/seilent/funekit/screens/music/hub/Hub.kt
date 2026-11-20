@@ -218,6 +218,10 @@ enum class HubPick { Scroll, Defer }
 
 fun hubPick(pivot: Int): HubPick = hubPick(HubSet.Music, pivot)
 
+data class LibraryMark(val state: LibraryState, val running: Boolean, val failed: Boolean) {
+    constructor(state: LibraryState, scan: ScanProgress) : this(state, scan.running, scan.failed)
+}
+
 class HubPane(val pivot: Int, first: Listing = hubListing(pivot, 0L)) {
     var listing: Listing by mutableStateOf(first)
         private set
@@ -228,7 +232,7 @@ class HubPane(val pivot: Int, first: Listing = hubListing(pivot, 0L)) {
     var whole: List<Row>? by mutableStateOf(null)
     var pending: Anchor? by mutableStateOf(null)
     var heldAt = 0
-    var heldOn: Pair<LibraryState, ScanProgress>? = null
+    var heldOn: LibraryMark? = null
     var favorites by mutableIntStateOf(0)
     var folders = 0
     var loads by mutableIntStateOf(0)
@@ -800,7 +804,7 @@ class HubModel(entry: Long, page: MusicPage = MusicPage.Hub, private val st: Hub
         return panes[p].map?.rowOfIndex(i)?.takeIf { it >= 0 }
     }
 
-    fun hold(p: Int, on: Pair<LibraryState, ScanProgress>? = null) {
+    fun hold(p: Int, on: LibraryMark? = null) {
         val pn = panes[p]
         if (pn.pending == null) return
         pn.heldAt = pn.track.q
@@ -826,6 +830,7 @@ class HubModel(entry: Long, page: MusicPage = MusicPage.Hub, private val st: Hub
         } catch (e: Busy) {
             return null
         }
+        if (v.generation != pn.gen || pn.pending !== a) return null
         val row = i?.let { pn.map?.rowOfIndex(it) }?.takeIf { it >= 0 }
         if (row == null) pn.pending = null
         return row
