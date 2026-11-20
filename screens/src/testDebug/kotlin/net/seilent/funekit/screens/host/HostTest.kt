@@ -264,10 +264,13 @@ class HostTest {
         val e = MusicEntry(app.stack.entry(), MusicPage.Album(ALBUM))
         rule.runOnIdle { app.stack.push(e, MoveKind.T2) }
         frames(OPEN_FRAMES)
-        val m = app.models[e.entry]
-        assertTrue("premise: the push enters the album, $m", m is AlbumModel)
-        assertTrue("premise: the album is drawn from the new maps", types.holds(m))
-        assertFalse("the turn's thumb builds no draw in the old maps", first.holds(m))
+        val m = app.models[e.entry] as? AlbumModel
+        assertNotNull("premise: the push enters the album", m)
+        fun album(t: MusicTypes) = t.all.filterIsInstance<AlbumType>().single()
+        assertSame("premise: the album is drawn on the new scale", shorter, album(types).drawOf(m!!).s)
+        val was = first.env
+        first.env = MusicEnv(np, was.np, was.measurer, was.fonts, was.density, was.covers, was.bands, was.accent, was.accentOff, was.a, was.now, was.poke, was.grid)
+        assertSame("the turn's thumb built no draw in the old maps, so the one there is built now on the scale set after the turn", np, album(first).drawOf(m).s)
     }
 
     @Test

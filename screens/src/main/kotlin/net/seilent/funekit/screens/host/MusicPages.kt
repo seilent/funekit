@@ -160,8 +160,6 @@ abstract class MusicPageType<M : PageModel, D : Any>(protected val types: MusicT
         draws.keys.retainAll { models[it.entry] === it }
     }
 
-    internal fun holds(pm: PageModel?): Boolean = of(pm)?.let(draws::containsKey) == true
-
     @Composable
     fun LayerOf(e: MusicEntry, pm: PageModel?, src: MusicSource?, at: PageAt, acts: MusicActs) {
         of(pm)?.let { Layer(e, it, src, at, acts) }
@@ -467,8 +465,6 @@ class MusicTypes(var env: MusicEnv, var homeItem: (String) -> Int, val chromes: 
     }
 
     fun retain(models: PageModels) = all.forEach { it.retain(models) }
-
-    internal fun holds(pm: PageModel?): Boolean = of(pm)?.holds(pm) == true
 }
 
 class MusicChromes(val hub: Chrome, val search: Chrome, val queue: Chrome, val album: Chrome, val artist: Chrome, val playlists: Chrome, val history: Chrome)
