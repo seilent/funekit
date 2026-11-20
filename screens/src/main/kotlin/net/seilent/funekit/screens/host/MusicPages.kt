@@ -78,6 +78,7 @@ import net.seilent.funekit.screens.music.queue.queueDraw
 
 class MusicEnv(
     val page: Scale,
+    val np: Scale,
     val measurer: TextMeasurer,
     val fonts: FontFamily.Resolver,
     val density: Density,
@@ -87,6 +88,7 @@ class MusicEnv(
     val accentOff: Boolean,
     val a: Arbiter,
     val now: () -> Long,
+    val poke: () -> Unit,
     val grid: Scale,
 )
 
@@ -157,6 +159,8 @@ abstract class MusicPageType<M : PageModel, D : Any>(protected val types: MusicT
     fun retain(models: PageModels) {
         draws.keys.retainAll { models[it.entry] === it }
     }
+
+    internal fun holds(pm: PageModel?): Boolean = of(pm)?.let(draws::containsKey) == true
 
     @Composable
     fun LayerOf(e: MusicEntry, pm: PageModel?, src: MusicSource?, at: PageAt, acts: MusicActs) {
@@ -463,6 +467,8 @@ class MusicTypes(var env: MusicEnv, var homeItem: (String) -> Int, val chromes: 
     }
 
     fun retain(models: PageModels) = all.forEach { it.retain(models) }
+
+    internal fun holds(pm: PageModel?): Boolean = of(pm)?.holds(pm) == true
 }
 
 class MusicChromes(val hub: Chrome, val search: Chrome, val queue: Chrome, val album: Chrome, val artist: Chrome, val playlists: Chrome, val history: Chrome)

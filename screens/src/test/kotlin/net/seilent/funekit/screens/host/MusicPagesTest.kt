@@ -43,7 +43,7 @@ class MusicPagesTest {
     private val s = scale(Window(W, H, SDK, none, none, none, none, none), Nav.None, Surface.Page, false)
     private val fonts = createFontFamilyResolver(RuntimeEnvironment.getApplication())
     private val density = Density(1f)
-    private val env = MusicEnv(s, TextMeasurer(fonts, density, LayoutDirection.Ltr), fonts, density, null, groundBands(s.heightPx, true), Ink.white, true, Arbiter(s), { 0L }, s)
+    private val env = MusicEnv(s, s, TextMeasurer(fonts, density, LayoutDirection.Ltr), fonts, density, null, groundBands(s.heightPx, true), Ink.white, true, Arbiter(s), { 0L }, {}, s)
     private val chrome = Chrome(s, Word.none, emptyList())
     private val types = MusicTypes(env, { -1 }, MusicChromes(chrome, chrome, chrome, chrome, chrome, chrome, chrome), RuntimeEnvironment.getApplication())
 
