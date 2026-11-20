@@ -10,6 +10,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
+import kotlinx.coroutines.CompletableDeferred
 import net.seilent.funekit.Insets
 import net.seilent.funekit.Nav
 import net.seilent.funekit.Scale
@@ -73,6 +74,33 @@ class HostTest {
         override fun maxPct(): Int? = cap
     }
 
+    private class SlowLevel(var pct: Int) : VolumeLevel {
+        var cap: Int? = null
+        var refuse = false
+        val sets = mutableListOf<Int>()
+        val waits = mutableListOf<CompletableDeferred<Unit>>()
+
+        override fun percent(): Int = pct
+
+        override fun stepPct(): Int = STEP
+
+        override suspend fun step(detents: Int) {
+            pct = (pct + detents * STEP).coerceIn(0, PCT)
+        }
+
+        override suspend fun set(pct: Int) {
+            sets += pct
+            check(!refuse) { "refused" }
+            if (pct == this.pct) return
+            val d = CompletableDeferred<Unit>()
+            waits += d
+            d.await()
+            this.pct = pct
+        }
+
+        override fun maxPct(): Int? = cap
+    }
+
     private fun app(level: VolumeLevel) = TestApp(page, np, null, level) { rule.mainClock.currentTime }.also {
         it.compose(rule)
         rule.waitForIdle()
@@ -91,6 +119,10 @@ class HostTest {
         rule.runOnIdle { app.host.openVolume(rule.mainClock.currentTime) }
         frames(OPEN_FRAMES)
         assertEquals("premise: the hud is up", OverKind.Volume, app.stack.overlay?.kind)
+        dragUp()
+    }
+
+    private fun dragUp() {
         val x = Tok.canvasW / 2 * np.ppu + (np.left - page.left)
         val y = MID_U * np.ppu
         rule.onRoot().performTouchInput {
@@ -99,6 +131,47 @@ class HostTest {
             up()
         }
         frames(OPEN_FRAMES)
+    }
+
+    @Test
+    fun aSetThatWaitsForTheDeviceShowsItsNumberOnlyOnceItCompletesAndASetTheDeviceHoldsReturnsWithTheLevelUnchanged() {
+        val level = SlowLevel(START)
+        val app = app(level)
+        rule.runOnIdle { app.host.openVolume(rule.mainClock.currentTime) }
+        frames(OPEN_FRAMES)
+        dragUp()
+        assertTrue("premise: the drag set the level", level.sets.isNotEmpty())
+        assertEquals("premise: every set waits for the device", level.sets.size, level.waits.size)
+        assertEquals("premise: the level holds its number", START, level.pct)
+        assertEquals("the plate keeps the level's number while the sets wait", START, app.host.hud.percent)
+        rule.runOnIdle { level.waits.forEach { it.complete(Unit) } }
+        frames(OPEN_FRAMES)
+        assertEquals("premise: the level lands on the last set", level.sets.last(), level.pct)
+        assertTrue("premise: the last set moved the level", level.pct > START)
+        assertEquals("the plate shows the number the level reports once its set completes", level.pct, app.host.hud.percent)
+        val held = level.pct
+        val waits = level.waits.size
+        val sets = level.sets.size
+        level.cap = held
+        dragUp()
+        assertTrue("premise: the second drag sets the level", level.sets.size > sets)
+        assertTrue("premise: every set of the second drag holds the level's number", level.sets.drop(sets).all { it == held })
+        assertEquals("a set the device holds returns with the level unchanged, nothing waits", waits, level.waits.size)
+        assertEquals("the plate keeps its number", held, app.host.hud.percent)
+    }
+
+    @Test
+    fun aSetThatThrowsLeavesThePlateOnTheDevicesNumber() {
+        val level = SlowLevel(START)
+        level.refuse = true
+        val app = app(level)
+        rule.runOnIdle { app.host.openVolume(rule.mainClock.currentTime) }
+        frames(OPEN_FRAMES)
+        dragUp()
+        assertTrue("premise: the drag set the level", level.sets.isNotEmpty())
+        assertTrue("premise: every set asked past the device's number", level.sets.all { it > START })
+        assertEquals("premise: the device keeps its number", START, level.pct)
+        assertEquals("the plate shows the device's number", START, app.host.hud.percent)
     }
 
     @Test
