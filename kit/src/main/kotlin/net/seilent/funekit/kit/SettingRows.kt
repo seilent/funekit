@@ -7,6 +7,7 @@ import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.Density
 import net.seilent.funekit.Fonts
+import net.seilent.funekit.Role
 import net.seilent.funekit.Roles
 import net.seilent.funekit.Scale
 import net.seilent.funekit.fx
@@ -24,11 +25,12 @@ class SettingMeasure(
     private val titleWidth: (String) -> Float,
     private val light: (String) -> Float,
     private val bold: (String) -> Float,
+    val title: Role = Roles.pageRowTitle,
 ) {
     val left64: Int = pen64(Tok.hubEdge, s.ppu)
     val right64: Int = pen64(s.w - Tok.hubEdge, s.ppu)
     val gutter: Int = px(Tok.gutter, s.ppu)
-    val titlePx: Int = rolePx(Roles.pageRowTitle, s)
+    val titlePx: Int = rolePx(title, s)
     val valuePx: Int = rolePx(Roles.settingsValue, s)
     val subPx: Int = rolePx(Roles.settingsSub, s)
     val pitch: Int = px(Tok.settingsPitch, s.ppu)
@@ -38,15 +40,16 @@ class SettingMeasure(
     fun value64(v: String, editable: Boolean): Int = pen64(if (editable) bold(v) else light(v))
 }
 
-fun settingMeasure(s: Scale, fonts: FontFamily.Resolver, density: Density, covers: Covers?, accentOff: Boolean): SettingMeasure {
-    val ts = roleStyle(Roles.pageRowTitle, s, density, Ink.white)
+fun settingMeasure(s: Scale, fonts: FontFamily.Resolver, density: Density, covers: Covers?, accentOff: Boolean, title: Role = Roles.pageRowTitle): SettingMeasure {
+    val ts = roleStyle(title, s, density, Ink.white)
     val vs = roleStyle(Roles.settingsValue, s, density, Ink.white)
     val bs = vs.copy(fontWeight = Fonts.weight(Accent.bold(Roles.settingsValue.weight, accentOff)))
     return SettingMeasure(
         s,
-        textWidth(Roles.pageRowTitle, ts, fonts, density, covers),
+        textWidth(title, ts, fonts, density, covers),
         textWidth(Roles.settingsValue, vs, fonts, density, covers),
         textWidth(Roles.settingsValue, bs, fonts, density, covers),
+        title,
     )
 }
 
@@ -154,7 +157,7 @@ fun settingInk(
     tall: Boolean = false,
 ): SettingInk {
     val s = meas.s
-    val ts = roleStyle(Roles.pageRowTitle, s, density, Ink.white)
+    val ts = roleStyle(meas.title, s, density, Ink.white)
     val vs = roleStyle(Roles.settingsValue, s, density, Ink.white)
     val cands = words + value
     val lines = meas.titleLines(title, cands, editable)
@@ -176,7 +179,7 @@ fun settingInk(
     val tdesc = Metrics.descent(meas.titlePx)
     val tpitch = if (lines.size > 1) px(Tok.settingsTitlePitch, s.ppu) else 0
     val tbase = top + (h - tasc - tpitch - tdesc) / HALF + tasc
-    val tw = lines.map { m.word(it, Roles.pageRowTitle, ts, fonts, density, covers) }
+    val tw = lines.map { m.word(it, meas.title, ts, fonts, density, covers) }
     val tb = tw.indices.map { tbase + it * tpitch }
     val sw = sub?.let { m.word(it, Roles.settingsSub, roleStyle(Roles.settingsSub, s, density, Ink.white), fonts, density, covers) }
     return SettingInk(

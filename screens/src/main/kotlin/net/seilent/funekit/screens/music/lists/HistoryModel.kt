@@ -219,8 +219,4 @@ class HistoryModel(entry: Long) : PivotPage(entry, MusicPage.History) {
     override fun drop() {
         for (p in panes) p.lists = emptyList()
     }
-
-    companion object {
-        fun switchEnd(): Long = (Tok.motion_pivotOut + max(Tok.motion_pivotRows, Tok.motion_pivotRowFade)).toLong()
-    }
 }

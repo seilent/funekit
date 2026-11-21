@@ -446,8 +446,4 @@ class ArtistModel(entry: Long, val id: Long) : PivotPage(entry, MusicPage.Artist
         lists = emptyList()
         art.clear()
     }
-
-    companion object {
-        fun switchEnd(): Long = (Tok.motion_pivotOut + max(Tok.motion_pivotRows, Tok.motion_pivotRowFade)).toLong()
-    }
 }

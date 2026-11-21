@@ -179,12 +179,6 @@ fun keepShown(m: HubModel, draw: HubDraw) {
     draw.keep(models, cells, m.panes.indices.flatMap { listOf(m.line(it), m.found(it)) }.toSet())
 }
 
-fun hubChromeAt(c: Chrome, now: Long): Long {
-    val since = c.since(now) ?: return 0L
-    val strip = Tok.motion_pivotStrip.toLong()
-    return if (since < strip) now else now - since + strip
-}
-
 fun hubSide(m: HubModel, now: Long): Int {
     if (m.switchAt == null || !m.switching(now)) return m.pivot
     return if (m.motion.entering(now)) m.pivot else m.switchFrom

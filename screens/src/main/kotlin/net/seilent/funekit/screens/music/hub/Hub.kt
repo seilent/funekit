@@ -11,7 +11,6 @@ import androidx.compose.ui.graphics.asImageBitmap
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
 import net.seilent.funekit.core.Section
-import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.FocusTrack
 import net.seilent.funekit.kit.GlowPair
 import net.seilent.funekit.kit.JumpGrid
@@ -899,10 +898,6 @@ class HubModel(entry: Long, page: MusicPage = MusicPage.Hub, private val st: Hub
     override fun drop() {
         lists = emptyList()
         art.clear()
-    }
-
-    companion object {
-        fun switchEnd(): Long = (Tok.motion_pivotOut + max(Tok.motion_pivotRows, Tok.motion_pivotRowFade)).toLong()
     }
 }
 

@@ -6,6 +6,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import net.seilent.funekit.Insets
 import net.seilent.funekit.Nav
+import net.seilent.funekit.Roles
 import net.seilent.funekit.Scale
 import net.seilent.funekit.Surface
 import net.seilent.funekit.Window
@@ -155,6 +156,19 @@ class SettingRowsTest {
         assertEquals(listOf("rescan library"), m.titleLines("rescan library", listOf("scanning", "1293 songs"), false))
     }
 
+    @Test
+    fun aMeasureTakesItsTitleRoleForTheTitleSizeWidthAndWords() {
+        val page = measure(a105)
+        val info = settingMeasure(a105, fonts, density, null, true, Roles.settingsValue)
+        assertTrue("premise: the two roles differ in size", rolePx(Roles.pageRowTitle, a105) != rolePx(Roles.settingsValue, a105))
+        assertEquals(rolePx(Roles.pageRowTitle, a105), page.titlePx)
+        assertEquals(rolePx(Roles.settingsValue, a105), info.titlePx)
+        assertEquals("the title measures as a light value would", info.value64("battery", false), info.title64("battery"))
+        assertTrue("premise: the page title measures wider", page.title64("battery") > info.title64("battery"))
+        val ink = settingInk(TextMeasurer(fonts, density, LayoutDirection.Ltr), fonts, density, null, info, "battery", "", emptyList(), null, false)
+        assertEquals("the title word draws in that role", info.title64("battery") / PEN, ink.title.single().width, 1f)
+    }
+
     private companion object {
         const val A105_TOP = 360
         const val A105_BASE = 435
@@ -169,5 +183,6 @@ class SettingRowsTest {
         const val R1_RESUME_TOP = 511
         const val R1_RESUME_SUB = 593
         const val PAGE_RIGHT64 = 65323
+        const val PEN = 64f
     }
 }
