@@ -32,6 +32,7 @@ class FakeRefsContractTest : SeamContract() {
             caps = Caps(artRefs = false, outcomes = true, pinCap = f.pinCap, firstIndex = true, trackRefs = true),
             busy = { f.busyNext(it) },
             card = { f.card(it) },
+            bookTrack = Fixture.ALBUMS.first { it.title == Fixture.BOOK }.tracks.first().id,
         )
     }
 

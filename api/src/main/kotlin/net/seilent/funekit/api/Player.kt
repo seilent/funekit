@@ -5,9 +5,12 @@ import kotlinx.coroutines.flow.StateFlow
 
 enum class Repeat { Off, All, One }
 
+data class PlayerCaps(val sleep: Boolean = false, val endArm: Boolean = false, val speeds: List<Int> = emptyList())
+
 interface Player {
     val state: StateFlow<PlayerState>
     val events: SharedFlow<EngineEvent>
+    val caps: PlayerCaps get() = PlayerCaps()
 
     suspend fun play(ids: List<Long>, index: Int, posMs: Long)
     suspend fun play(listing: Listing, generation: Long, index: Int, posMs: Long, shuffle: Boolean = false)
@@ -30,4 +33,8 @@ interface Player {
     suspend fun clear()
     suspend fun shuffle(on: Boolean)
     suspend fun repeat(mode: Repeat)
+    suspend fun skip(ms: Long): Unit = throw UnsupportedOperationException()
+    suspend fun speed(pct: Int): Unit = throw UnsupportedOperationException()
+    suspend fun sleep(minutes: Int): Unit = throw UnsupportedOperationException()
+    suspend fun endOfTrack(): Unit = throw UnsupportedOperationException()
 }

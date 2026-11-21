@@ -27,6 +27,7 @@ internal class TrackSpec(
     val art: Art? = null,
     val ms: Long? = null,
     val artist: String? = null,
+    val book: Boolean = false,
 )
 
 internal class AlbumSpec(
@@ -58,6 +59,7 @@ internal class Track(
     val broken: Boolean,
     val dir: String,
     val file: String,
+    val book: Boolean = false,
 )
 
 internal class Album(
@@ -134,7 +136,7 @@ internal class Shelf(
                     val credit = t.artist ?: s.artist
                     Track(
                         id, t.title, split(credit, s.albumArtist).map { artist.getValue(it) }, credit, album, s.year, genre[s.genre],
-                        t.no, t.ms ?: ms(id), t.format ?: s.format, t.codec, art, t.title == broken, t.dir ?: s.dir, t.file,
+                        t.no, t.ms ?: ms(id), t.format ?: s.format, t.codec, art, t.title == broken, t.dir ?: s.dir, t.file, t.book,
                     )
                 }
                 Album(album, s.title, s.albumArtist ?: s.artist, genre[s.genre], s.root, mtime(i), s.year, tracks)
@@ -167,6 +169,7 @@ internal object Fixture {
     const val UNAVAILABLE_ROOT = 1
     const val BROKEN = "Worn Groove"
     const val REFUSED = "Room 12"
+    const val BOOK = "Umber"
     const val HUGE = 50_000
     const val HUGE_BASE = 1_000_000L
     const val FOLDER_BASE = 1_000L
@@ -257,7 +260,9 @@ internal object Fixture {
     private val MAIN_SPECS = SPECS.mapIndexed { i, s ->
         AlbumSpec(
             s.title, s.artist, s.genre, s.root, s.art, s.format, YEAR_BASE + i * YEAR_STEP % YEAR_SPAN, s.title,
-            s.tracks.mapIndexed { n, t -> TrackSpec(t, n + 1, "${(n + 1).toString().padStart(2, '0')} $t.flac", format = SURROUND.takeIf { t == REFUSED }) },
+            s.tracks.mapIndexed { n, t ->
+                TrackSpec(t, n + 1, "${(n + 1).toString().padStart(2, '0')} $t.flac", format = SURROUND.takeIf { t == REFUSED }, book = s.title == BOOK)
+            },
         )
     }
 

@@ -47,6 +47,20 @@ data class PlayerState(
     val input: Format? = null,
     val output: Format? = null,
     val xruns: Long = 0,
+    val book: Boolean = false,
+    val sleepAtNanos: Long? = null,
+    val sleepEnd: Boolean = false,
 ) {
     val durationMs: Long get() = anchor.durationMs
+
+    fun sleepLeftMs(nowElapsedNanos: Long): Long = when {
+        sleepAtNanos != null -> ((sleepAtNanos - nowElapsedNanos) / MILLI).coerceAtLeast(0)
+        sleepEnd -> (durationMs - anchor.ms(nowElapsedNanos)).coerceAtLeast(0) * PERCENT / anchor.speedPct
+        else -> 0
+    }
+
+    private companion object {
+        const val MILLI = 1_000_000L
+        const val PERCENT = 100
+    }
 }

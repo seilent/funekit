@@ -16,7 +16,9 @@ import net.seilent.funekit.api.Anchor
 import net.seilent.funekit.api.EngineEvent
 import net.seilent.funekit.api.Listing
 import net.seilent.funekit.api.Player
+import net.seilent.funekit.api.PlayerCaps
 import net.seilent.funekit.api.PlayerState
+import net.seilent.funekit.api.Refused
 import net.seilent.funekit.api.Repeat
 import net.seilent.funekit.api.Stale
 import net.seilent.funekit.api.engine.Format
@@ -36,9 +38,14 @@ class FakePlayer internal constructor(
     private var end: Job? = null
     private var origin: Listing? = null
     private var stopped = true
+    private var bookSpeed = PERCENT
+    private var sleepAt: Long? = null
+    private var sleepJob: Job? = null
+    private var sleepEnd = false
 
     override val state: StateFlow<PlayerState> = _state.asStateFlow()
     override val events: SharedFlow<EngineEvent> = bus.asSharedFlow()
+    override val caps = PlayerCaps(sleep = true, endArm = true, speeds = SPEEDS)
 
     override suspend fun play(ids: List<Long>, index: Int, posMs: Long) = lock.withLock {
         library.present()
@@ -163,6 +170,53 @@ class FakePlayer internal constructor(
 
     override suspend fun repeat(mode: Repeat) = lock.withLock { publish(_state.value.copy(repeat = mode)) }
 
+    override suspend fun skip(ms: Long) = lock.withLock {
+        require(ms in -MAX_SKIP..MAX_SKIP) { "skip $ms" }
+        val s = _state.value
+        if (s.input == null || stopped || !s.book) throw Refused()
+        val to = s.anchor.ms(clock()) + ms
+        when {
+            to < s.durationMs -> seekTo(to.coerceAtLeast(0))
+            queue.slot + 1 < queue.size -> {
+                queue.select(queue.slot + 1)
+                load(0, s.playing)
+            }
+            else -> throw Refused()
+        }
+    }
+
+    override suspend fun speed(pct: Int) = lock.withLock {
+        require(pct in SPEEDS) { "speed $pct" }
+        val s = _state.value
+        if (s.input == null || stopped || !s.book) throw Refused()
+        bookSpeed = pct
+        publish(s.copy(anchor = frozen(s).copy(running = s.anchor.running, speedPct = pct)))
+        schedule()
+    }
+
+    override suspend fun sleep(minutes: Int) = lock.withLock {
+        require(minutes in 0..MAX_SLEEP) { "sleep $minutes" }
+        sleepJob?.cancel()
+        sleepEnd = false
+        sleepAt = if (minutes == 0) null else clock() + minutes * MINUTE * MILLI
+        sleepJob = sleepAt?.let {
+            scope.launch {
+                delay(minutes * MINUTE)
+                lock.withLock { slept() }
+            }
+        }
+        publish(_state.value)
+    }
+
+    override suspend fun endOfTrack() = lock.withLock {
+        if (queue.current == null) throw Refused()
+        sleepJob?.cancel()
+        sleepJob = null
+        sleepAt = null
+        sleepEnd = true
+        publish(_state.value)
+    }
+
     internal suspend fun route(output: Output) = lock.withLock {
         val s = _state.value
         if (s.route == output) return@withLock
@@ -226,6 +280,7 @@ class FakePlayer internal constructor(
 
     private fun start(ids: List<Long>, index: Int, posMs: Long, from: Listing?, shuffle: Boolean) {
         origin = from
+        sleepEnd = false
         queue.set(ids, index, shuffle)
         load(posMs, true)
         emit(EngineEvent.QueueChanged)
@@ -276,6 +331,7 @@ class FakePlayer internal constructor(
         end?.cancel()
         stopped = true
         origin = null
+        sleepEnd = false
         queue.clear()
         publish(_state.value.copy(playing = false, anchor = Anchor.NONE, input = null, output = null, resampled = false))
         emit(EngineEvent.QueueChanged)
@@ -294,13 +350,17 @@ class FakePlayer internal constructor(
             track = queue.current,
             origin = origin,
             shuffle = queue.shuffle,
+            book = queue.current?.let { library.track(it)?.book } == true,
+            sleepAtNanos = sleepAt,
+            sleepEnd = sleepEnd,
         )
     }
 
     private fun frame(s: PlayerState): Long {
         val a = s.anchor
         if (!a.running || a.rate <= 0) return a.frame
-        val t = (clock() - a.elapsedNanos).coerceAtLeast(0)
+        val wall = (clock() - a.elapsedNanos).coerceAtLeast(0)
+        val t = wall / PERCENT * a.speedPct + wall % PERCENT * a.speedPct / PERCENT
         val f = a.frame + t / NANOS * a.rate + t % NANOS * a.rate / NANOS
         return f.coerceAtMost(a.durationMs * a.rate / 1000)
     }
@@ -354,7 +414,7 @@ class FakePlayer internal constructor(
         val input = inputOf(t)
         val resampled = out.rate != input.rate
         val at = posMs.coerceIn(0, t.ms)
-        val anchor = Anchor(at * input.rate / 1000, input.rate, clock(), playing, t.ms)
+        val anchor = Anchor(at * input.rate / 1000, input.rate, clock(), playing, t.ms, if (t.book) bookSpeed else PERCENT)
         publish(s.copy(playing = playing, anchor = anchor, input = input, output = out, resampled = resampled))
         emit(EngineEvent.FormatChanged(input, out))
         emit(EngineEvent.RouteChanged(s.route, resampled))
@@ -369,9 +429,9 @@ class FakePlayer internal constructor(
         end?.cancel()
         val s = _state.value
         if (!s.playing || !s.anchor.running) return
-        val left = s.durationMs - s.anchor.ms(clock())
+        val left = (s.durationMs - s.anchor.ms(clock())).coerceAtLeast(0)
         end = scope.launch {
-            delay(left.coerceAtLeast(0))
+            delay((left * PERCENT + s.anchor.speedPct - 1) / s.anchor.speedPct)
             lock.withLock { ended() }
         }
     }
@@ -381,21 +441,30 @@ class FakePlayer internal constructor(
         val s = _state.value
         val id = s.track ?: return
         emit(EngineEvent.Ended(id))
+        val play = !sleepEnd
+        sleepEnd = false
         when {
-            s.repeat == Repeat.One -> load(0, true)
+            s.repeat == Repeat.One -> load(0, play)
             queue.slot + 1 < queue.size -> {
                 queue.select(queue.slot + 1)
-                load(0, true)
+                load(0, play)
             }
             s.repeat == Repeat.All -> {
                 queue.select(0)
-                load(0, true)
+                load(0, play)
             }
             else -> {
                 stopped = true
                 publish(s.copy(playing = false, anchor = s.anchor.copy(frame = s.durationMs * s.anchor.rate / 1000, elapsedNanos = clock(), running = false)))
             }
         }
+    }
+
+    private fun slept() {
+        sleepJob = null
+        sleepAt = null
+        halt()
+        publish(_state.value)
     }
 
     private companion object {
@@ -413,5 +482,11 @@ class FakePlayer internal constructor(
         const val MISSING = "missing"
         const val UNREADABLE = "unreadable"
         const val ABOVE_CEILING = "rate above the ceiling"
+        const val PERCENT = 100
+        const val MILLI = 1_000_000L
+        const val MINUTE = 60_000L
+        const val MAX_SLEEP = 24 * 60
+        const val MAX_SKIP = 24 * 60 * MINUTE
+        val SPEEDS = listOf(50, 100, 150, 200)
     }
 }

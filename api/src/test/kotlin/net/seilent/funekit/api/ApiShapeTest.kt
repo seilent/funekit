@@ -73,7 +73,7 @@ class ApiShapeTest {
             Page::class.java to listOf("generation", "offset", "total", "rows", "revision"),
             PlayerState::class.java to listOf(
                 "queueSize", "queueRevision", "index", "track", "origin", "playing", "anchor", "shuffle", "repeat", "route",
-                "resampled", "input", "output", "xruns",
+                "resampled", "input", "output", "xruns", "book", "sleepAtNanos", "sleepEnd",
             ),
             Anchor::class.java to listOf("frame", "rate", "elapsedNanos", "running", "durationMs", "speedPct"),
             Sound::class.java to listOf(

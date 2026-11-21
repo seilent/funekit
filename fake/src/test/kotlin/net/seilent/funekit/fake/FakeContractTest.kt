@@ -48,6 +48,7 @@ class FakeContractTest : ApiContract() {
             scrobbling = f.scrobbling,
             busy = { f.busyNext(it) },
             card = { f.card(it) },
+            bookTrack = Fixture.ALBUMS.first { it.title == Fixture.BOOK }.tracks.first().id,
         )
     }
 

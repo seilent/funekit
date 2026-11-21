@@ -22,6 +22,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.concurrent.CopyOnWriteArrayList
+import kotlin.math.abs
 
 enum class Edge { Main, Empty, Huge, Unavailable }
 
@@ -61,6 +62,7 @@ class Subject(
     val scrobbling: Scrobbling? = null,
     val busy: (suspend (String) -> Unit)? = null,
     val card: (suspend (Card) -> Unit)? = null,
+    val bookTrack: Long? = null,
 ) {
     suspend fun <T> within(block: suspend () -> T): T = wait.within(block)
 
@@ -119,6 +121,24 @@ abstract class SeamContract {
     private suspend fun outcome(s: Subject, typed: (Throwable?) -> Boolean, block: suspend () -> Unit) {
         val e = runCatching { block() }.exceptionOrNull()
         assertTrue("$e", if (s.caps.outcomes) typed(e) else e !is Expired && e !is Stale && e !is Disconnected)
+    }
+
+    private fun playerCapsHold(s: Subject) {
+        val c = s.player.caps
+        assertEquals("$c", c.speeds.isEmpty(), s.bookTrack == null)
+        assertEquals("$c", c.speeds.sorted().distinct(), c.speeds)
+        if (c.speeds.isNotEmpty()) assertTrue("$c", 100 in c.speeds && c.speeds.any { it != 100 })
+        assertTrue("$c", !c.endArm || c.sleep)
+    }
+
+    private suspend fun booksOff(s: Subject) {
+        val song = songs(s, 1).single()
+        s.player.play(listOf(song), 0, 0)
+        assertFalse(playing(s, song).book)
+        unsupported { s.player.skip(1_000) }
+        unsupported { s.player.speed(100) }
+        assertFalse(s.player.state.value.book)
+        assertEquals(100, s.player.state.value.anchor.speedPct)
     }
 
     private suspend fun walk(view: LibraryView, folder: Long): List<Long> {
@@ -1695,6 +1715,168 @@ abstract class SeamContract {
         assertNull(view.indexOf(Listing.Albums, Kind.Album, -1))
         assertNull(view.indexOf(Listing.Albums, Kind.Song, album))
         assertNull(view.indexOf(Listing.Artists, Kind.Artist, -1))
+    }
+
+    @Test
+    fun aBookRunsAtItsSpeedAndSkipsWithinTheTrack() = runTest {
+        val s = open(Edge.Main)
+        playerCapsHold(s)
+        val book = s.bookTrack ?: return@runTest booksOff(s)
+        val seen = events(s.player)
+        val song = songs(s, 20).first { it != book }
+        val p = s.player.caps.speeds.last { it != 100 }
+        s.player.play(listOf(book, song), 0, 0)
+        val st = playing(s, book)
+        assertTrue(st.book)
+        assertEquals(100, st.anchor.speedPct)
+        advanceTimeBy(1_000L)
+        val before = ms(s)
+        s.player.speed(p)
+        s.until(s.player.state) { it.anchor.speedPct == p }
+        assertTrue("${ms(s)} against $before", abs(ms(s) - before) <= 1)
+        val at = ms(s)
+        advanceTimeBy(2_000L)
+        assertEquals(at + 2_000L * p / 100, ms(s))
+        s.player.pause()
+        s.until(s.player.state) { !it.playing }
+        val held = ms(s)
+        assertTrue("$held", abs(held - (at + 2_000L * p / 100)) <= 1)
+        advanceTimeBy(1_000L)
+        assertEquals(held, ms(s))
+        s.player.resume()
+        s.until(s.player.state) { it.playing }
+        s.player.skip(10_000)
+        s.until(s.player.state) { abs(it.anchor.ms(s.elapsedNanos()) - (held + 10_000)) <= 1 }
+        s.player.skip(-1_000_000)
+        s.until(s.player.state) { it.anchor.ms(s.elapsedNanos()) == 0L }
+        advanceTimeBy(s.player.state.value.durationMs * 100 / p + 1)
+        s.saw(seen) { it == EngineEvent.Ended(book) }
+        s.saw(seen) { it == EngineEvent.Started(song) }
+        val next = playing(s, song)
+        assertFalse(next.book)
+        assertEquals(100, next.anchor.speedPct)
+    }
+
+    @Test
+    fun skipAndSpeedRefuseAnEntryThatIsNoBookAndAStepNotOffered() = runTest {
+        val s = open(Edge.Main)
+        playerCapsHold(s)
+        val book = s.bookTrack ?: return@runTest booksOff(s)
+        val speeds = s.player.caps.speeds
+        val p = speeds.last { it != 100 }
+        val q = (speeds.first() + 1..1000).first { it !in speeds }
+        val song = songs(s, 20).first { it != book }
+        s.player.play(listOf(song), 0, 0)
+        playing(s, song)
+        val at = ms(s)
+        outcome(s, { it is Refused }) { s.player.skip(5_000) }
+        outcome(s, { it is Refused }) { s.player.speed(p) }
+        assertEquals(at, ms(s))
+        assertEquals(100, s.player.state.value.anchor.speedPct)
+        assertTrue(runCatching { s.player.speed(0) }.exceptionOrNull() is IllegalArgumentException)
+        s.player.play(listOf(book), 0, 0)
+        val st = playing(s, book)
+        for (bad in listOf(0, q)) assertTrue("$bad", runCatching { s.player.speed(bad) }.exceptionOrNull() is IllegalArgumentException)
+        assertEquals(100, s.player.state.value.anchor.speedPct)
+        val pos = ms(s)
+        for (huge in listOf(Long.MAX_VALUE, Long.MIN_VALUE)) assertTrue("$huge", runCatching { s.player.skip(huge) }.exceptionOrNull() is IllegalArgumentException)
+        assertEquals(pos, ms(s))
+        advanceTimeBy(st.durationMs + 1)
+        val ended = s.until(s.player.state) { !it.playing }
+        outcome(s, { it is Refused }) { s.player.skip(-5_000) }
+        assertEquals(ended.anchor.ms(s.elapsedNanos()), ms(s))
+        s.player.clear()
+        s.until(s.player.state) { it.queueSize == 0 }
+        outcome(s, { it is Refused }) { s.player.skip(5_000) }
+    }
+
+    @Test
+    fun aSleepTimerPausesAtItsEndAndZeroMinutesCancelsIt() = runTest {
+        val s = open(Edge.Main)
+        playerCapsHold(s)
+        val (a, b) = songs(s, 2)
+        s.player.play(listOf(a), 0, 0)
+        playing(s, a)
+        if (!s.player.caps.sleep) {
+            unsupported { s.player.sleep(1) }
+            assertNull(s.player.state.value.sleepAtNanos)
+            return@runTest
+        }
+        s.player.sleep(1)
+        var st = s.until(s.player.state) { it.sleepAtNanos != null }
+        assertFalse(st.sleepEnd)
+        assertTrue(st.sleepLeftMs(s.elapsedNanos()) in 59_000L..60_000L)
+        s.player.pause()
+        s.until(s.player.state) { !it.playing }
+        advanceTimeBy(30_000L)
+        assertTrue(s.player.state.value.sleepLeftMs(s.elapsedNanos()) in 29_000L..30_000L)
+        s.player.resume()
+        s.until(s.player.state) { it.playing }
+        val due = s.player.state.value.sleepAtNanos
+        s.player.play(listOf(b), 0, 0)
+        playing(s, b)
+        assertEquals(due, s.player.state.value.sleepAtNanos)
+        s.player.sleep(0)
+        st = s.until(s.player.state) { it.sleepAtNanos == null }
+        assertEquals(0L, st.sleepLeftMs(s.elapsedNanos()))
+        advanceTimeBy(61_000L)
+        assertTrue(s.player.state.value.playing)
+        s.player.sleep(1)
+        s.until(s.player.state) { it.sleepAtNanos != null }
+        advanceTimeBy(60_001L)
+        st = s.until(s.player.state) { !it.playing }
+        assertEquals(b, st.track)
+        assertTrue(st.anchor.ms(s.elapsedNanos()) < st.durationMs)
+        assertNull(st.sleepAtNanos)
+        for (bad in listOf(-1, Int.MAX_VALUE)) assertTrue("$bad", runCatching { s.player.sleep(bad) }.exceptionOrNull() is IllegalArgumentException)
+    }
+
+    @Test
+    fun endOfTrackPausesAtTheNextEntryAndASleepReplacesIt() = runTest {
+        val s = open(Edge.Main)
+        playerCapsHold(s)
+        val seen = events(s.player)
+        val (a, b) = songs(s, 2)
+        s.player.play(listOf(a, b), 0, 0)
+        playing(s, a)
+        if (!s.player.caps.endArm) {
+            unsupported { s.player.endOfTrack() }
+            assertFalse(s.player.state.value.sleepEnd)
+            return@runTest
+        }
+        suspend fun arm(): PlayerState {
+            s.player.endOfTrack()
+            return s.until(s.player.state) { it.sleepEnd }
+        }
+        var st = arm()
+        assertNull(st.sleepAtNanos)
+        assertEquals(st.durationMs - ms(s), st.sleepLeftMs(s.elapsedNanos()))
+        s.player.sleep(5)
+        st = s.until(s.player.state) { !it.sleepEnd }
+        assertTrue(st.sleepAtNanos != null)
+        assertNull(arm().sleepAtNanos)
+        s.player.sleep(0)
+        s.until(s.player.state) { !it.sleepEnd }
+        arm()
+        s.player.next()
+        assertTrue(s.until(s.player.state) { it.track == b }.sleepEnd)
+        s.player.play(listOf(a, b), 0, 0)
+        s.until(s.player.state) { it.track == a && !it.sleepEnd }
+        arm()
+        s.player.clear()
+        s.until(s.player.state) { it.queueSize == 0 && !it.sleepEnd }
+        outcome(s, { it is Refused }) { s.player.endOfTrack() }
+        assertFalse(s.player.state.value.sleepEnd)
+        s.player.play(listOf(a, b), 0, 0)
+        st = playing(s, a)
+        arm()
+        val started = seen.value.count { it == EngineEvent.Started(b) }
+        advanceTimeBy(st.durationMs + 1)
+        s.saw(seen) { it == EngineEvent.Ended(a) }
+        st = s.until(s.player.state) { it.track == b && !it.playing }
+        assertFalse(st.sleepEnd)
+        assertEquals(0L, st.anchor.ms(s.elapsedNanos()))
+        assertEquals(started, seen.value.count { it == EngineEvent.Started(b) })
     }
 
     private companion object {
