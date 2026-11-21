@@ -9,7 +9,7 @@ import net.seilent.funekit.fake.FakeSet
 private const val LEASE_MS = 60_000L
 private const val NANOS_PER_MS = 1_000_000L
 
-internal fun testFake(
+fun testFake(
     set: FakeSet = FakeSet.Demo,
     scheduler: TestCoroutineScheduler = TestCoroutineScheduler(),
     clock: () -> Long = { scheduler.currentTime * NANOS_PER_MS },

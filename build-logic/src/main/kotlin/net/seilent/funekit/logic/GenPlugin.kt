@@ -214,6 +214,9 @@ abstract class CheckKitImportsTask : DefaultTask() {
     @get:Input
     abstract val denied: ListProperty<String>
 
+    @get:Input
+    abstract val fixtureDenied: ListProperty<String>
+
     @get:OutputFile
     abstract val stamp: RegularFileProperty
 
@@ -221,7 +224,7 @@ abstract class CheckKitImportsTask : DefaultTask() {
     fun run() {
         val files = sources.asFileTree.matching { include("**/*.kt") }.files.toList()
         val fixed = fixtures.asFileTree.matching { include("**/*.kt") }.files.toList()
-        val hits = Fence.scan(files, allowed.get(), denied.get()) + Fence.scan(fixed, allowed.get() + Fence.fixtureAllowed, denied.get())
+        val hits = Fence.scan(files, allowed.get(), denied.get()) + Fence.scan(fixed, allowed.get() + Fence.fixtureAllowed, fixtureDenied.get())
         if (hits.isNotEmpty()) throw GradleException("checkKitImports:\n" + hits.joinToString("\n"))
         stamp.get().asFile.writeText("ok\n")
     }
@@ -383,9 +386,10 @@ class FencePlugin : Plugin<Project> {
         val checkKitImports = project.tasks.register("checkKitImports", CheckKitImportsTask::class.java) {
             group = "verification"
             sources.from(project.fileTree("src") { exclude("test*/**", "androidTest*/**") })
-            if (project.path == ":api") fixtures.from(project.layout.projectDirectory.dir("src/testFixtures"))
+            if (project.path in Fence.fixtured) fixtures.from(project.layout.projectDirectory.dir("src/testFixtures"))
             allowed.set(Fence.allowed)
             denied.set(Fence.deniedIn(project.path))
+            fixtureDenied.set(Fence.fixtureDeniedIn(project.path))
             stamp.set(project.layout.buildDirectory.file("checks/checkKitImports"))
         }
         val path = project.path

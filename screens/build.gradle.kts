@@ -26,6 +26,10 @@ android {
         compose = true
     }
 
+    testFixtures {
+        enable = true
+    }
+
     testOptions {
         unitTests {
             isIncludeAndroidResources = true
@@ -42,6 +46,12 @@ android {
 
 tasks.withType<KotlinCompile>().configureEach {
     if (!name.contains("Test")) compilerOptions.moduleName.set("funekit-screens")
+}
+
+val sheets = gradle.startParameter.taskRequests.any { r -> r.args.any { "Sheet" in it } }
+
+tasks.withType<Test>().configureEach {
+    if (!sheets) filter.excludeTestsMatching("net.seilent.funekit.screens.music.sheet.*")
 }
 
 funekitSyntax {
@@ -62,6 +72,12 @@ dependencies {
     implementation("androidx.core:core:1.18.0")
     implementation("androidx.window:window:1.5.1")
     add("funePsi", "org.jetbrains.kotlin:kotlin-compiler-embeddable:2.4.10")
+    testFixturesApi(project(":fake"))
+    testFixturesApi(project(":sheet"))
+    testFixturesApi("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
+    testFixturesImplementation("org.robolectric:robolectric:4.17")
+    testFixturesImplementation(platform("androidx.compose:compose-bom:2026.06.01"))
+    testFixturesImplementation("androidx.compose.ui:ui")
     testImplementation(project(":fake"))
     testImplementation(project(":sheet"))
     testImplementation("junit:junit:4.13.2")

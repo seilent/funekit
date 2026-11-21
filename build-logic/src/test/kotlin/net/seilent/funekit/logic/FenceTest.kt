@@ -47,6 +47,15 @@ class FenceTest {
     }
 
     @Test
+    fun aScreensFixtureTakesTheMadeUpLibraryAndRobolectricAndNoAppName() {
+        val ok = listOf(File(dir, "ScreensFixture.kt"))
+        val allowed = Fence.allowed + Fence.fixtureAllowed
+        assertEquals(emptyList<String>(), Fence.scan(ok, allowed, Fence.fixtureDeniedIn(":screens")))
+        assertEquals(listOf("ScreensFixture.kt:3: names net.seilent.funekit.fake"), Fence.scan(ok, allowed, Fence.fixtureDeniedIn(":api")))
+        assertEquals(listOf("Forbidden.kt:6: names net.seilent.funeplayer"), Fence.scan(listOf(File(dir, "Forbidden.kt")), allowed, Fence.fixtureDeniedIn(":screens")))
+    }
+
+    @Test
     fun theKitSourcesPassTheFence() {
         val repo = File("..").canonicalFile
         val files = listOf("core", "kit", "sheet").flatMap { m ->
