@@ -79,7 +79,7 @@ class QueueTouchTest {
         rule.mainClock.advanceTimeBy(FRAME)
     }
 
-    private fun push(screen: MusicEntry, kind: MoveKind) {
+    private fun push(screen: TestScreen, kind: MoveKind) {
         rule.runOnUiThread {
             stack.push(screen, kind)
             Snapshot.sendApplyNotifications()
@@ -93,10 +93,10 @@ class QueueTouchTest {
         settle()
     }
 
-    private fun openQueue(): Triple<MusicEntry, MusicEntry, QueueModel> {
-        val np = MusicEntry(stack.entry(), MusicPage.NowPlaying)
+    private fun openQueue(): Triple<TestScreen, TestScreen, QueueModel> {
+        val np = TestScreen.Music(MusicEntry(stack.entry(), MusicPage.NowPlaying))
         push(np, MoveKind.T7)
-        val screen = MusicEntry(stack.entry(), MusicPage.Queue)
+        val screen = TestScreen.Music(MusicEntry(stack.entry(), MusicPage.Queue))
         push(screen, MoveKind.T3)
         assertEquals(screen, stack.top)
         val m = app.models[screen.entry] as QueueModel

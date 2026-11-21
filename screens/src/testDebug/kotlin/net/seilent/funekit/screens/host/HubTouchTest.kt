@@ -321,7 +321,7 @@ class HubTouchTest {
         app.compose(rule, root = true)
         rule.waitForIdle()
         val stack = app.stack
-        val screen = MusicEntry(stack.entry(), MusicPage.Hub)
+        val screen = TestScreen.Music(MusicEntry(stack.entry(), MusicPage.Hub))
         rule.runOnUiThread { stack.push(screen, MoveKind.T2) }
         rule.mainClock.advanceTimeBy(SETTLE)
         rule.waitForIdle()
@@ -348,7 +348,7 @@ class HubTouchTest {
         app.compose(rule, root = true)
         rule.waitForIdle()
         val stack = app.stack
-        val screen = MusicEntry(stack.entry(), MusicPage.Hub)
+        val screen = TestScreen.Music(MusicEntry(stack.entry(), MusicPage.Hub))
         rule.runOnUiThread { stack.push(screen, MoveKind.T2) }
         rule.mainClock.advanceTimeBy(SETTLE)
         rule.waitForIdle()

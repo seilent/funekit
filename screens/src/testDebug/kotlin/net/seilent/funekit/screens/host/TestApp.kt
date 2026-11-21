@@ -64,7 +64,7 @@ import net.seilent.funekit.kit.touch.Swipes
 import net.seilent.funekit.kit.touch.arbiter
 import net.seilent.funekit.screens.music.MusicPage
 import net.seilent.funekit.screens.music.MusicSource
-import net.seilent.funekit.screens.music.PageModels
+import net.seilent.funekit.screens.music.PageId
 import net.seilent.funekit.screens.music.hub.musicModel
 import net.seilent.funekit.screens.music.nowplaying.NpPicture
 import net.seilent.funekit.screens.music.nowplaying.OffsetEdit
@@ -72,16 +72,35 @@ import net.seilent.funekit.screens.music.nowplaying.NpSplit
 import net.seilent.funekit.screens.music.pivotBy
 import net.seilent.funekit.screens.music.pivotPan
 import net.seilent.funekit.screens.music.pivotSwitch
+import net.seilent.funekit.screens.settings.SettingsId
+import net.seilent.funekit.screens.settings.SettingsPage
+import net.seilent.funekit.screens.settings.SettingsScreen
 
-class TestApp(page: Scale, np: Scale, private val src: MusicSource?, private val level: VolumeLevel, private val now: () -> Long) : MusicApp<MusicEntry> {
+sealed interface TestScreen {
+    val entry: Long
+    val page: PageId
+
+    data class Music(val music: MusicEntry) : TestScreen {
+        override val entry: Long get() = music.entry
+        override val page: PageId get() = music.page
+    }
+
+    data class Settings(override val entry: Long, override val page: SettingsId) : TestScreen
+}
+
+class TestApp(page: Scale, np: Scale, private val src: MusicSource?, private val level: VolumeLevel, private val now: () -> Long) : MusicApp<TestScreen> {
     var page by mutableStateOf(page)
     var np by mutableStateOf(np)
     var split by mutableStateOf<NpSplit?>(null)
+    var accentOff by mutableStateOf(true)
+    var settingsList by mutableStateOf<List<SettingsPage>>(emptyList())
+    var homeWords: Set<String> = emptySet()
+    var beforeApplied: () -> Unit = {}
     val gate = InputGate()
     val music = MusicModels()
-    val models = PageModels { e, p -> musicModel(e, p as MusicPage, music.hub) }
-    lateinit var host: MusicHost<MusicEntry>
-    lateinit var stack: PageStack<MusicEntry>
+    val models = pageModels { e, p -> musicModel(e, p as MusicPage, music.hub) }
+    lateinit var host: MusicHost<TestScreen>
+    lateinit var stack: PageStack<TestScreen>
     lateinit var toast: Toast
     lateinit var movePaint: MovePaint
     lateinit var menu: Menu
@@ -92,11 +111,15 @@ class TestApp(page: Scale, np: Scale, private val src: MusicSource?, private val
     var asked: () -> Unit = {}
     val backdropFlow = MutableStateFlow<NpPicture?>(null)
 
-    override fun music(s: MusicEntry): MusicEntry = s
+    override fun music(s: TestScreen): MusicEntry? = (s as? TestScreen.Music)?.music
 
-    override fun screen(e: MusicEntry): MusicEntry = e
+    override fun screen(e: MusicEntry): TestScreen = TestScreen.Music(e)
 
-    override fun homeHas(word: String): Boolean = false
+    override fun settings(s: TestScreen): SettingsScreen? = (s as? TestScreen.Settings)?.let { SettingsScreen(it.entry, it.page) }
+
+    override val settingsPages: List<SettingsPage> get() = settingsList
+
+    override fun homeHas(word: String): Boolean = word in homeWords
 
     override fun homeItem(word: String): Int = -1
 
@@ -106,9 +129,7 @@ class TestApp(page: Scale, np: Scale, private val src: MusicSource?, private val
 
     override fun homeFront(): Boolean = false
 
-    override fun liftRow(top: MusicEntry?): Int? = null
-
-    override fun cancel(top: MusicEntry?) {}
+    override fun cancel(top: TestScreen?) {}
 
     override val phone = MutableStateFlow<PhoneSession?>(null)
 
@@ -164,11 +185,11 @@ class TestApp(page: Scale, np: Scale, private val src: MusicSource?, private val
         val bands = remember(page.heightPx) { groundBands(page.heightPx, true) }
         val grid = remember(page) { page.kept() }
         val accent = Accent.color(Accent.defaultHue, true)
-        val env = MusicEnv(page, np, m, fonts, density, covers, bands, accent, true, a, now, { pokes++ }, grid)
+        val env = MusicEnv(page, np, m, fonts, density, covers, bands, accent, accentOff, a, now, { pokes++ }, grid)
         val h = rememberMusicHost(this@TestApp, music, models, env, src, split, level, toast, jump, menuHost, movePaint)
         host = h
         stack = remember {
-            PageStack<MusicEntry>(
+            PageStack<TestScreen>(
                 MoveForms.board(page.board),
                 { h.kind(it) ?: PageKind.Plain },
                 pageBack = { s, _ -> h.pageBack(s) },
@@ -180,6 +201,7 @@ class TestApp(page: Scale, np: Scale, private val src: MusicSource?, private val
                 started = h::started,
                 starting = h::starting,
                 swapped = h::swapped,
+                closing = { o, _ -> h.closing(o) },
                 dropped = h::dropped,
                 isNp = h::isNp,
                 gate = if (root) gate else null,
@@ -191,6 +213,7 @@ class TestApp(page: Scale, np: Scale, private val src: MusicSource?, private val
         val stack = stack
         SideEffect {
             if (root) stack.forms = MoveForms.board(page.board)
+            beforeApplied()
             h.applied()
         }
         h.StackClock { MoveKind.T4n }
@@ -284,6 +307,7 @@ class TestApp(page: Scale, np: Scale, private val src: MusicSource?, private val
                 }
                 .arbiter(a, swipes),
         ) {
+            h.SettingsPages(pages)
             h.MusicPages(pages, status)
             h.MoveCanvas(!rest && turn != null, MoveStatus(statusInk, statusInk, accent, true))
             h.JumpHost({ null }) { _, _ -> }

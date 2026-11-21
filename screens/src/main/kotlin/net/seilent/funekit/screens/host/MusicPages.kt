@@ -2,7 +2,10 @@ package net.seilent.funekit.screens.host
 
 import android.content.Context
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextMeasurer
@@ -75,6 +78,11 @@ import net.seilent.funekit.screens.music.queue.QueueLayer
 import net.seilent.funekit.screens.music.queue.QueueModel
 import net.seilent.funekit.screens.music.queue.QueuePaint
 import net.seilent.funekit.screens.music.queue.queueDraw
+import net.seilent.funekit.screens.settings.SettingsDraw
+import net.seilent.funekit.screens.settings.SettingsId
+import net.seilent.funekit.screens.settings.SettingsModel
+import net.seilent.funekit.screens.settings.SettingsPaint
+import net.seilent.funekit.screens.settings.settingsDraw
 
 data class MusicEnv(
     val page: Scale,
@@ -116,7 +124,7 @@ interface MusicActs {
     fun commit(query: String)
 }
 
-abstract class MusicPageType<M : PageModel, D : Any>(protected val types: MusicTypes) {
+abstract class PageType<M : PageModel, D : Any>(protected val types: MusicTypes) {
     private val draws = HashMap<M, D>()
 
     protected val env: MusicEnv get() = types.env
@@ -133,11 +141,6 @@ abstract class MusicPageType<M : PageModel, D : Any>(protected val types: MusicT
 
     protected open fun back(m: M): Boolean = false
 
-    protected open fun enter(m: M, e: MusicEntry) {}
-
-    @Composable
-    protected abstract fun Layer(e: MusicEntry, m: M, src: MusicSource?, at: PageAt, acts: MusicActs)
-
     fun drawOf(m: M): D = draws.getOrPut(m) { draw(m) }
 
     fun owns(pm: PageModel?): Boolean = of(pm) != null
@@ -150,14 +153,21 @@ abstract class MusicPageType<M : PageModel, D : Any>(protected val types: MusicT
 
     fun backOf(pm: PageModel?): Boolean = of(pm)?.let(::back) == true
 
-    fun enterOf(pm: PageModel?, e: MusicEntry) {
-        of(pm)?.let { enter(it, e) }
-    }
-
     fun pivotOf(pm: PageModel?): Pair<PivotPage, Chrome>? = of(pm)?.let { m -> (m as? PivotPage)?.let { it to chrome(m) } }
 
     fun retain(models: PageModels) {
         draws.keys.retainAll { models[it.entry] === it }
+    }
+}
+
+abstract class MusicPageType<M : PageModel, D : Any>(types: MusicTypes) : PageType<M, D>(types) {
+    protected open fun enter(m: M, e: MusicEntry) {}
+
+    @Composable
+    protected abstract fun Layer(e: MusicEntry, m: M, src: MusicSource?, at: PageAt, acts: MusicActs)
+
+    fun enterOf(pm: PageModel?, e: MusicEntry) {
+        of(pm)?.let { enter(it, e) }
     }
 
     @Composable
@@ -436,8 +446,22 @@ class HistoryType(types: MusicTypes, private val chrome: Chrome) : MusicPageType
     }
 }
 
+class SettingsType(types: MusicTypes) : PageType<SettingsModel, SettingsDraw>(types) {
+    var chromes: Map<SettingsId, Chrome> by mutableStateOf(emptyMap())
+
+    override fun of(pm: PageModel?): SettingsModel? = pm as? SettingsModel
+
+    override fun chrome(m: SettingsModel): Chrome = chromes.getValue(m.id)
+
+    override fun draw(m: SettingsModel): SettingsDraw = env.let { settingsDraw(m, it.page, it.measurer, it.fonts, it.density, it.covers, it.accent, it.accentOff) }
+
+    override fun side(m: SettingsModel): PagePaint = SettingsPaint(drawOf(m), chrome(m), types.homeItem(m.id.header), env.bands, env.accent)
+
+    override fun thumb(m: SettingsModel): PageThumb = PageThumb(m.fade, drawOf(m).thumbAt(m.pivot, m.pane.px) != null, m::poke)
+}
+
 class MusicTypes(var env: MusicEnv, var homeItem: (String) -> Int, val chromes: MusicChromes, context: Context) {
-    val all: List<MusicPageType<*, *>> = listOf(
+    val music: List<MusicPageType<*, *>> = listOf(
         HubType(this, chromes.hub, chromes.search),
         QueueType(this, chromes.queue),
         AlbumType(this, chromes.album, context),
@@ -447,8 +471,12 @@ class MusicTypes(var env: MusicEnv, var homeItem: (String) -> Int, val chromes: 
         ListViewType(this),
         HistoryType(this, chromes.history),
     )
+    val settings = SettingsType(this)
+    val all: List<PageType<*, *>> = music + settings
 
-    fun of(pm: PageModel?): MusicPageType<*, *>? = all.firstOrNull { it.owns(pm) }
+    fun of(pm: PageModel?): PageType<*, *>? = all.firstOrNull { it.owns(pm) }
+
+    fun musicOf(pm: PageModel?): MusicPageType<*, *>? = music.firstOrNull { it.owns(pm) }
 
     fun chrome(pm: PageModel?): Chrome? = of(pm)?.chromeOf(pm)
 
@@ -461,7 +489,7 @@ class MusicTypes(var env: MusicEnv, var homeItem: (String) -> Int, val chromes: 
     fun back(pm: PageModel?): Boolean = of(pm)?.backOf(pm) == true
 
     fun enter(pm: PageModel?, e: MusicEntry) {
-        of(pm)?.enterOf(pm, e)
+        musicOf(pm)?.enterOf(pm, e)
     }
 
     fun retain(models: PageModels) = all.forEach { it.retain(models) }
@@ -483,7 +511,7 @@ fun rememberMusicTypes(env: MusicEnv, homeItem: (String) -> Int): MusicTypes {
         rememberChrome(s, MusicPage.History.headerWord ?: "", MusicPage.History.pivots),
     )
     val c = listOf(chromes.hub, chromes.search, chromes.queue, chromes.album, chromes.artist, chromes.playlists, chromes.history)
-    val types = remember(s, env.density, env.fonts, env.covers, env.accent, c) { MusicTypes(env, homeItem, chromes, context) }
+    val types = remember(s, env.density, env.fonts, env.covers, env.accent, env.accentOff, c) { MusicTypes(env, homeItem, chromes, context) }
     types.env = env
     types.homeItem = homeItem
     return types

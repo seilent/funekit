@@ -132,7 +132,7 @@ class CarryTest {
         sync()
     }
 
-    private fun push(screen: MusicEntry, kind: MoveKind) {
+    private fun push(screen: TestScreen, kind: MoveKind) {
         rule.runOnUiThread {
             stack.push(screen, kind)
             Snapshot.sendApplyNotifications()
@@ -150,7 +150,7 @@ class CarryTest {
         launcher()
         runBlocking { fake.player.play(Listing.Songs, fake.library.generation.value, 0, 0) }
         settle()
-        val np = MusicEntry(stack.entry(), MusicPage.NowPlaying)
+        val np = TestScreen.Music(MusicEntry(stack.entry(), MusicPage.NowPlaying))
         push(np, MoveKind.T7)
         into(TAP_AT)
         val g = NpLayout(page)
@@ -167,7 +167,7 @@ class CarryTest {
     @Test
     fun aDownHeldOnAnAlbumsCellDuringTheHubPushOpensItsMenu() {
         launcher()
-        val screen = MusicEntry(stack.entry(), MusicPage.Hub)
+        val screen = TestScreen.Music(MusicEntry(stack.entry(), MusicPage.Hub))
         push(screen, MoveKind.T2)
         val m = app.models[screen.entry] as HubModel
         assertEquals(HUB_ALBUMS, m.pivot)
@@ -192,10 +192,10 @@ class CarryTest {
         launcher()
         runBlocking { fake.player.play(Listing.Songs, fake.library.generation.value, 0, 0) }
         settle()
-        val np = MusicEntry(stack.entry(), MusicPage.NowPlaying)
+        val np = TestScreen.Music(MusicEntry(stack.entry(), MusicPage.NowPlaying))
         push(np, MoveKind.T7)
         until("premise: now playing lands") { stack.phase == Phase.Rest }
-        push(MusicEntry(stack.entry(), MusicPage.Queue), MoveKind.T3)
+        push(TestScreen.Music(MusicEntry(stack.entry(), MusicPage.Queue)), MoveKind.T3)
         until("premise: the queue lands") { stack.phase == Phase.Rest }
         rule.runOnUiThread { stack.back { MoveKind.T4 } }
         until("premise: the pop starts") { stack.phase != Phase.Rest }
@@ -223,9 +223,9 @@ class CarryTest {
         until("the up in the slop backs from now playing") { stack.phase == Phase.Rest && stack.pages.isEmpty() }
     }
 
-    private fun hubAtRest(): Pair<MusicEntry, HubModel> {
+    private fun hubAtRest(): Pair<TestScreen, HubModel> {
         launcher()
-        val hub = MusicEntry(stack.entry(), MusicPage.Hub)
+        val hub = TestScreen.Music(MusicEntry(stack.entry(), MusicPage.Hub))
         push(hub, MoveKind.T2)
         until("premise: the hub rests") { stack.phase == Phase.Rest }
         val m = app.models[hub.entry] as HubModel
@@ -246,7 +246,7 @@ class CarryTest {
     fun aTapDuringTheT3cLandsItAndPushesTheAlbumUnderItOnTheLandedColumn() {
         val (_, h) = hubAtRest()
         val letter = (0 until LETTERS).first { h.pane.map?.has(it) == true }
-        val col = MusicEntry(stack.entry(), MusicPage.AlbumCol(letter))
+        val col = TestScreen.Music(MusicEntry(stack.entry(), MusicPage.AlbumCol(letter)))
         push(col, MoveKind.T3c)
         val cm = app.models[col.entry] as AlbumColModel
         until("premise: the column window lands") { cm.ready && cm.count > 0 }

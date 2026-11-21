@@ -415,7 +415,7 @@ class HostTest {
         frames(RESIZE_FRAMES)
         val types = app.host.types
         assertTrue("premise: the scale change makes new draw maps", types !== first)
-        val e = MusicEntry(app.stack.entry(), MusicPage.Album(ALBUM))
+        val e = TestScreen.Music(MusicEntry(app.stack.entry(), MusicPage.Album(ALBUM)))
         rule.runOnIdle { app.stack.push(e, MoveKind.T2) }
         frames(OPEN_FRAMES)
         val m = app.models[e.entry] as? AlbumModel
@@ -441,7 +441,7 @@ class HostTest {
     @Test
     fun aResetUnderNowPlayingRefusesUnderPagesThatHoldNowPlaying() {
         val app = app(Level(START, null))
-        val kept = MusicEntry(app.stack.entry(), MusicPage.NowPlaying)
+        val kept = TestScreen.Music(MusicEntry(app.stack.entry(), MusicPage.NowPlaying))
         val refused = rule.runOnIdle { runCatching { app.host.resetNp(listOf(kept)) }.exceptionOrNull() }
         assertTrue("the reset refuses, $refused", refused is IllegalArgumentException)
     }
@@ -449,8 +449,8 @@ class HostTest {
     @Test
     fun aResetUnderNowPlayingLandsTheAppPagesUnderANewNowPlayingWithNoTurnAndSetsItUp() {
         val app = app(Level(START, null))
-        val hub = MusicEntry(app.stack.entry(), MusicPage.Hub)
-        val album = MusicEntry(app.stack.entry(), MusicPage.Album(ALBUM))
+        val hub = TestScreen.Music(MusicEntry(app.stack.entry(), MusicPage.Hub))
+        val album = TestScreen.Music(MusicEntry(app.stack.entry(), MusicPage.Album(ALBUM)))
         rule.runOnIdle { app.stack.reset(listOf(hub, album)) }
         frames(OPEN_FRAMES)
         assertEquals("premise: the hub and the album are up", listOf(hub, album), app.stack.pages.toList())
@@ -598,7 +598,7 @@ class HostTest {
                     m.lyrics.toggle(0)
                     m.lyrics.land()
                 }
-                it.host.resetNp(listOf(MusicEntry(it.stack.entry(), MusicPage.Hub)))
+                it.host.resetNp(listOf(TestScreen.Music(MusicEntry(it.stack.entry(), MusicPage.Hub))))
             }
             frames(OPEN_FRAMES)
         }
@@ -692,7 +692,7 @@ class HostTest {
         frames(OPEN_FRAMES)
         assertTrue(rule.runOnIdle { app.menuHost.hold!!(0) })
         frames(CUT_FRAMES)
-        rule.runOnIdle { app.stack.push(MusicEntry(app.stack.entry(), MusicPage.Album(ALBUM)), MoveKind.T2) }
+        rule.runOnIdle { app.stack.push(TestScreen.Music(MusicEntry(app.stack.entry(), MusicPage.Album(ALBUM))), MoveKind.T2) }
         frames(OPEN_FRAMES)
         rule.runOnIdle { app.host.offsetReturn(false) }
         frames(CUT_FRAMES)
@@ -764,7 +764,7 @@ class HostTest {
         frames(OPEN_FRAMES)
         assertTrue(rule.runOnIdle { app.menuHost.hold!!(0) })
         frames(CUT_FRAMES)
-        rule.runOnIdle { app.stack.push(MusicEntry(app.stack.entry(), MusicPage.Album(ALBUM)), MoveKind.T2) }
+        rule.runOnIdle { app.stack.push(TestScreen.Music(MusicEntry(app.stack.entry(), MusicPage.Album(ALBUM))), MoveKind.T2) }
         frames(OPEN_FRAMES)
         rule.runOnIdle {
             app.stack.back(app.host.popKind)
@@ -876,7 +876,7 @@ class HostTest {
     @Test
     fun duringTheTurnBackToNowPlayingTheLyricsSheetStaysShut() {
         val app = lyricsApp(Edit())
-        rule.runOnIdle { app.stack.push(MusicEntry(app.stack.entry(), MusicPage.Album(ALBUM)), MoveKind.T2) }
+        rule.runOnIdle { app.stack.push(TestScreen.Music(MusicEntry(app.stack.entry(), MusicPage.Album(ALBUM))), MoveKind.T2) }
         frames(OPEN_FRAMES)
         rule.runOnIdle { app.stack.back(app.host.popKind) }
         var n = 0
@@ -933,7 +933,7 @@ class HostTest {
     @Test
     fun aBackOnAPageOverNowPlayingPopsItAndLeavesTheLyrics() {
         val app = lyricsApp(Edit())
-        rule.runOnIdle { app.stack.push(MusicEntry(app.stack.entry(), MusicPage.Album(ALBUM)), MoveKind.T2) }
+        rule.runOnIdle { app.stack.push(TestScreen.Music(MusicEntry(app.stack.entry(), MusicPage.Album(ALBUM))), MoveKind.T2) }
         frames(OPEN_FRAMES)
         assertFalse(app.host.isNp(app.stack.top!!))
         rule.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
@@ -984,7 +984,7 @@ class HostTest {
     fun offNowPlayingTheLyricsSheetNeverOpens() {
         val e = Edit()
         val app = lyricsApp(e)
-        rule.runOnIdle { app.stack.push(MusicEntry(app.stack.entry(), MusicPage.Album(ALBUM)), MoveKind.T2) }
+        rule.runOnIdle { app.stack.push(TestScreen.Music(MusicEntry(app.stack.entry(), MusicPage.Album(ALBUM))), MoveKind.T2) }
         frames(OPEN_FRAMES)
         rule.runOnIdle { app.host.openOffset() }
         frames(2)

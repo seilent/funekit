@@ -6,9 +6,14 @@ import net.seilent.funekit.api.Listing
 import net.seilent.funekit.api.Row
 import net.seilent.funekit.screens.music.Anchor
 import net.seilent.funekit.screens.music.MusicPage
+import net.seilent.funekit.screens.music.PageId
+import net.seilent.funekit.screens.music.PageModel
+import net.seilent.funekit.screens.music.PageModels
 import net.seilent.funekit.screens.music.PushFrom
 import net.seilent.funekit.screens.music.hub.HubState
 import net.seilent.funekit.screens.music.nowplaying.NowPlayingModel
+import net.seilent.funekit.screens.settings.SettingsId
+import net.seilent.funekit.screens.settings.SettingsModel
 
 private const val PUSH_ROW = 3
 private const val ANCHOR_INDEX = 3
@@ -21,6 +26,8 @@ class MusicModels {
     val np = NowPlayingModel()
     var searchQuery = ""
 }
+
+fun pageModels(make: (Long, PageId) -> PageModel): PageModels = PageModels { e, p -> if (p is SettingsId) SettingsModel(e, p) else make(e, p) }
 
 class SavedMusic(val entry: MusicEntry, val pivot: Int, val anchor: Anchor?, val state: List<Any>?)
 

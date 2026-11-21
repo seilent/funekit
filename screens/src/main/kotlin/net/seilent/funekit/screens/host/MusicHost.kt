@@ -30,6 +30,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.IntOffset
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -66,6 +67,7 @@ import net.seilent.funekit.kit.overlay.VolumeLayer
 import net.seilent.funekit.kit.pen64
 import net.seilent.funekit.kit.pxAt
 import net.seilent.funekit.kit.pxSize
+import net.seilent.funekit.kit.rememberChrome
 import net.seilent.funekit.kit.rememberStatusInk
 import net.seilent.funekit.kit.roleStyle
 import net.seilent.funekit.kit.stack.MovePaint
@@ -147,6 +149,17 @@ import net.seilent.funekit.screens.music.overlay.runSheet
 import net.seilent.funekit.screens.music.overlay.sheetItems
 import net.seilent.funekit.screens.music.pivotBy
 import net.seilent.funekit.screens.music.queue.QueueModel
+import net.seilent.funekit.screens.settings.SettingFlag
+import net.seilent.funekit.screens.settings.SettingKind
+import net.seilent.funekit.screens.settings.SettingPivot
+import net.seilent.funekit.screens.settings.SettingRow
+import net.seilent.funekit.screens.settings.SettingSheet
+import net.seilent.funekit.screens.settings.SettingsId
+import net.seilent.funekit.screens.settings.SettingsLayer
+import net.seilent.funekit.screens.settings.SettingsModel
+import net.seilent.funekit.screens.settings.SettingsPage
+import net.seilent.funekit.screens.settings.settingsChrome
+import net.seilent.funekit.screens.settings.valueSheet
 
 private const val OVER = 1
 private const val LEAD_MS = 17L
@@ -242,6 +255,12 @@ class MusicHost<S : Any> internal constructor(
     private var offsetEntry = false
     private var offsetWant by mutableStateOf(false)
     private val volSets = mutableListOf<Int>()
+    private var settingsRead: Map<SettingsId, List<SettingPivot>> = emptyMap()
+    private var menuOpens = 0
+    private var edit: Pair<Overlay, SettingsModel>? = null
+    private var editGone: Overlay? = null
+    private var liftOver: Overlay? = null
+    private var liftModel: SettingsModel? = null
     private val infoRole = Role(Roles.dialogItem.size, Roles.dialogItem.weight, Case.Mixed, Roles.dialogItem.alpha, Roles.dialogItem.tracking)
     val popKind: (Turn<S>) -> MoveKind = { t -> pop(t) ?: appPop(t) }
 
@@ -267,6 +286,7 @@ class MusicHost<S : Any> internal constructor(
         navGround: NavGround,
         split: NpSplit?,
         view: View,
+        settingsRead: Map<SettingsId, List<SettingPivot>>,
     ) {
         this.app = app
         this.env = env
@@ -281,6 +301,7 @@ class MusicHost<S : Any> internal constructor(
         this.navGround = navGround
         this.split = split
         this.view = view
+        this.settingsRead = settingsRead
         hud.board = env.np.board
         hud.w = env.np.w
         hud.h = env.np.h
@@ -289,11 +310,16 @@ class MusicHost<S : Any> internal constructor(
 
     fun applied() {
         types.retain(models)
+        for (e in models.entries) {
+            val m = models[e] as? SettingsModel ?: continue
+            m.pivots = settingsRead.listed(m.id)
+        }
+        editEnd()
         val key = scaleKey(env.page)
         if (scaleAt != key) {
             scaleAt = key
             stack.touch()
-            stack.overlay?.takeIf { it.kind == OverKind.Sheet || it.kind == OverKind.Dlg }?.let { frameMenu(menuHost.menu, env.page, menuHost.lift) { app.liftRow(stack.top) } }
+            stack.overlay?.takeIf { it.kind == OverKind.Sheet || it.kind == OverKind.Dlg }?.let { frameMenu(menuHost.menu, env.page, menuHost.lift) { liftRow(stack.top) } }
         }
         if (splitAt !== split) {
             splitAt = split
@@ -307,7 +333,20 @@ class MusicHost<S : Any> internal constructor(
 
     private fun entryOf(s: S?): MusicEntry? = s?.let(app::music)
 
-    private fun modelOf(s: S?): PageModel? = entryOf(s)?.let { models[it.entry] }
+    private fun pageEntry(s: S?): Long? = s?.let { entryOf(it)?.entry ?: app.settings(it)?.entry }
+
+    private fun modelOf(s: S?): PageModel? = pageEntry(s)?.let { models[it] }
+
+    private fun settingsOf(s: S?): SettingsModel? = s?.let(app::settings)?.let { models[it.entry] as? SettingsModel }
+
+    private fun <T> Map<SettingsId, T>.listed(id: SettingsId): T = requireNotNull(this[id]) { "a settings model takes the rows of a listed page" }
+
+    private fun settingsPage(id: SettingsId): SettingsPage = requireNotNull(app.settingsPages.firstOrNull { it.id == id }) { "a settings screen names a listed page" }
+
+    private fun liftRow(top: S?): Int? {
+        val m = settingsOf(top) ?: return app.liftRow(top)
+        return m.takeIf { it.rows(it.pivot).isNotEmpty() }?.let { it.heights(it.pivot)[it.focusRow(it.pivot)] }
+    }
 
     private fun hubOf(s: S?): HubModel? = modelOf(s) as? HubModel
 
@@ -331,24 +370,34 @@ class MusicHost<S : Any> internal constructor(
 
     private fun thumbOf(s: S): PageThumb? = types.thumb(modelOf(s))
 
-    private fun pop(t: Turn<S>): MoveKind? =
-        musicPopKind(t, app::music, models, app::homeHas)?.also { if (it == MoveKind.T8) movePaint.npForm = npCloseForm(t.to == null, app.homeFront()) }
+    private fun pop(t: Turn<S>): MoveKind? {
+        t.from?.let(app::settings)?.let { sc -> return if (t.to != null) MoveKind.T4 else if (app.homeHas(sc.id.header)) MoveKind.T4h else MoveKind.T4n }
+        return musicPopKind(t, app::music, models, app::homeHas)?.also { if (it == MoveKind.T8) movePaint.npForm = npCloseForm(t.to == null, app.homeFront()) }
+    }
 
     fun ready(s: S): Boolean? {
-        val e = entryOf(s) ?: return null
+        val e = entryOf(s) ?: return app.settings(s)?.let { models[it.entry]?.ready ?: true }
         return if (e.page == MusicPage.NowPlaying) npReady() else models[e.entry]?.ready ?: true
     }
 
     fun enter(s: S) {
-        val e = entryOf(s) ?: return
-        types.enter(models.enter(e.entry, e.page), e)
+        val e = entryOf(s)
+        if (e != null) {
+            types.enter(models.enter(e.entry, e.page), e)
+            return
+        }
+        val sc = app.settings(s) ?: return
+        val page = settingsPage(sc.id)
+        val m = models.enter(sc.entry, sc.id)
+        require(m is SettingsModel) { "a settings page takes a settings model, pageModels builds one" }
+        m.pivots = page.rows.pivots.value
     }
 
     fun drop(s: S) {
-        entryOf(s)?.let { models.drop(it.entry) }
+        pageEntry(s)?.let { models.drop(it) }
     }
 
-    fun kind(s: S): PageKind? = entryOf(s)?.let { models[it.entry]?.kind ?: PageKind.Plain }
+    fun kind(s: S): PageKind? = pageEntry(s)?.let { models[it]?.kind ?: PageKind.Plain }
 
     fun pageBack(s: S): Boolean = entryOf(s) != null && ((isNp(s) && npBack()) || types.back(modelOf(s)))
 
@@ -379,9 +428,8 @@ class MusicHost<S : Any> internal constructor(
     }
 
     fun side(s: S): PagePaint? {
-        val e = entryOf(s) ?: return null
-        if (e.page == MusicPage.NowPlaying) return NpPaint(npGeo, np, npHalves.zip(npHalfInks), { np.art }, env.accent) { npHides }
-        return types.side(models[e.entry])
+        if (entryOf(s)?.page == MusicPage.NowPlaying) return NpPaint(npGeo, np, npHalves.zip(npHalfInks), { np.art }, env.accent) { npHides }
+        return types.side(modelOf(s))
     }
 
     fun pivot(s: S?): Pair<PivotPage, Chrome>? = types.pivot(modelOf(s))
@@ -400,6 +448,7 @@ class MusicHost<S : Any> internal constructor(
 
     fun down() {
         hubOf(stack.top)?.stopAim()
+        settingsOf(stack.top)?.stopAim()
     }
 
     fun up(t: Long, upX: Float?) {
@@ -410,6 +459,7 @@ class MusicHost<S : Any> internal constructor(
             it.jump.fade.release(t)
         }
         queueOf(stack.top)?.fade?.release(t)
+        settingsOf(stack.top)?.fade?.release(t)
         menuHost.menu.held = false
         menuHost.menu.fade.release(t)
     }
@@ -465,7 +515,7 @@ class MusicHost<S : Any> internal constructor(
         menu.open(form, title, items, now(), readOnly, mixedRow, lead = lead, confirm = confirm)
         setup(menu)
         menuHost.lift = lift
-        frameMenu(menu, env.page, lift) { app.liftRow(stack.top) }
+        frameMenu(menu, env.page, lift) { liftRow(stack.top) }
         menuHost.act = act
         menuHost.hold = hold
         menuHost.scrim = scrim
@@ -473,8 +523,51 @@ class MusicHost<S : Any> internal constructor(
         val at = stack.clock
         menuOvers.retainAll { it.first === stack.overlay || it.second == at }
         menuOvers += o to at
+        menuOpens++
         stack.open(o)
         return o
+    }
+
+    fun openSheet(sheet: SettingSheet, pick: (Int) -> Boolean): Overlay {
+        val o = openMenu(sheet.form, sheet.title, sheet.items, sheet.readOnly, sheet.mixedRow, sheet.lead, sheet.confirm, pick, sheet.lift) { menu ->
+            if (sheet.focus >= 0) menu.value(sheet.focus, sheet.mark, sheet.wrap, now())
+            if (sheet.values.isNotEmpty()) menu.cells(sheet.values, sheet.mixed, -1)
+        }
+        val m = settingsOf(stack.top)
+        m?.edit(sheet.edit?.takeIf { sheet.focus >= 0 }, sheet.lift)
+        edit = m?.let { o to it }
+        return o
+    }
+
+    fun closing(o: Overlay) {
+        if (o !== liftOver) return
+        liftModel?.drop(minOf(o.dur().toFloat(), Tok.motion_scroll))
+        liftModel?.poke()
+    }
+
+    internal fun settingsTap(m: SettingsModel, row: SettingRow) {
+        val rows = settingsPage(m.id).rows
+        if (rows.open(row)) return
+        if (row.kind == SettingKind.Action) {
+            rows.action(row.key)
+            return
+        }
+        if (!row.editable || row.words.isEmpty()) return
+        openSheet(valueSheet(row)) { i ->
+            val n = row.values.size
+            val v = row.values.getOrNull(if (row.kind == SettingKind.Steps) n - 1 - i else i) ?: return@openSheet true
+            val opens = menuOpens
+            scope.launch(FailFast, CoroutineStart.UNDISPATCHED) { rows.set(row.key, listOf(v)) }
+            menuOpens == opens
+        }
+    }
+
+    private fun editEnd() {
+        val (o, m) = edit ?: return
+        val k = m.editing ?: return
+        if (m.groups.any { p -> p.rows.any { it.key == k && SettingFlag.ReadOnly !in it.flags } }) return
+        edit = null
+        if (stack.overlay === o) stack.close() else if (menuOvers.any { it.first === o }) editGone = o
     }
 
     fun openJump(owner: S) {
@@ -520,8 +613,8 @@ class MusicHost<S : Any> internal constructor(
         if (o != null && o !== volumeOverlay) return
         if (o == null) {
             val top = stack.top
-            val e = entryOf(top)
-            if (e != null) models[e.entry]?.lists?.forEach { it.cancel() } else app.cancel(top)
+            val e = pageEntry(top)
+            if (e != null) models[e]?.lists?.forEach { it.cancel() } else app.cancel(top)
             toast.cancel(t)
             stack.open(volumeOverlay, hides = false, covers = false)
         }
@@ -965,6 +1058,51 @@ class MusicHost<S : Any> internal constructor(
             val l = colFire(h, stack.top == sc, stack.phase == Phase.Rest, stack.overlay != null)
             if (l >= 0) pushCol(l, true)
         }
+        LaunchedEffect(stack) {
+            snapshotFlow { stack.overlay }.collect { o ->
+                if (o == null || o !== editGone) return@collect
+                editGone = null
+                stack.close()
+            }
+        }
+        LaunchedEffect(stack) {
+            snapshotFlow { Triple(stack.overlay, menuHost.menu.panelTop, stack.top) }.collect { (o, panel, top) ->
+                val sm = settingsOf(top)
+                if (o == null) {
+                    if (liftOver != null) {
+                        liftModel?.drop(Tok.motion_scroll)
+                        liftModel?.endEdit()
+                        liftModel?.poke()
+                    }
+                    liftOver = null
+                    liftModel = null
+                } else if (sm != null && o !== liftOver && panel >= 0) {
+                    liftOver = o
+                    liftModel = sm
+                    val pg = env.page
+                    if (sm.lift(px(pg.board.page_contentTop, pg.ppu), panel - px(Tok.gutter, pg.ppu), menuHost.menu.kept) && !o.closing) o.open(now() + Tok.motion_scroll.toLong())
+                    sm.poke()
+                }
+            }
+        }
+    }
+
+    @Composable
+    fun SettingsPages(pages: Map<S, Shown>) {
+        val rest = stack.phase == Phase.Rest
+        for ((sc, sh) in pages) {
+            val m = settingsOf(sc) ?: continue
+            val type = types.settings
+            key(m.entry) {
+                SettingsLayer(
+                    m, type.drawOf(m), type.chromes.listed(m.id), env.a, env.bands, env.now,
+                    live = rest && stack.top == sc, visible = sh.visible, frozen = sh.frozen, snap = stack.snap,
+                    onBack = { stack.back(popKind) },
+                    onTap = { r -> settingsTap(m, r) },
+                    leavesLit = { stack.moving },
+                )
+            }
+        }
     }
 
     @Composable
@@ -990,7 +1128,7 @@ class MusicHost<S : Any> internal constructor(
                 continue
             }
             val pm = models[e.entry]
-            val type = types.of(pm) ?: continue
+            val type = types.musicOf(pm) ?: continue
             key(e.entry) {
                 type.LayerOf(e, pm, src, PageAt(rest && stack.top == sc, sh.visible, sh.frozen, stack.hideFocus, stack.snap, stack.covered) { stack.moving }, this)
             }
@@ -1363,9 +1501,18 @@ fun <S : Any> rememberMusicHost(
     val feed = NowPlayingFeed(np, npHalves.holding(NpPart.Art).g, src, phone) { SystemClock.uptimeMillis() }
     val npHalfInks = remember(npHalves, env.measurer, env.fonts, env.density, env.covers) { npHalves.map { NpInks(NpMeasure(it.g, env.measurer, env.fonts, env.density, env.covers), np) } }
     val types = rememberMusicTypes(env, app::homeItem)
+    val settings = app.settingsPages.associate { page ->
+        key(page.id) {
+            val pivots = page.rows.pivots.value
+            val names = remember(pivots) { pivots.map { it.name } }
+            val c = rememberChrome(env.page, page.id.header, names)
+            page.id to (pivots to remember(c, page.look) { settingsChrome(c, page.look) })
+        }
+    }
+    types.settings.chromes = settings.mapValues { it.value.second }
     val navGround = remember(env.bands, env.accent) { NavGround(env.bands, env.accent) }
     val host = remember { MusicHost(music, models, toast, jump, menuHost, movePaint, scope, app, env, src, volume, types, npGeo, npHalves, npHalfInks, navGround, split, view) }
-    host.update(app, env, src, volume, types, phone, feed, npGeo, npHalves, npHalfInks, navGround, split, view)
+    host.update(app, env, src, volume, types, phone, feed, npGeo, npHalves, npHalfInks, navGround, split, view, settings.mapValues { it.value.first })
     return host
 }
 

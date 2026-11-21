@@ -6,6 +6,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import net.seilent.funekit.screens.music.nowplaying.NpPicture
 import net.seilent.funekit.screens.music.nowplaying.OffsetEdit
 import net.seilent.funekit.screens.music.nowplaying.PhoneTrack
+import net.seilent.funekit.screens.settings.SettingsPage
+import net.seilent.funekit.screens.settings.SettingsScreen
 
 class PhoneSession(val track: PhoneTrack, val toggle: () -> Unit, val skip: (Int) -> Unit)
 
@@ -26,7 +28,7 @@ interface MusicApp<S : Any> {
 
     fun homeFront(): Boolean
 
-    fun liftRow(top: S?): Int?
+    fun liftRow(top: S?): Int? = null
 
     fun cancel(top: S?)
 
@@ -37,6 +39,10 @@ interface MusicApp<S : Any> {
     val lyricsView: Boolean get() = false
 
     fun offset(track: Long): OffsetEdit? = null
+
+    fun settings(s: S): SettingsScreen? = null
+
+    val settingsPages: List<SettingsPage> get() = emptyList()
 }
 
 interface VolumeLevel {
