@@ -2,12 +2,16 @@ package net.seilent.funekit.artist
 
 import java.io.ByteArrayOutputStream
 import java.io.IOException
+import java.io.PushbackInputStream
 import java.net.HttpURLConnection
 import java.net.SocketTimeoutException
 import java.net.URI
 import java.net.URLEncoder
+import java.util.zip.GZIPInputStream
 
 class HttpDenied(val code: Int, url: String) : IOException("http $code: $url")
+
+class HttpTooBig(val maxBytes: Int, url: String) : IOException("body over $maxBytes bytes: $url")
 
 class HttpTimeout : SocketTimeoutException("read timed out")
 
@@ -15,8 +19,13 @@ class Response(val code: Int, val body: ByteArray, val headers: Map<String, Stri
     val text: String get() = String(body, Charsets.UTF_8)
 }
 
+data class Fetch(val maxBytes: Int? = null, val redirects: Boolean = true)
+
 fun interface Http {
     fun get(url: String, headers: Map<String, String>): Response
+
+    fun get(url: String, headers: Map<String, String>, fetch: Fetch): Response =
+        if (fetch == Fetch()) get(url, headers) else throw IOException("no fetch options: $url")
 
     fun post(url: String, headers: Map<String, String>, body: ByteArray): Response = throw IOException("no post: $url")
 
@@ -26,6 +35,9 @@ fun interface Http {
         sink(r.code, r.body, r.body.size)
         return Response(r.code, ByteArray(0), r.headers)
     }
+
+    fun download(url: String, headers: Map<String, String>, fetch: Fetch, sink: (Int, ByteArray, Int) -> Boolean): Response =
+        if (fetch == Fetch()) download(url, headers, sink) else throw IOException("no fetch options: $url")
 }
 
 class HttpRun(private val onCall: (String) -> Unit = {}) {
@@ -95,13 +107,21 @@ class HttpRun(private val onCall: (String) -> Unit = {}) {
 }
 
 class UrlHttp(private val maxBytes: Int = 16 shl 20, private val timeoutMs: Int = 15_000) : Http {
-    override fun get(url: String, headers: Map<String, String>): Response = send(url, headers, null)
+    override fun get(url: String, headers: Map<String, String>): Response = send(url, headers, null, Fetch())
 
-    override fun post(url: String, headers: Map<String, String>, body: ByteArray): Response = send(url, headers, body)
+    override fun get(url: String, headers: Map<String, String>, fetch: Fetch): Response = send(url, headers, null, fetch)
 
-    override fun download(url: String, headers: Map<String, String>, sink: (Int, ByteArray, Int) -> Boolean): Response = send(url, headers, null, sink)
+    override fun post(url: String, headers: Map<String, String>, body: ByteArray): Response = send(url, headers, body, Fetch())
 
-    private fun send(url: String, headers: Map<String, String>, body: ByteArray?, sink: ((Int, ByteArray, Int) -> Boolean)? = null): Response {
+    override fun download(url: String, headers: Map<String, String>, sink: (Int, ByteArray, Int) -> Boolean): Response = send(url, headers, null, Fetch(), sink)
+
+    override fun download(url: String, headers: Map<String, String>, fetch: Fetch, sink: (Int, ByteArray, Int) -> Boolean): Response = send(url, headers, null, fetch, sink)
+
+    private fun send(url: String, headers: Map<String, String>, body: ByteArray?, fetch: Fetch, sink: ((Int, ByteArray, Int) -> Boolean)? = null): Response {
+        val cap = fetch.maxBytes
+        val accept = headers.entries.firstOrNull { it.key.equals("Accept-Encoding", ignoreCase = true) }?.value
+        require(cap == null || accept == null || accept == "identity") { "Accept-Encoding $accept on a capped call: $url" }
+        val limit = cap ?: maxBytes
         val run = HttpRun.current()
         val c = open(URI(url))
         run?.add(c)
@@ -109,8 +129,9 @@ class UrlHttp(private val maxBytes: Int = 16 shl 20, private val timeoutMs: Int 
         try {
             c.connectTimeout = timeoutMs
             c.readTimeout = timeoutMs
-            c.instanceFollowRedirects = true
+            c.instanceFollowRedirects = fetch.redirects
             headers.forEach { (k, v) -> c.setRequestProperty(k, v) }
+            if (cap != null && accept == null) c.setRequestProperty("Accept-Encoding", "gzip")
             if (body != null) {
                 c.requestMethod = "POST"
                 c.doOutput = true
@@ -120,23 +141,40 @@ class UrlHttp(private val maxBytes: Int = 16 shl 20, private val timeoutMs: Int 
             connected = true
             if (body != null) c.outputStream.use { it.write(body) }
             val code = c.responseCode
+            val encoding = if (cap == null) null else c.contentEncoding?.lowercase()
+            if (encoding != null && encoding != "gzip" && encoding != "identity") throw IOException("content encoding $encoding: $url")
+            var inflated = false
             val out = ByteArrayOutputStream()
-            (if (code >= 400) c.errorStream else c.inputStream)?.use { input ->
-                val buf = ByteArray(16384)
-                while (true) {
-                    val n = input.read(buf)
-                    if (n < 0) break
-                    if (sink != null && code in 200..299) {
-                        if (run?.cancelled == true) throw IOException("cancelled")
-                        if (!sink(code, buf, n)) break
-                        continue
+            var given = 0L
+            (if (code >= 400) c.errorStream else c.inputStream)?.use { raw ->
+                val stream = if (encoding == "gzip" && code != 204 && code != 304) {
+                    val peek = PushbackInputStream(raw, 1)
+                    val first = peek.read()
+                    if (first >= 0) peek.unread(first)
+                    inflated = first >= 0
+                    if (inflated) GZIPInputStream(peek) else peek
+                } else {
+                    raw
+                }
+                stream.use { input ->
+                    val buf = ByteArray(16384)
+                    while (true) {
+                        val n = input.read(buf)
+                        if (n < 0) break
+                        if (sink != null && code in 200..299) {
+                            if (run?.cancelled == true) throw IOException("cancelled")
+                            if (cap != null && given + n > cap) throw HttpTooBig(cap, url)
+                            given += n
+                            if (!sink(code, buf, n)) break
+                            continue
+                        }
+                        if (out.size() + n > limit) throw HttpTooBig(limit, url)
+                        out.write(buf, 0, n)
                     }
-                    if (out.size() + n > maxBytes) throw IOException("body over $maxBytes bytes: $url")
-                    out.write(buf, 0, n)
                 }
             }
             val h = c.headerFields.filterKeys { it != null }.mapKeys { it.key.lowercase() }.mapValues { it.value.firstOrNull() ?: "" }
-            return Response(code, out.toByteArray(), h)
+            return Response(code, out.toByteArray(), if (inflated) h - "content-encoding" - "content-length" else h)
         } catch (e: SocketTimeoutException) {
             throw if (connected) HttpTimeout() else e
         } finally {
@@ -180,7 +218,7 @@ class Api(
     fun download(url: String, maxBytes: Int, stop: (ByteArray, Int) -> Boolean): Response? = send(url) { u ->
         val out = Body()
         val r = http.download(u, mapOf("User-Agent" to userAgent)) { _, buf, n ->
-            if (out.size() + n > maxBytes) throw IOException("body over $maxBytes bytes: $u")
+            if (out.size() + n > maxBytes) throw HttpTooBig(maxBytes, u)
             out.write(buf, 0, n)
             !stop(out.bytes, out.size())
         }
