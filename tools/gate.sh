@@ -83,9 +83,9 @@ gradle_leg() {
 shots_leg() {
     local unit=0 rc=0 ink=0
     python3 tools/inkband_test.py || unit=$?
-    gradlew "$root" :kit:testDebugUnitTest --tests '*Sheet*' --rerun || rc=$?
+    gradlew "$root" :kit:testDebugUnitTest --tests '*Sheet*' --rerun :screens:testDebugUnitTest --tests '*Sheet*' --rerun || rc=$?
     python3 tools/inkband.py --ref "$FUNEOS_REF" --tokens tokens/funeos/player/ui/tokens.txt --allow tools/inkband-allow.txt \
-        --k3 k3.txt --report kit/build/sheets/inkband.txt kit/build/sheets || ink=$?
+        --k3 k3.txt --report kit/build/sheets/inkband.txt kit/build/sheets screens/build/sheets || ink=$?
     rc=$((rc > ink ? rc : ink))
     return $((rc > unit ? rc : unit))
 }
@@ -149,12 +149,12 @@ shots_cand_leg() {
         fi
     done
     local rc=0
-    gradlew "$dir" :kit:testDebugUnitTest --tests '*Sheet*' --rerun || rc=$?
+    gradlew "$dir" :kit:testDebugUnitTest --tests '*Sheet*' --rerun :screens:testDebugUnitTest --tests '*Sheet*' --rerun || rc=$?
     echo "shots-cand: render rc=$rc"
     mkdir -p "$root/kit/build/sheets-cand"
     python3 "$dir/tools/inkband.py" --ref "$FUNEOS_REF" --tokens "$dir/tokens/funeos/player/ui/tokens.txt" \
         --allow "$dir/tools/inkband-allow.txt" --k3 "$dir/k3.txt" --report "$root/kit/build/sheets-cand/inkband.txt" \
-        "$dir/kit/build/sheets" || true
+        "$dir/kit/build/sheets" "$dir/screens/build/sheets" || true
     return "$rc"
 }
 
