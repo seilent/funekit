@@ -559,10 +559,10 @@ class MusicHost<S : Any> internal constructor(
             VolumeHud.Act.Volume -> {
                 val n = volume.maxPct()?.let { minOf(hud.number, it) } ?: hud.number
                 scope.launch(FailFast) {
-                    val was = volume.percent()
                     quiet { volume.set(n) } ?: return@launch
-                    hud.took(volume.percent())
-                    if (volume.percent() != was) openVolume(now())
+                    val p = volume.percent()
+                    hud.took(p)
+                    if (p != hud.percent) openVolume(now())
                 }
             }
             VolumeHud.Act.Seek -> volSeek()

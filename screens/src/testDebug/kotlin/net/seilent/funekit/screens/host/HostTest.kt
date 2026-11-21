@@ -53,6 +53,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -65,6 +66,7 @@ class HostTest {
     private val window = Window(W, H, SDK, none, none, none, none, none)
     private val page = scale(window, Nav.None, Surface.Page, false)
     private val np = scale(window, Nav.None, Surface.NowPlaying, false)
+    private val hudAt = Offset(Tok.canvasW / 2 * np.ppu + (np.left - page.left), MID_U * np.ppu)
 
     private class Level(var pct: Int, private val cap: Int?) : VolumeLevel {
         val sets = mutableListOf<Int>()
@@ -112,6 +114,53 @@ class HostTest {
         override fun maxPct(): Int? = cap
     }
 
+    private class FifoLevel(var pct: Int) : VolumeLevel {
+        val sets = mutableListOf<Int>()
+        val waits = ArrayDeque<Pair<Int, CompletableDeferred<Unit>>>()
+
+        override fun percent(): Int = pct
+
+        override fun stepPct(): Int = STEP
+
+        override suspend fun step(detents: Int) {
+            pct = (pct + detents * STEP).coerceIn(0, PCT)
+        }
+
+        override suspend fun set(pct: Int) {
+            sets += pct
+            val d = CompletableDeferred<Unit>()
+            waits += pct to d
+            d.await()
+        }
+
+        fun land() {
+            val (p, d) = waits.removeFirst()
+            pct = p
+            d.complete(Unit)
+        }
+    }
+
+    private class GridLevel(var index: Int) : VolumeLevel {
+        val sets = mutableListOf<Int>()
+        val waits = mutableListOf<CompletableDeferred<Unit>>()
+
+        override fun percent(): Int = (PCT * index.toFloat() / GRID).roundToInt()
+
+        override fun stepPct(): Int = (PCT + GRID - 1) / GRID
+
+        override suspend fun step(detents: Int) {
+            index = (index + detents).coerceIn(0, GRID)
+        }
+
+        override suspend fun set(pct: Int) {
+            sets += pct
+            val d = CompletableDeferred<Unit>()
+            waits += d
+            d.await()
+            index = (pct * GRID.toFloat() / PCT).roundToInt()
+        }
+    }
+
     private fun app(level: VolumeLevel) = TestApp(page, np, null, level) { rule.mainClock.currentTime }.also {
         it.compose(rule)
         rule.waitForIdle()
@@ -134,11 +183,20 @@ class HostTest {
     }
 
     private fun dragUp() {
-        val x = Tok.canvasW / 2 * np.ppu + (np.left - page.left)
-        val y = MID_U * np.ppu
         rule.onRoot().performTouchInput {
-            down(Offset(x, y))
+            down(hudAt)
             repeat(STEPS) { moveBy(Offset(0f, -DRAG_PX / STEPS)) }
+            up()
+        }
+        frames(OPEN_FRAMES)
+    }
+
+    private fun dragBy(step: Int, vararg strides: Int) {
+        val stride = np.board.vol_slideStride / step * np.ppu
+        rule.onRoot().performTouchInput {
+            down(hudAt)
+            moveBy(Offset(0f, -2 * Tok.touchSlop * np.ppu))
+            strides.forEach { moveBy(Offset(0f, -it * stride)) }
             up()
         }
         frames(OPEN_FRAMES)
@@ -183,6 +241,57 @@ class HostTest {
         assertTrue("premise: every set asked past the device's number", level.sets.all { it > START })
         assertEquals("premise: the device keeps its number", START, level.pct)
         assertEquals("the plate shows the device's number", START, app.host.hud.percent)
+    }
+
+    @Test
+    fun twoSetsInFlightThatTheDeviceAppliesInSendOrderLeaveThePlateOnTheLevel() {
+        val level = FifoLevel(START)
+        val app = app(level)
+        rule.runOnIdle { app.host.openVolume(rule.mainClock.currentTime) }
+        frames(OPEN_FRAMES)
+        dragBy(STEP, 1, -1)
+        assertEquals("premise: the drag sends one stride up, then one back", listOf(START + 1, START), level.sets)
+        assertEquals("premise: both sets wait for the device", level.sets.size, level.waits.size)
+        assertEquals("premise: the level holds its number", START, level.pct)
+        assertEquals("premise: the plate keeps the level's number while the sets wait", START, app.host.hud.percent)
+        rule.runOnIdle { level.land() }
+        frames(OPEN_FRAMES)
+        assertEquals("premise: the first set lands", START + 1, level.pct)
+        assertEquals("premise: the plate shows the first set once it lands", START + 1, app.host.hud.percent)
+        val t = rule.mainClock.currentTime
+        assertEquals("premise: the hud is up", OverKind.Volume, app.stack.overlay?.kind)
+        assertTrue("premise: the hud is up and not closing", app.host.hud.visible(t) && !app.host.hud.closing(t))
+        rule.runOnIdle { level.land() }
+        frames(OPEN_FRAMES)
+        assertEquals("premise: the level lands on the last set", START, level.pct)
+        assertEquals("the plate shows the level once the last set lands", level.pct, app.host.hud.percent)
+    }
+
+    @Test
+    fun aLevelOnACoarseGridShowsNothingForASetThatHoldsItsStepAndItsOwnPercentForASetThatMovesIt() {
+        val level = GridLevel(GRID_AT)
+        val app = app(level)
+        rule.runOnIdle { app.host.openVolume(rule.mainClock.currentTime) }
+        frames(OPEN_FRAMES)
+        val held = level.percent()
+        dragBy(level.stepPct(), 1)
+        assertEquals("premise: the drag sends one stride up", listOf(held + 1), level.sets)
+        assertEquals("premise: the set waits for the device", 1, level.waits.size)
+        assertEquals("premise: the plate shows the level", held, app.host.hud.percent)
+        val rev = app.host.hud.revision
+        rule.runOnIdle { level.waits.last().complete(Unit) }
+        frames(OPEN_FRAMES)
+        assertEquals("premise: the set holds the grid step", held, level.percent())
+        assertEquals("a set that holds the grid step leaves the plate's number", held, app.host.hud.percent)
+        assertEquals("a set that holds the grid step shows nothing", rev, app.host.hud.revision)
+        dragBy(level.stepPct(), GRID_STRIDES)
+        val n = level.sets.last()
+        assertEquals("premise: the second drag sends one set", 2, level.sets.size)
+        rule.runOnIdle { level.waits.last().complete(Unit) }
+        frames(OPEN_FRAMES)
+        assertTrue("premise: the set moves the grid step, ${level.percent()} from $held", level.percent() > held)
+        assertTrue("premise: the dragged number $n is off the grid", n != level.percent())
+        assertEquals("the plate shows the grid percent, never the dragged $n", level.percent(), app.host.hud.percent)
     }
 
     @Test
@@ -938,6 +1047,9 @@ class HostTest {
         private const val STEP = 10
         private const val START = 50
         private const val CAP = 60
+        private const val GRID = 15
+        private const val GRID_AT = 7
+        private const val GRID_STRIDES = 4
         private const val MID_U = 300f
         private const val DRAG_PX = 600f
         private const val STEPS = 10
