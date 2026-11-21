@@ -293,6 +293,11 @@ class SettingsModel(entry: Long, page: SettingsId) : PivotPage(entry, page) {
         }
     }
 
+    internal fun openAt(name: String) {
+        held = name
+        resync()
+    }
+
     fun focusRow(p: Int): Int {
         val pn = pane(p)
         val rows = rows(p)

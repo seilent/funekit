@@ -169,6 +169,8 @@ class SettingsHostTest {
 
     private fun pivot(vararg rows: SettingRow) = listOf(SettingPivot(OUT, rows.toList()))
 
+    private fun named(vararg names: String) = names.map { SettingPivot(it, listOf(choice(it))) }
+
     private fun app(vararg pages: SettingsPage, root: Boolean = false) = TestApp(page, page, null, StillLevel) { rule.mainClock.currentTime }.also {
         it.settingsList = pages.toList()
         it.compose(rule, root)
@@ -183,8 +185,8 @@ class SettingsHostTest {
         rule.mainClock.advanceTimeByFrame()
     }
 
-    private fun open(app: TestApp, id: SettingsId = ID): Pair<TestScreen, SettingsModel> {
-        val sc = TestScreen.Settings(app.stack.entry(), id)
+    private fun open(app: TestApp, id: SettingsId = ID, pivot: String? = null): Pair<TestScreen, SettingsModel> {
+        val sc = TestScreen.Settings(app.stack.entry(), id, pivot)
         rule.runOnIdle { app.stack.reset(listOf(sc)) }
         frames(OPEN_FRAMES)
         val m = app.models[sc.entry] as SettingsModel
@@ -270,6 +272,13 @@ class SettingsHostTest {
     }
 
     @Test
+    fun aPageListedTwiceFailsTheListing() {
+        val failed = runCatching { app(SettingsPage(ID, Rows(pivot(choice("a"))), HeaderLook.Settings), SettingsPage(ID, Rows(pivot(choice("b"))), HeaderLook.Page)) }.exceptionOrNull()
+        assertTrue("the listing fails, $failed", failed is IllegalArgumentException)
+        assertEquals("a settings page is listed once", failed?.message)
+    }
+
+    @Test
     fun aPageListedAheadOfAPageKeepsTheLattersChromeAndItsPivot() {
         val b = SettingsPage(ID, Rows(listOf(SettingPivot(OUT, listOf(choice("a"))), SettingPivot(SYS, listOf(choice("b"))))), HeaderLook.Settings)
         val app = app(b)
@@ -281,6 +290,64 @@ class SettingsHostTest {
         val kept = app.host.types.settings.chromes.getValue(ID)
         assertSame(c, kept)
         assertEquals(1, kept.active)
+    }
+
+    @Test
+    fun aScreenOpensAtItsPivot() {
+        val app = app(SettingsPage(ID, Rows(named(OUT, SYS, LIB)), HeaderLook.Settings), root = true)
+        val (_, m) = open(app, pivot = SYS)
+        assertEquals("the page opens at its pivot", 1, m.pivot)
+        assertEquals("the chrome shows the pivot", 1, app.host.types.settings.chromes.getValue(ID).active)
+    }
+
+    @Test
+    fun aPivotTheRowsDoNotNameOpensTheFirstUntilTheyNameIt() {
+        val rows = Rows(named(OUT, SYS))
+        val app = app(SettingsPage(ID, rows, HeaderLook.Settings))
+        val (_, m) = open(app, pivot = LIB)
+        assertEquals("the page opens at the first pivot", 0, m.pivot)
+        rule.runOnIdle { rows.pivots.value = named(OUT, SYS, LIB) }
+        frames(RESIZE_FRAMES)
+        assertEquals("the rows that name the pivot move the page there", 2, m.pivot)
+    }
+
+    @Test
+    fun aSwitchBeforeTheRowsNameTheOpenPivotKeepsTheSwitchedPivot() {
+        val rows = Rows(named(OUT, SYS))
+        val app = app(SettingsPage(ID, rows, HeaderLook.Settings))
+        val (_, m) = open(app, pivot = LIB)
+        rule.runOnIdle { m.switchTo(1, rule.mainClock.currentTime) }
+        frames(OPEN_FRAMES)
+        assertEquals("premise: the switch lands", 1, m.pivot)
+        rule.runOnIdle { rows.pivots.value = named(OUT, SYS, LIB) }
+        frames(RESIZE_FRAMES)
+        assertEquals("the page stays at the switched pivot", 1, m.pivot)
+    }
+
+    @Test
+    fun aRestoredModelKeepsItsSavedPivotThroughAnEnter() {
+        val app = app(SettingsPage(ID, Rows(named(OUT, SYS, LIB)), HeaderLook.Settings))
+        val sc = TestScreen.Settings(app.stack.entry(), ID, LIB)
+        rule.runOnIdle {
+            app.models.restore(sc.entry, ID, 0, null, listOf(SYS))
+            app.stack.reset(listOf(sc))
+        }
+        frames(OPEN_FRAMES)
+        assertEquals("premise: the settings page is up", sc, app.stack.top)
+        assertEquals("the page keeps its saved pivot", 1, app.models[sc.entry]?.pivot)
+    }
+
+    @Test
+    fun aSecondEnterOfTheSameScreenKeepsTheSwitchedPivot() {
+        val app = app(SettingsPage(ID, Rows(named(OUT, SYS, LIB)), HeaderLook.Settings))
+        val (sc, m) = open(app, pivot = SYS)
+        rule.runOnIdle { m.switchTo(0, rule.mainClock.currentTime) }
+        frames(OPEN_FRAMES)
+        assertEquals("premise: the switch lands", 0, m.pivot)
+        rule.runOnIdle { app.host.enter(sc) }
+        frames(OPEN_FRAMES)
+        assertSame("premise: the model is kept", m, app.models[sc.entry])
+        assertEquals("the page keeps the switched pivot", 0, m.pivot)
     }
 
     @Test

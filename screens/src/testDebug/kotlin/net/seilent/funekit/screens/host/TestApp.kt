@@ -85,7 +85,7 @@ sealed interface TestScreen {
         override val page: PageId get() = music.page
     }
 
-    data class Settings(override val entry: Long, override val page: SettingsId) : TestScreen
+    data class Settings(override val entry: Long, override val page: SettingsId, val pivot: String? = null) : TestScreen
 }
 
 class TestApp(page: Scale, np: Scale, private val src: MusicSource?, private val level: VolumeLevel, private val now: () -> Long) : MusicApp<TestScreen> {
@@ -115,7 +115,7 @@ class TestApp(page: Scale, np: Scale, private val src: MusicSource?, private val
 
     override fun screen(e: MusicEntry): TestScreen = TestScreen.Music(e)
 
-    override fun settings(s: TestScreen): SettingsScreen? = (s as? TestScreen.Settings)?.let { SettingsScreen(it.entry, it.page) }
+    override fun settings(s: TestScreen): SettingsScreen? = (s as? TestScreen.Settings)?.let { SettingsScreen(it.entry, it.page, it.pivot) }
 
     override val settingsPages: List<SettingsPage> get() = settingsList
 

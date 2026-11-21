@@ -25,4 +25,4 @@ interface SettingsRows {
 
 class SettingsPage(val id: SettingsId, val rows: SettingsRows, val look: HeaderLook)
 
-class SettingsScreen(val entry: Long, val id: SettingsId)
+class SettingsScreen(val entry: Long, val id: SettingsId, val pivot: String? = null)

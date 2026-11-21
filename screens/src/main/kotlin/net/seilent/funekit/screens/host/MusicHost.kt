@@ -410,9 +410,11 @@ class MusicHost<S : Any> internal constructor(
         }
         val sc = app.settings(s) ?: return
         val page = settingsPage(sc.id)
+        val was = models[sc.entry]
         val m = models.enter(sc.entry, sc.id)
         require(m is SettingsModel) { "a settings page takes a settings model, pageModels builds one" }
         m.pivots = page.rows.pivots.value
+        if (m !== was) sc.pivot?.let { m.openAt(it) }
     }
 
     fun drop(s: S) {
@@ -1610,7 +1612,9 @@ fun <S : Any> rememberMusicHost(
     val feed = NowPlayingFeed(np, npHalves.holding(NpPart.Art).g, src, phone) { SystemClock.uptimeMillis() }
     val npHalfInks = remember(npHalves, env.measurer, env.fonts, env.density, env.covers) { npHalves.map { NpInks(NpMeasure(it.g, env.measurer, env.fonts, env.density, env.covers), np) } }
     val types = rememberMusicTypes(env, app::homeItem)
-    val settings = app.settingsPages.associate { page ->
+    val pages = app.settingsPages
+    require(pages.distinctBy { it.id }.size == pages.size) { "a settings page is listed once" }
+    val settings = pages.associate { page ->
         key(page.id) {
             val pivots = page.rows.pivots.value
             val names = remember(pivots) { pivots.map { it.name } }
