@@ -10,6 +10,8 @@ interface SettingsRows {
     suspend fun set(key: String, values: List<String>): Boolean
 
     fun action(key: String) {}
+
+    fun draft(key: String, value: String) {}
 }
 
 class SettingsPage(val id: SettingsId, val rows: SettingsRows, val look: HeaderLook)

@@ -555,20 +555,23 @@ class MusicHost<S : Any> internal constructor(
             rows.action(row.key)
             return
         }
-        if (!row.editable || row.words.isEmpty()) return
+        if (!row.editable || row.kind == SettingKind.Range || row.words.isEmpty()) return
         openSheet(valueSheet(row)) { i ->
             val n = row.values.size
             val v = row.values.getOrNull(if (row.kind == SettingKind.Steps) n - 1 - i else i) ?: return@openSheet true
+            if (!writable(m, row.key)) return@openSheet true
             val opens = menuOpens
-            scope.launch(FailFast, CoroutineStart.UNDISPATCHED) { rows.set(row.key, listOf(v)) }
+            if (row.kind == SettingKind.Draft) rows.draft(row.key, v) else scope.launch(FailFast, CoroutineStart.UNDISPATCHED) { rows.set(row.key, listOf(v)) }
             menuOpens == opens
         }
     }
 
+    private fun writable(m: SettingsModel, k: String): Boolean = m.groups.any { p -> p.rows.any { it.key == k && SettingFlag.ReadOnly !in it.flags } }
+
     private fun editEnd() {
         val (o, m) = edit ?: return
         val k = m.editing ?: return
-        if (m.groups.any { p -> p.rows.any { it.key == k && SettingFlag.ReadOnly !in it.flags } }) return
+        if (writable(m, k)) return
         edit = null
         if (stack.overlay === o) stack.close() else if (menuOvers.any { it.first === o }) editGone = o
     }

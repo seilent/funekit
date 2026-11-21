@@ -65,6 +65,7 @@ class SettingsHostTest {
         val opens = mutableListOf<String>()
         val sets = mutableListOf<Map<String, String>>()
         val actions = mutableListOf<String>()
+        val drafts = mutableListOf<Pair<String, String>>()
         var opened: Set<String> = emptySet()
         var onSet: () -> Unit = {}
 
@@ -81,6 +82,10 @@ class SettingsHostTest {
 
         override fun action(key: String) {
             actions += key
+        }
+
+        override fun draft(key: String, value: String) {
+            drafts += key to value
         }
     }
 
@@ -356,6 +361,73 @@ class SettingsHostTest {
         assertTrue("premise: the rows landed", landed)
         assertNull("premise: the sheet was not current when the rows landed", over)
         assertTrue("the sheet of the gone row closes", closed(app))
+    }
+
+    @Test
+    fun aReadOnlyChoiceOpensNoValueSheetAndSendsNothing() {
+        val rows = Rows(pivot(choice("a").copy(flags = setOf(SettingFlag.ReadOnly))))
+        val app = app(SettingsPage(ID, rows, HeaderLook.Settings))
+        val (_, m) = open(app)
+        tap(app, m, 0)
+        assertEquals("premise: the route asks the app first", listOf("a"), rows.opens)
+        assertNull(app.stack.overlay)
+        assertTrue(rows.sets.isEmpty())
+    }
+
+    @Test
+    fun aPickAfterItsRowTurnedReadOnlySendsNothing() {
+        val rows = Rows(pivot(choice("a")))
+        val app = app(SettingsPage(ID, rows, HeaderLook.Settings))
+        val (_, m) = open(app)
+        tap(app, m, 0)
+        rule.runOnIdle { rows.pivots.value = pivot(choice("a").copy(flags = setOf(SettingFlag.ReadOnly))) }
+        frames(RESIZE_FRAMES)
+        assertTrue("premise: the row is read only", SettingFlag.ReadOnly in m.rows(0)[0].flags)
+        assertTrue("the pick closes the menu", rule.runOnIdle { app.menuHost.act(1) })
+        assertTrue("and sends nothing", rows.sets.isEmpty())
+    }
+
+    @Test
+    fun aReadOnlyActionCallsItsAction() {
+        val rows = Rows(pivot(SettingRow("a", "a", "", SettingKind.Action, flags = setOf(SettingFlag.ReadOnly))))
+        val app = app(SettingsPage(ID, rows, HeaderLook.Settings))
+        val (_, m) = open(app)
+        tap(app, m, 0)
+        assertEquals(listOf("a"), rows.actions)
+        assertNull(app.stack.overlay)
+    }
+
+    @Test
+    fun aReadOnlyInfoRowTheAppOpensReachesOpen() {
+        val rows = Rows(pivot(SettingRow("a", "a", NEW, flags = setOf(SettingFlag.ReadOnly)))).also { it.opened = setOf("a") }
+        val app = app(SettingsPage(ID, rows, HeaderLook.Settings))
+        val (_, m) = open(app)
+        tap(app, m, 0)
+        assertEquals(listOf("a"), rows.opens)
+        assertNull(app.stack.overlay)
+    }
+
+    @Test
+    fun aDraftPickSendsADraftAndNoSet() {
+        val rows = Rows(pivot(SettingRow("a", "a", WORDS[0], SettingKind.Draft, values = WORDS, words = WORDS, at = 0)))
+        val app = app(SettingsPage(ID, rows, HeaderLook.Settings))
+        val (_, m) = open(app)
+        tap(app, m, 0)
+        assertEquals("premise: a draft with values opens its value sheet", OverKind.Sheet, app.stack.overlay?.kind)
+        assertTrue(rule.runOnIdle { app.menuHost.act(1) })
+        assertEquals(listOf("a" to WORDS[1]), rows.drafts)
+        assertTrue(rows.sets.isEmpty())
+    }
+
+    @Test
+    fun aRangeRowWithWordsOpensNoValueSheet() {
+        val rows = Rows(pivot(SettingRow("a", "a", WORDS[0], SettingKind.Range, values = WORDS, words = WORDS, at = 0)))
+        val app = app(SettingsPage(ID, rows, HeaderLook.Settings))
+        val (_, m) = open(app)
+        tap(app, m, 0)
+        assertTrue("premise: a range row is editable", m.rows(0)[0].editable)
+        assertNull(app.stack.overlay)
+        assertTrue(rows.sets.isEmpty())
     }
 
     @Test
