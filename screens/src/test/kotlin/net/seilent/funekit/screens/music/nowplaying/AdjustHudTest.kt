@@ -88,7 +88,7 @@ class AdjustHudTest {
         assertEquals(0f, open.textDx, 0.001f)
         assertFalse(h.moving(Tok.motion_volumeOpenEnd.toLong()))
         h.hide(1000)
-        assertTrue(h.closing())
+        assertTrue(h.closing(1000))
         assertEquals(0f, h.legs(1000 + Tok.motion_volumeTouchClose.toLong()).number, 0f)
         assertTrue(h.visible(1000 + VolumeHud.closeMs() - 1))
         assertFalse(h.visible(1000 + VolumeHud.closeMs()))

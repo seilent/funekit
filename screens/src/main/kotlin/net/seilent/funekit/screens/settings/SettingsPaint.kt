@@ -23,6 +23,7 @@ import net.seilent.funekit.kit.pageGround
 import net.seilent.funekit.kit.settingInk
 import net.seilent.funekit.kit.settingMeasure
 import net.seilent.funekit.kit.settingSub
+import net.seilent.funekit.kit.settingSwatch
 import net.seilent.funekit.kit.settingTitle
 import net.seilent.funekit.kit.settingValue
 import net.seilent.funekit.kit.stack.DrawRecord
@@ -53,8 +54,9 @@ class SettingsDraw(
 
     fun thumbAt(p: Int, off: Int): ThumbRect? = thumbOf(s, top, bottom, view.toLong(), m.content(p).toLong(), off.toLong())
 
-    fun DrawScope.row(ink: SettingInk, look: SettingLook) {
+    fun DrawScope.row(ink: SettingInk, look: SettingLook, swatch: Color?) {
         settingValue(ink, look.value, if (look.edit) accent else Ink.white)
+        if (swatch != null) settingSwatch(ink, swatch, look.swatch)
         settingSub(ink, look.sub)
         settingTitle(ink, look.title, look.glow?.let { RowGlow(m.glow, it) })
     }
@@ -67,7 +69,7 @@ class SettingsDraw(
                 val k = ink(rows[i])
                 val y = top + tops[i] - off
                 if (y + k.size.px <= top || y >= bottom) continue
-                translate(0f, y.toFloat()) { row(k, look(i)) }
+                translate(0f, y.toFloat()) { row(k, look(i), rows[i].swatch) }
             }
         }
     }
@@ -84,7 +86,7 @@ fun settingsDraw(
     accentOff: Boolean,
 ): SettingsDraw {
     val meas = settingMeasure(s, fonts, density, covers, accentOff)
-    val d = SettingsDraw(m, s, meas, { r -> settingInk(measurer, fonts, density, covers, meas, r.title, r.live ?: r.value, r.words + r.shows + listOfNotNull(r.live?.let { r.value }), r.sub, r.editable) }, accent)
+    val d = SettingsDraw(m, s, meas, { r -> settingInk(measurer, fonts, density, covers, meas, r.title, r.live ?: r.value, r.words + r.shows + listOfNotNull(r.live?.let { r.value }), r.sub, r.editable, swatch = r.swatch != null) }, accent)
     m.heightOf = { d.ink(it).size.px }
     m.view = d.view
     m.scale(s.ppu)
@@ -132,7 +134,7 @@ class SettingsPaint(
 
     override fun DrawScope.row(i: Int, y: Int, now: Long, rec: DrawRecord?, name: String) {
         val r = m.rows(p).getOrNull(i) ?: return
-        shifted(rec, 0f, y.toFloat()) { with(d) { row(ink(r), m.look(p, i, now)) } }
+        shifted(rec, 0f, y.toFloat()) { with(d) { row(ink(r), m.look(p, i, now), r.swatch) } }
     }
 
     override fun thumbFade(at: Long): Float = m.fade.at(at)

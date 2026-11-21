@@ -1,5 +1,7 @@
 package net.seilent.funekit.kit
 
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.clipRect
@@ -141,6 +143,7 @@ class SettingInk(
     val subBase: Int,
     val glowText: List<GlowText>,
     val glowClip: Edges,
+    val swatch: Edges? = null,
 )
 
 fun settingInk(
@@ -155,16 +158,17 @@ fun settingInk(
     sub: String?,
     editable: Boolean,
     tall: Boolean = false,
+    swatch: Boolean = false,
 ): SettingInk {
     val s = meas.s
     val ts = roleStyle(meas.title, s, density, Ink.white)
     val vs = roleStyle(Roles.settingsValue, s, density, Ink.white)
-    val cands = words + value
+    val cands = if (swatch) emptyList() else words + value
     val lines = meas.titleLines(title, cands, editable)
     val size = meas.size(lines, cands, sub != null, editable, tall)
     val top = size.pad
     val h = size.band
-    val vl = if (value.isEmpty()) emptyList() else meas.valueLines(meas.wideLine(lines), value, editable)
+    val vl = if (swatch || value.isEmpty()) emptyList() else meas.valueLines(meas.wideLine(lines), value, editable)
     val vw = vl.map { m.word(it, Roles.settingsValue, vs, fonts, density, covers) }
     val vasc = Metrics.ascent(meas.valuePx)
     val vdesc = Metrics.descent(meas.valuePx)
@@ -174,7 +178,18 @@ fun settingInk(
     val desc = if (two) vdesc else Metrics.descent(meas.titlePx)
     val vbase = top + (h - asc - vpitch - desc) / HALF + asc
     val vx = vw.map { meas.right64 - pen64(it.width) }
-    val clipX = if (vx.isEmpty()) penFloor(meas.right64) else penFloor(min(meas.right64, vx.min())) - meas.gutter
+    val sq = if (swatch) {
+        val side = px(Tok.settingsSwatch, s.ppu)
+        val sy = top + (h - side) / HALF
+        Edges(penFloor(meas.right64) - side, sy, penFloor(meas.right64), sy + side)
+    } else {
+        null
+    }
+    val clipX = when {
+        sq != null -> sq.x0 - meas.gutter
+        vx.isEmpty() -> penFloor(meas.right64)
+        else -> penFloor(min(meas.right64, vx.min())) - meas.gutter
+    }
     val tasc = Metrics.ascent(meas.titlePx)
     val tdesc = Metrics.descent(meas.titlePx)
     val tpitch = if (lines.size > 1) px(Tok.settingsTitlePitch, s.ppu) else 0
@@ -198,11 +213,17 @@ fun settingInk(
         size.subY + Metrics.ascent(meas.subPx),
         tw.indices.map { GlowText(tw[it], meas.left64, tb[it], meas.titlePx) },
         Edges(0, top, clipX, top + h),
+        sq,
     )
 }
 
 fun DrawScope.settingValue(ink: SettingInk, alpha: Float, color: Color = Ink.white) {
     for (i in ink.value.indices) word(ink.value[i], penPx(ink.valueX64[i]), ink.valueBase[i].toFloat(), color, alpha)
+}
+
+fun DrawScope.settingSwatch(ink: SettingInk, color: Color, alpha: Float) {
+    val sq = ink.swatch ?: return
+    drawRect(color, Offset(sq.x0.toFloat(), sq.y0.toFloat()), Size(sq.w.toFloat(), sq.h.toFloat()), alpha)
 }
 
 fun DrawScope.settingTitle(ink: SettingInk, alpha: Float, glow: RowGlow? = null) {

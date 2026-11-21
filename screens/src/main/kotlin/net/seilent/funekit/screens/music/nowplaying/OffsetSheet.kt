@@ -54,7 +54,7 @@ class OffsetSheet(val edit: OffsetEdit) {
         when (h) {
             AdjustHit.Exit -> {
                 edit.keep()
-                hud.drop()
+                hud.dismiss()
             }
             AdjustHit.Up0 -> edit.step(1)
             AdjustHit.Down0 -> edit.step(-1)
@@ -73,7 +73,7 @@ class OffsetSheet(val edit: OffsetEdit) {
     fun holdNumber(): Boolean {
         if (!hud.shown) return false
         edit.keep()
-        hud.drop()
+        hud.dismiss()
         edit.entry(true)
         return true
     }
@@ -87,7 +87,7 @@ class OffsetSheet(val edit: OffsetEdit) {
     fun back(): Boolean {
         if (hud.shown) {
             edit.restore()
-            hud.drop()
+            hud.dismiss()
             return true
         }
         if (!edit.editing) return false
@@ -103,7 +103,7 @@ class OffsetSheet(val edit: OffsetEdit) {
     }
 
     fun dismiss() {
-        hud.drop()
+        hud.dismiss()
         if (edit.editing) edit.restore()
         edit.end()
     }

@@ -535,6 +535,7 @@ class MusicHost<S : Any> internal constructor(
         val o = openMenu(sheet.form, sheet.title, sheet.items, sheet.readOnly, sheet.mixedRow, sheet.lead, sheet.confirm, pick, sheet.lift) { menu ->
             if (sheet.focus >= 0) menu.value(sheet.focus, sheet.mark, sheet.wrap, now())
             if (sheet.values.isNotEmpty()) menu.cells(sheet.values, sheet.mixed, -1)
+            if (sheet.swatches.isNotEmpty()) menu.swatches(sheet.swatches)
         }
         val m = settingsOf(stack.top)
         m?.edit(sheet.edit?.takeIf { sheet.focus >= 0 }, sheet.lift)

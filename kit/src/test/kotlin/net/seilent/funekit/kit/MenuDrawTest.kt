@@ -275,6 +275,17 @@ class MenuDrawTest {
     }
 
     @Test
+    fun aSwatchItemDrawsItsSquareAndNoWord() {
+        val m = sheet(listOf("red", "blue"))
+        m.swatches(listOf(Ink.black, Ink.black))
+        val d = draw(m, OverKind.Sheet, 380)
+        val r = d.plan.rows[1]
+        val sy = r.top + (129 - 51) / 2
+        assertEquals("no word over the square", 0, d.most(48, 48 + 51, sy, sy + 51))
+        assertEquals("and none beside it", panel, d.most(48 + 51 + 12, 672, r.top, r.top + r.h))
+    }
+
+    @Test
     fun aPressedItemGlowsUnderItsWord() {
         val m = sheet(listOf("play", "play next"))
         val plain = draw(m, OverKind.Sheet, 380)

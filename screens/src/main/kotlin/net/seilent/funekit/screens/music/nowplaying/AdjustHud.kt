@@ -34,6 +34,7 @@ import net.seilent.funekit.kit.Metrics
 import net.seilent.funekit.kit.Word
 import net.seilent.funekit.kit.glyph
 import net.seilent.funekit.kit.motion.Curves
+import net.seilent.funekit.kit.motion.OverHud
 import net.seilent.funekit.kit.overlay.VolumeHud
 import net.seilent.funekit.kit.pen64
 import net.seilent.funekit.kit.pxSize
@@ -60,7 +61,7 @@ class AdjustLegs(val scrim: Float, val number: Float, val exit: Float, val group
 
 private fun progress(e: Long, d: Float): Float = if (d <= 0f) 1f else (e / d).coerceIn(0f, 1f)
 
-class AdjustHud {
+class AdjustHud : OverHud {
     var shown by mutableStateOf(false)
         private set
     var cols: List<AdjustCol> = emptyList()
@@ -74,7 +75,8 @@ class AdjustHud {
 
     private var inAt = 0L
     private var hideAt = 0L
-    private var hiding = false
+    override var hiding = false
+        private set
     private val numbers = arrayOfNulls<IntRect>(COLS)
 
     private fun bump() {
@@ -98,23 +100,27 @@ class AdjustHud {
         bump()
     }
 
-    fun hide(now: Long) {
+    override fun hide(now: Long) {
         if (hiding) return
         hiding = true
         hideAt = now
         bump()
     }
 
-    fun drop() {
+    override fun dismiss() {
         shown = false
         hiding = false
         numbers.fill(null)
         bump()
     }
 
-    fun closing(): Boolean = hiding
+    override fun opening(now: Long): Boolean = shown && !hiding && now < inAt + Tok.motion_volumeOpenEnd.toLong()
 
-    fun visible(now: Long): Boolean = shown && (!hiding || now < hideAt + VolumeHud.closeMs())
+    override fun closing(now: Long): Boolean = hiding
+
+    override fun visible(now: Long): Boolean = shown && (!hiding || now < hideAt + VolumeHud.closeMs())
+
+    override fun wakeAt(now: Long): Long? = null
 
     fun moving(now: Long): Boolean {
         if (!shown) return false

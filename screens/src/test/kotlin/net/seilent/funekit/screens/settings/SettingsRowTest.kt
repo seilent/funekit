@@ -8,7 +8,10 @@ import net.seilent.funekit.Insets
 import net.seilent.funekit.Nav
 import net.seilent.funekit.Surface
 import net.seilent.funekit.Window
+import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.Ink
+import net.seilent.funekit.kit.penFloor
+import net.seilent.funekit.px
 import net.seilent.funekit.scale
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -107,11 +110,39 @@ class SettingsRowTest {
         assertEquals(saved, m.state())
     }
 
+    @Test
+    fun aSwatchRowDrawsItsSquareAtTheRightEdgeWithNoValueAndClipsItsTitleBeforeIt() {
+        val d = draw()
+        val k = d.ink(SettingRow("accent", "accent", HUE, SettingKind.Range, swatch = Ink.white))
+        assertTrue("a swatch row draws no value text", k.value.isEmpty())
+        val sq = requireNotNull(k.swatch)
+        val side = px(Tok.settingsSwatch, a105.ppu)
+        assertEquals(listOf(side, side), listOf(sq.w, sq.h))
+        assertEquals("at the right edge", penFloor(d.measure.right64), sq.x1)
+        assertEquals("centered in the row band", k.size.pad + (k.size.band - side) / 2, sq.y0)
+        assertEquals("the title clips a gutter before it", sq.x0 - d.measure.gutter, k.clipX)
+        assertEquals(sq.x0 - d.measure.gutter, k.glowClip.x1)
+        assertTrue("a plain row has no swatch", d.ink(SettingRow("accent", "accent", HUE)).swatch == null)
+    }
+
+    @Test
+    fun aSwatchTakesTheUneditedValueAlphaOverTheFocusedOne() {
+        val m = model()
+        m.pivots = listOf(SettingPivot(SYSTEM, listOf(SettingRow("about", "about", "0.1.0"), SettingRow("accent", "accent", "", SettingKind.Range, swatch = Ink.white))))
+        assertEquals("premise: the focus is on the first row", 0, m.focusRow(0))
+        m.edit("accent", false)
+        val l = m.look(0, 1, 0L)
+        assertEquals("premise: the edited value draws at full alpha", Tok.alpha_full, l.value, 0f)
+        assertEquals(Tok.settingsValueDim / Tok.settingsValueFocused, l.swatch, 1e-4f)
+        assertEquals(1f, m.look(0, 0, 0L).swatch, 1e-4f)
+    }
+
     private companion object {
         const val A105_W = 720
         const val A105_H = 1280
         const val SDK = 35
         const val EFFECTS = "effects"
         const val SYSTEM = "system"
+        const val HUE = "350"
     }
 }

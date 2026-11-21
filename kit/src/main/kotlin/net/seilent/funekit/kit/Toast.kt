@@ -49,7 +49,7 @@ fun toastPlace(over: OverKind?, closing: Boolean, nowPlaying: Boolean, holdUp: B
 }
 
 fun toastOver(over: OverKind?, holdUp: Boolean = false): Boolean = when (over) {
-    null, OverKind.Sheet -> true
+    null, OverKind.Sheet, OverKind.Adjust -> true
     OverKind.Dlg -> holdUp
     OverKind.Jump, OverKind.Volume -> false
 }

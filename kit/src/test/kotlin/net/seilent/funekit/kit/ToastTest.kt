@@ -144,6 +144,18 @@ class ToastTest {
     }
 
     @Test
+    fun theToastDrawsOverTheAdjustHudAndStaysAtTheBottomUnderIt() {
+        assertTrue(toastOver(OverKind.Adjust))
+        assertEquals(ToastPlace.Bottom, toastPlace(OverKind.Adjust, closing = false, nowPlaying = false))
+        assertEquals(ToastPlace.Top, toastPlace(OverKind.Adjust, closing = false, nowPlaying = true))
+        val t = Toast()
+        t.show(0, "artist", "title")
+        t.frame(ToastPlace.Bottom, 1280, 0)
+        t.opened(OverKind.Adjust, nowPlaying = false, now = 50)
+        assertTrue("a toast shown before the hud stays where it is", t.bottom)
+    }
+
+    @Test
     fun aSheetOpeningOverARisingBottomToastTakesItToTheTopFromWhereItRose() {
         val t = Toast()
         t.show(0, "artist", "title")

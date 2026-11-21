@@ -158,8 +158,8 @@ class PageStack<P : Any>(
 
     private fun cuttable(o: Overlay?, now: Long): Boolean {
         if (o == null) return false
-        if (o.kind != OverKind.Sheet && o.kind != OverKind.Jump && o.kind != OverKind.Volume) return false
-        if (o.kind != OverKind.Volume && (o.closing || o.moving(now))) return false
+        if (o.kind != OverKind.Sheet && o.kind != OverKind.Jump && o.hud == null) return false
+        if (o.hud == null && (o.closing || o.moving(now))) return false
         if (phase != Phase.Rest) return false
         return pending == 0
     }
@@ -221,7 +221,7 @@ class PageStack<P : Any>(
         overlay = null
         hideFocus = false
         covered = false
-        if (show && was != null && was.kind != OverKind.Volume) top?.let { dropped(it, clock) }
+        if (show && was != null && was.hud == null) top?.let { dropped(it, clock) }
     }
 
     fun back(popKind: (Turn<P>) -> MoveKind) = back(false, popKind)
@@ -287,7 +287,7 @@ class PageStack<P : Any>(
 
     private fun holdReversible(now: Long): Boolean {
         val o = overlay
-        if (o != null) return o.kind != OverKind.Volume && !o.closing && o.moving(now) && openSeq == seq
+        if (o != null) return o.hud == null && !o.closing && o.moving(now) && openSeq == seq
         return reversible()
     }
 

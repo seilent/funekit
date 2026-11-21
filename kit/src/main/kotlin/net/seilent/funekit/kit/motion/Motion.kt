@@ -80,7 +80,7 @@ fun jumpOut(e: Long, from: JumpLook): JumpLook = JumpLook(
 
 class Modal(val scrim: Float, val alpha: Float, val scale: Float)
 
-enum class OverKind { Sheet, Dlg, Jump, Volume }
+enum class OverKind { Sheet, Dlg, Jump, Volume, Adjust }
 
 interface OverHud {
     val hiding: Boolean
@@ -124,7 +124,7 @@ class Overlay(val kind: OverKind, val hud: OverHud? = null, private val commit: 
     }
 
     fun dur(): Int {
-        if (kind == OverKind.Volume) return 0
+        if (hud != null) return 0
         if (kind == OverKind.Sheet) return if (closing) sheetOutMs(sheetFrom) else sheetInMs()
         if (closing && backMs >= 0) return backMs
         return when (kind) {
@@ -136,8 +136,8 @@ class Overlay(val kind: OverKind, val hud: OverHud? = null, private val commit: 
     private fun progress(e: Long, d: Int): Float = if (d <= 0) 1f else (e.toFloat() / d).coerceIn(0f, 1f)
 
     fun close(now: Long) {
-        if (kind == OverKind.Volume) {
-            val h = hud ?: return
+        val h = hud
+        if (h != null) {
             if (h.hiding) return
             commit()
             h.hide(now)
@@ -172,32 +172,32 @@ class Overlay(val kind: OverKind, val hud: OverHud? = null, private val commit: 
                         else -> hide - min(hide, (-hide / LOG_STEPS * log2(backO)).roundToInt())
                     }
                 }
-                OverKind.Jump, OverKind.Volume -> {}
+                OverKind.Jump, OverKind.Volume, OverKind.Adjust -> {}
             }
         }
         closed = true
         start = now
     }
 
-    fun wakeAt(now: Long): Long? = if (kind == OverKind.Volume) hud?.wakeAt(now) else null
+    fun wakeAt(now: Long): Long? = hud?.wakeAt(now)
 
-    fun done(now: Long): Boolean = if (kind == OverKind.Volume) hud?.visible(now) != true else closing && now - start >= dur()
+    fun done(now: Long): Boolean = hud?.let { !it.visible(now) } ?: (closing && now - start >= dur())
 
     fun drop() {
-        if (kind != OverKind.Volume) return
+        val h = hud ?: return
         commit()
-        hud?.dismiss()
+        h.dismiss()
     }
 
     fun land(now: Long): Boolean {
-        if (kind == OverKind.Volume) return false
+        if (hud != null) return false
         if (closing) return true
         start = now - dur()
         return false
     }
 
     fun moving(now: Long): Boolean =
-        if (kind == OverKind.Volume) hud?.let { it.opening(now) || it.closing(now) } == true else now - start < dur()
+        hud?.let { it.opening(now) || it.closing(now) } ?: (now - start < dur())
 
     fun sheetLook(now: Long): SheetLook = if (closing) sheetOut(now - start, sheetFrom) else sheetIn(now - start)
 

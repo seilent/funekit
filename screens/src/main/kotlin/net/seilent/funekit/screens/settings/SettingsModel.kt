@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.channels.Channel
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.FocusTrack
@@ -54,6 +55,8 @@ data class SettingRow(
     val level: Int = 0,
     val flags: Set<SettingFlag> = emptySet(),
     val live: String? = null,
+    val swatch: Color? = null,
+    val swatches: List<Color> = emptyList(),
 ) {
     val editable: Boolean
         get() = SettingFlag.ReadOnly !in flags && when (kind) {
@@ -80,13 +83,14 @@ open class SettingSheet(
     val lift: Boolean = false,
     val confirm: Boolean = false,
     val edit: String? = null,
+    val swatches: List<Color> = emptyList(),
 )
 
 fun valueSheet(row: SettingRow): SettingSheet {
     val steps = row.kind == SettingKind.Steps
     val n = row.words.size
     fun at(i: Int): Int = if (steps && i >= 0) n - 1 - i else i
-    return SettingSheet(MenuForm.Sheet, row.title.lowercase(), if (steps) row.words.reversed() else row.words, focus = at(row.focus), mark = at(row.at), wrap = row.wrap, lift = true, edit = row.key)
+    return SettingSheet(MenuForm.Sheet, row.title.lowercase(), if (steps) row.words.reversed() else row.words, focus = at(row.focus), mark = at(row.at), wrap = row.wrap, lift = true, edit = row.key, swatches = if (steps) row.swatches.reversed() else row.swatches)
 }
 
 fun settingRowAt(tops: IntArray, content: Int, y: Int): Int {
@@ -126,7 +130,7 @@ fun ensureVisible(top: Int, h: Int, off: Int, view: Int, limit: Int): Int {
     return want.coerceIn(0, max(0, limit))
 }
 
-data class SettingLook(val title: Float, val value: Float, val sub: Float, val glow: Float?, val edit: Boolean = false)
+data class SettingLook(val title: Float, val value: Float, val sub: Float, val swatch: Float, val glow: Float?, val edit: Boolean = false)
 
 fun settingsLift(tops: IntArray, heights: IntArray, focus: Int, off: Int, contentTop: Int, panelTop: Int, toTop: Boolean): Int {
     if (focus !in tops.indices) return 0
@@ -489,10 +493,12 @@ class SettingsModel(entry: Long, page: SettingsId) : PivotPage(entry, page) {
         val live = p == pivot
         val title = if (live && lit.on(r, now)) Tok.alpha_full else lerp(Tok.type_settingsItem_alphaDim, Tok.type_settingsItem_alpha, mix)
         val edit = editing != null && rows(p).getOrNull(r)?.key == editing
+        val va = lerp(Tok.settingsValueDim, Tok.settingsValueFocused, mix)
         return SettingLook(
             title,
-            if (edit) Tok.alpha_full else lerp(Tok.settingsValueDim, Tok.settingsValueFocused, mix),
+            if (edit) Tok.alpha_full else va,
             lerp(Tok.type_settingsSub_alphaDim, Tok.type_settingsSub_alpha, mix),
+            va / Tok.settingsValueFocused,
             if (live && glow.key == r) glow.level(now) else null,
             edit,
         )

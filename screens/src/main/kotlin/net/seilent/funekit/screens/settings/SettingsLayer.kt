@@ -214,7 +214,7 @@ fun SettingsLayer(
                             val row = rows[i]
                             val ink = remember(row, draw) { draw.ink(row) }
                             val look = rememberLook(p, i, m, covered = covered) { m.look(p, i, frame) }
-                            Canvas(Modifier.pxSize(s.widthPx, ink.size.px).tapTarget(a, rowTap(i), layer)) { with(draw) { row(ink, look.value) } }
+                            Canvas(Modifier.pxSize(s.widthPx, ink.size.px).tapTarget(a, rowTap(i), layer)) { with(draw) { row(ink, look.value, row.swatch) } }
                         }
                         val pad = m.pad(p)
                         if (pad > 0) item { Box(Modifier.pxSize(s.widthPx, pad)) }
