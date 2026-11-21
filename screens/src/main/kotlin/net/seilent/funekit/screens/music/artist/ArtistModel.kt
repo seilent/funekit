@@ -49,6 +49,7 @@ import net.seilent.funekit.screens.music.Paging
 import net.seilent.funekit.screens.music.PivotPage
 import net.seilent.funekit.screens.music.overlay.SONGS_ADDED
 import net.seilent.funekit.screens.music.overlay.SONG_ADDED
+import net.seilent.funekit.screens.music.pivotSwitchEnd
 import net.seilent.funekit.screens.music.pivots
 import net.seilent.funekit.screens.music.staleIn
 
@@ -353,7 +354,7 @@ class ArtistModel(entry: Long, val id: Long) : PivotPage(entry, MusicPage.Artist
         }
     }
 
-    fun switching(now: Long): Boolean = switchAt?.let { now - it < switchEnd() } == true
+    fun switching(now: Long): Boolean = switchAt?.let { now - it < pivotSwitchEnd() } == true
 
     fun thumbAlpha(now: Long): Float {
         if (switchAt == null || !switching(now)) return fade.at(now)

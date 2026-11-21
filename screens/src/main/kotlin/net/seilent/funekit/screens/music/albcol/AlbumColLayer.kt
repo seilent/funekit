@@ -52,9 +52,9 @@ import net.seilent.funekit.kit.touch.Tap
 import net.seilent.funekit.kit.touch.rememberCoast
 import net.seilent.funekit.api.Row
 import net.seilent.funekit.screens.music.MusicSource
-import net.seilent.funekit.screens.music.hub.hubChromeAt
 import net.seilent.funekit.screens.music.lists.quiet
 import net.seilent.funekit.screens.music.overlay.SheetTarget
+import net.seilent.funekit.screens.music.pivotChromeAt
 
 private const val HIDDEN = -1
 private const val AHEAD_ROWS = 2
@@ -287,6 +287,6 @@ fun AlbumColLayer(
         }
         val bar = thumbOf(s, geo.boxTop, geo.bottom, (geo.bottom - geo.boxTop).toLong(), m.track.topOf(m.track.count).toLong(), 0L)
         if (bar != null) key(m.count) { ThumbLayer(bar, covered, snap) { thumbProps(geo.thumb(m.track), m.fade.at(frame)) } }
-        PageChrome(chrome, a, { hubChromeAt(chrome, frame) }, onPivot = {}, onHeader = if (live) onBack else null, leavesLit = leavesLit)
+        PageChrome(chrome, a, { pivotChromeAt(chrome, frame) }, onPivot = {}, onHeader = if (live) onBack else null, leavesLit = leavesLit)
     }
 }

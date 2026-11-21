@@ -67,9 +67,9 @@ import net.seilent.funekit.api.Kind as ApiKind
 import net.seilent.funekit.api.Listing
 import net.seilent.funekit.screens.music.MusicSource
 import net.seilent.funekit.screens.music.accentShown
-import net.seilent.funekit.screens.music.hub.hubChromeAt
 import net.seilent.funekit.screens.music.lists.quiet
 import net.seilent.funekit.screens.music.overlay.SheetTarget
+import net.seilent.funekit.screens.music.pivotChromeAt
 
 private const val HIDDEN = -1
 private const val AHEAD_ROWS = 2
@@ -340,6 +340,6 @@ fun AlbumLayer(
         val len by remember(geo, m, count) { derivedStateOf { geo.thumb(m.track)?.let { it.y1 - it.y0 } } }
         val n = len
         if (bar != null && n != null) key(count, n) { ThumbLayer(ThumbRect(bar.x0, 0, bar.x1, n), covered, snap) { thumbProps(geo.thumb(m.track), m.fade.at(frame)) } }
-        PageChrome(chrome, a, { hubChromeAt(chrome, frame) }, onPivot = {}, onHeader = if (live) onBack else null, leavesLit = leavesLit)
+        PageChrome(chrome, a, { pivotChromeAt(chrome, frame) }, onPivot = {}, onHeader = if (live) onBack else null, leavesLit = leavesLit)
     }
 }

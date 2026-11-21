@@ -6,9 +6,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.Chrome
 import net.seilent.funekit.kit.touch.Pan
 import net.seilent.funekit.kit.touch.Swipe
+import kotlin.math.max
 
 abstract class PivotPage(entry: Long, page: PageId) : PageModel(entry, page) {
     abstract val switchDir: Int
@@ -32,6 +34,14 @@ abstract class PivotPage(entry: Long, page: PageId) : PageModel(entry, page) {
     abstract fun haltList()
 
     abstract fun poke()
+}
+
+fun pivotSwitchEnd(): Long = (Tok.motion_pivotOut + max(Tok.motion_pivotRows, Tok.motion_pivotRowFade)).toLong()
+
+fun pivotChromeAt(c: Chrome, now: Long): Long {
+    val since = c.since(now) ?: return 0L
+    val strip = Tok.motion_pivotStrip.toLong()
+    return if (since < strip) now else now - since + strip
 }
 
 fun pivotLand(m: PivotPage, chrome: Chrome, now: Long) {

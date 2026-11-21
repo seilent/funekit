@@ -57,6 +57,7 @@ import net.seilent.funekit.screens.music.lists.listTarget
 import net.seilent.funekit.screens.music.overlay.SheetFrom
 import net.seilent.funekit.screens.music.overlay.SheetKind
 import net.seilent.funekit.screens.music.overlay.SheetTarget
+import net.seilent.funekit.screens.music.pivotSwitchEnd
 import net.seilent.funekit.screens.music.pivots
 import net.seilent.funekit.screens.music.queue.QueueModel
 import net.seilent.funekit.screens.music.search.SearchQuery
@@ -502,7 +503,7 @@ class HubModel(entry: Long, page: MusicPage = MusicPage.Hub, private val st: Hub
         }
     }
 
-    fun switching(now: Long): Boolean = switchAt?.let { now - it < switchEnd() } == true
+    fun switching(now: Long): Boolean = switchAt?.let { now - it < pivotSwitchEnd() } == true
 
     override fun canSwitch(d: Int): Boolean = pivot + d in panes.indices
 

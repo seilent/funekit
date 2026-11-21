@@ -60,6 +60,7 @@ import net.seilent.funekit.screens.music.hub.hubScrollInto
 import net.seilent.funekit.screens.music.hub.letterOf
 import net.seilent.funekit.screens.music.hub.rowModel
 import net.seilent.funekit.screens.music.overlay.SheetKind
+import net.seilent.funekit.screens.music.pivotSwitchEnd
 import net.seilent.funekit.screens.music.testFake
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -248,7 +249,7 @@ class HubTest {
         assertEquals(0, m.pane.focus.row)
         assertEquals(FOCUS_ROW, m.panes[HUB_SONGS].focus.row)
         assertTrue(m.switching(1L))
-        assertFalse(m.switching(HubModel.switchEnd()))
+        assertFalse(m.switching(pivotSwitchEnd()))
     }
 
     @Test

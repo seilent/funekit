@@ -55,9 +55,9 @@ import net.seilent.funekit.kit.touch.tapTarget
 import net.seilent.funekit.px
 import net.seilent.funekit.api.Row
 import net.seilent.funekit.screens.music.MusicSource
-import net.seilent.funekit.screens.music.hub.hubChromeAt
 import net.seilent.funekit.screens.music.lists.quiet
 import net.seilent.funekit.screens.music.overlay.SheetTarget
+import net.seilent.funekit.screens.music.pivotChromeAt
 import net.seilent.funekit.screens.music.pivotSwitch
 import net.seilent.funekit.screens.music.pivotWatch
 
@@ -365,6 +365,6 @@ fun ArtistLayer(
         }
         val bar = listThumbOf(s, geo.boxTop, geo.bottom, m.panes[side].count, m.panes[side].track.pitch, 0L)
         if (bar != null) key(side, m.panes[side].count) { ThumbLayer(bar, covered, snap) { thumbProps(geo.thumb(m.panes[side].track), m.thumbAlpha(frame)) } }
-        PageChrome(chrome, a, { hubChromeAt(chrome, frame) }, onPivot = { artistSwitch(m, chrome, it, now()) }, onHeader = if (live) onBack else null, leavesLit = leavesLit)
+        PageChrome(chrome, a, { pivotChromeAt(chrome, frame) }, onPivot = { artistSwitch(m, chrome, it, now()) }, onHeader = if (live) onBack else null, leavesLit = leavesLit)
     }
 }

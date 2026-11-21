@@ -43,7 +43,7 @@ import net.seilent.funekit.kit.touch.ListTouch
 import net.seilent.funekit.kit.touch.RowSpec
 import net.seilent.funekit.kit.touch.Tap
 import net.seilent.funekit.kit.touch.rememberCoast
-import net.seilent.funekit.screens.music.hub.hubChromeAt
+import net.seilent.funekit.screens.music.pivotChromeAt
 
 private const val HIDDEN = -1
 
@@ -230,6 +230,6 @@ fun ListPaneLayer(
         }
         val bar = geo.thumb(n, 0)
         if (bar != null) key(n) { ThumbLayer(bar, covered, snap) { thumbProps(geo.thumb(n, p.track.q), p.fade.at(frame)) } }
-        PageChrome(chrome, a, { hubChromeAt(chrome, frame) }, onPivot = {}, onHeader = if (live) onBack else null, leavesLit = leavesLit)
+        PageChrome(chrome, a, { pivotChromeAt(chrome, frame) }, onPivot = {}, onHeader = if (live) onBack else null, leavesLit = leavesLit)
     }
 }

@@ -20,6 +20,7 @@ import net.seilent.funekit.screens.music.PivotPage
 import net.seilent.funekit.screens.music.overlay.SheetFrom
 import net.seilent.funekit.screens.music.overlay.SheetKind
 import net.seilent.funekit.screens.music.overlay.SheetTarget
+import net.seilent.funekit.screens.music.pivotSwitchEnd
 import net.seilent.funekit.screens.music.pivots
 import net.seilent.funekit.screens.music.queue.QUEUE_EMPTY
 import kotlin.math.max
@@ -138,7 +139,7 @@ class HistoryModel(entry: Long) : PivotPage(entry, MusicPage.History) {
         for ((p, pn) in panes.withIndex()) pn.tick(now, thumb && p == pivot, moving && p == pivot)
     }
 
-    fun switching(now: Long): Boolean = switchAt?.let { now - it < switchEnd() } == true
+    fun switching(now: Long): Boolean = switchAt?.let { now - it < pivotSwitchEnd() } == true
 
     fun thumbAlpha(now: Long): Float {
         if (switchAt == null || !switching(now)) return pane.fade.at(now)

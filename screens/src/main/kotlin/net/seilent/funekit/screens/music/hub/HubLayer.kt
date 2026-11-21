@@ -98,6 +98,7 @@ import net.seilent.funekit.screens.music.lists.quiet
 import net.seilent.funekit.screens.music.morphSide
 import net.seilent.funekit.screens.music.rowWordSide
 import net.seilent.funekit.screens.music.overlay.SheetTarget
+import net.seilent.funekit.screens.music.pivotChromeAt
 import net.seilent.funekit.screens.music.pivotSwitch
 import net.seilent.funekit.screens.music.pivotWatch
 import net.seilent.funekit.screens.music.search.ImeInsets
@@ -333,7 +334,7 @@ fun HubLayer(
     val t = touches[p]
     val switching by remember(m) { derivedStateOf { m.switching(frame) } }
     val side by remember(m) { derivedStateOf { hubSide(m, frame) } }
-    val chromeAt by remember(chrome) { derivedStateOf { hubChromeAt(chrome, frame) } }
+    val chromeAt by remember(chrome) { derivedStateOf { pivotChromeAt(chrome, frame) } }
     SideEffect {
         m.lists = touches
         m.regrid(g.cols)

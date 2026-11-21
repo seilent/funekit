@@ -21,8 +21,8 @@ import net.seilent.funekit.screens.music.hub.HubDraw
 import net.seilent.funekit.screens.music.hub.HubModel
 import net.seilent.funekit.screens.music.hub.HubPlaying
 import net.seilent.funekit.screens.music.hub.cellAt
-import net.seilent.funekit.screens.music.hub.hubChromeAt
 import net.seilent.funekit.screens.music.hub.look
+import net.seilent.funekit.screens.music.pivotChromeAt
 import net.seilent.funekit.screens.music.pivots
 import net.seilent.funekit.screens.music.sheet.HubRegions
 import net.seilent.funekit.screens.music.sheet.MusicScenes
@@ -213,13 +213,13 @@ class HubDrawTest {
     @Test
     fun theChromeTimeMovesOnlyWhileThePivotStripMoves() {
         val c = chromeOf(sc.measurer, sc.fonts, s, sc.density, "music", MusicPage.Hub.pivots, null)
-        assertEquals(0L, hubChromeAt(c, FRAME_MS))
-        assertEquals(0L, hubChromeAt(c, FRAME_MS * 2))
+        assertEquals(0L, pivotChromeAt(c, FRAME_MS))
+        assertEquals(0L, pivotChromeAt(c, FRAME_MS * 2))
         c.switchTo(1, SWITCH_AT, 1)
         val strip = Tok.motion_pivotStrip.toLong()
-        assertEquals(SWITCH_AT + FRAME_MS, hubChromeAt(c, SWITCH_AT + FRAME_MS))
+        assertEquals(SWITCH_AT + FRAME_MS, pivotChromeAt(c, SWITCH_AT + FRAME_MS))
         val rest = SWITCH_AT + strip
-        for (t in listOf(rest, rest + FRAME_MS, rest + strip)) assertEquals(rest, hubChromeAt(c, t))
+        for (t in listOf(rest, rest + FRAME_MS, rest + strip)) assertEquals(rest, pivotChromeAt(c, t))
     }
 
     companion object {

@@ -41,8 +41,8 @@ import net.seilent.funekit.kit.touch.RowSpec
 import net.seilent.funekit.api.FailFast
 import net.seilent.funekit.screens.music.MusicSource
 import net.seilent.funekit.screens.music.accentShown
-import net.seilent.funekit.screens.music.hub.hubChromeAt
 import net.seilent.funekit.screens.music.overlay.SheetTarget
+import net.seilent.funekit.screens.music.pivotChromeAt
 import net.seilent.funekit.screens.music.pivotSwitch
 import net.seilent.funekit.screens.music.pivotWatch
 
@@ -205,6 +205,6 @@ fun HistoryLayer(
         }
         val bar = geo.thumb(m.count(side), 0)
         if (bar != null) key(side, m.count(side)) { ThumbLayer(bar, covered, snap) { thumbProps(geo.thumb(m.count(side), m.panes[side].track.q), m.thumbAlpha(frame)) } }
-        PageChrome(chrome, a, { hubChromeAt(chrome, frame) }, onPivot = { pivotSwitch(m, chrome, it, now()) }, onHeader = if (live) onBack else null, leavesLit = leavesLit)
+        PageChrome(chrome, a, { pivotChromeAt(chrome, frame) }, onPivot = { pivotSwitch(m, chrome, it, now()) }, onHeader = if (live) onBack else null, leavesLit = leavesLit)
     }
 }
