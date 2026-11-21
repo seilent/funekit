@@ -266,6 +266,8 @@ class MusicHost<S : Any> internal constructor(
 
     val chromes: MusicChromes get() = types.chromes
 
+    val settingsChromes: Map<SettingsId, Chrome> get() = types.settings.chromes
+
     private val np: NowPlayingModel get() = music.np
 
     private val npArtHalf: NpHalf get() = npHalves.holding(NpPart.Art)
@@ -435,9 +437,10 @@ class MusicHost<S : Any> internal constructor(
     fun pivot(s: S?): Pair<PivotPage, Chrome>? = types.pivot(modelOf(s))
 
     fun heldTarget(from: S?, o: Offset): Boolean? {
-        val e = entryOf(from) ?: return null
-        if (e.page == MusicPage.NowPlaying) return npHalves.holding(NpPart.Back).let { h -> h.holds(o.x, o.y) && h.g.backHit(h.ux(o.x), h.uy(o.y)) }
-        val b: Edges? = types.chrome(models[e.entry])?.headerBox()
+        val e = entryOf(from)
+        if (e == null && settingsOf(from) == null) return null
+        if (e?.page == MusicPage.NowPlaying) return npHalves.holding(NpPart.Back).let { h -> h.holds(o.x, o.y) && h.g.backHit(h.ux(o.x), h.uy(o.y)) }
+        val b: Edges? = types.chrome(modelOf(from))?.headerBox()
         return b != null && o.x >= b.x0 && o.x < b.x1 && o.y >= b.y0 && o.y < b.y1
     }
 

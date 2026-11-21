@@ -4,7 +4,10 @@ import androidx.activity.ComponentActivity
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.snapshots.Snapshot
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performTouchInput
 import kotlinx.coroutines.CoroutineScope
 import net.seilent.funekit.Insets
 import net.seilent.funekit.Nav
@@ -16,6 +19,7 @@ import net.seilent.funekit.kit.MenuForm
 import net.seilent.funekit.kit.motion.MoveKind
 import net.seilent.funekit.kit.motion.OverKind
 import net.seilent.funekit.kit.stack.PageKind
+import net.seilent.funekit.kit.stack.Phase
 import net.seilent.funekit.kit.stack.Turn
 import net.seilent.funekit.kit.touch.Kind
 import net.seilent.funekit.kit.touch.ListTouch
@@ -84,9 +88,9 @@ class SettingsHostTest {
 
     private fun pivot(vararg rows: SettingRow) = listOf(SettingPivot(OUT, rows.toList()))
 
-    private fun app(vararg pages: SettingsPage) = TestApp(page, page, null, StillLevel) { rule.mainClock.currentTime }.also {
+    private fun app(vararg pages: SettingsPage, root: Boolean = false) = TestApp(page, page, null, StillLevel) { rule.mainClock.currentTime }.also {
         it.settingsList = pages.toList()
-        it.compose(rule)
+        it.compose(rule, root)
         rule.waitForIdle()
         rule.mainClock.autoAdvance = false
     }
@@ -411,6 +415,20 @@ class SettingsHostTest {
         assertEquals("the drop starts at the close", AimKind.Drop, m.aimKind)
     }
 
+    @Test
+    fun aHeldDownOnTheSettingsHeaderDuringItsExitHoldsTheBack() {
+        val app = app(SettingsPage(ID, Rows(pivot(choice("a"))), HeaderLook.Settings), root = true)
+        open(app)
+        rule.runOnIdle { app.stack.back(app.host.popKind) }
+        frames(EXIT_FRAMES)
+        assertEquals("premise: the settings page exits", Phase.Exit, app.stack.phase)
+        assertEquals("premise: the exit pops settings", true, app.stack.turn?.popping)
+        val b = app.host.types.settings.chromes.getValue(ID).headerBox()
+        rule.onRoot().performTouchInput { down(Offset((b.x0 + b.x1) / 2f, (b.y0 + b.y1) / 2f)) }
+        assertTrue("the down on the header holds the back", app.stack.held?.target == true)
+        rule.onRoot().performTouchInput { up() }
+    }
+
     companion object {
         private const val W = 720
         private const val H = 1280
@@ -426,6 +444,7 @@ class SettingsHostTest {
         private const val OPEN_FRAMES = 30
         private const val RESIZE_FRAMES = 2
         private const val CLOSE_FRAMES = 4
+        private const val EXIT_FRAMES = 3
         private const val DRAG_Y = 400f
         private const val TALLER = 600
         private const val SWAP = 300L
