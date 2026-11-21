@@ -77,6 +77,8 @@ fun MenuOverlay(
     accent: Color = Ink.white,
     accentOff: Boolean = true,
     band: NavGround? = null,
+    onHold: ((Int) -> Boolean)? = null,
+    onScrim: () -> Boolean = { false },
 ) {
     val m = rememberTextMeasurer()
     val fonts = LocalFontFamilyResolver.current
@@ -98,7 +100,7 @@ fun MenuOverlay(
             menuLayer(menu, ink, plan, overlay, s, now(), accent, accentOff, paint)
             if (band != null) navBand(s, band)
         }
-        val shut = Tap({ gate.down(overlay, now()) }, {}, { if (gate.passes(overlay, false)) onClose() })
+        val shut = Tap({ gate.down(overlay, now()) }, {}, { if (gate.passes(overlay, false) && !onScrim()) onClose() })
         Box(Modifier.pxAt(Edges(0, 0, s.widthPx, if (band != null) navBand(s).y0 else s.heightPx)).tapTarget(a, shut, layer))
         if (menu.form == MenuForm.Sheet) {
             Box(Modifier.pxAt(Edges(0, menu.bottomPx - plan.panelH, s.widthPx, menu.bottomPx)).tapTarget(a, none, layer))
@@ -115,6 +117,7 @@ fun MenuOverlay(
                     onPress = { if (gate.down(overlay, now(), a.downAt)) menu.press(i, now()) },
                     onCancel = { menu.press(-1, now()) },
                     onTap = { if (!gate.passes(overlay, menu.confirm) || !onPick(i)) menu.press(-1, now()) },
+                    onLong = onHold?.let { h -> { !overlay.closing && !overlay.moving(now()) && h(i) } },
                 )
                 Box(Modifier.pxAt(e).tapTarget(a, tap, layer))
             }

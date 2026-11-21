@@ -62,17 +62,25 @@ class MenuOverlayTest {
     private var closes = 0
     private var under = 0
 
-    private fun show(form: MenuForm, kind: OverKind, lead: Int = 0): Menu {
+    private val holds = mutableListOf<Int>()
+    private var scrims = 0
+
+    private fun show(form: MenuForm, kind: OverKind, lead: Int = 0, hold: ((Int) -> Boolean)? = null, scrim: () -> Boolean = { false }, opened: Long = 0, closed: Long? = null): Menu {
         val m = Menu().also {
             it.open(form, "play", listOf("play", "play next", "shuffle"), 0, lead = lead)
             it.frame(px(22f, 1f), 320)
         }
         rule.setContent {
             val a = remember { Arbiter(v1) }
-            val o = remember { Overlay(kind).also { it.open(0) } }
+            val o = remember {
+                Overlay(kind).also {
+                    it.open(opened)
+                    if (closed != null) it.close(closed)
+                }
+            }
             Box(Modifier.fillMaxSize().arbiter(a, Swipes(false, false, false, { false }, { _, _ -> }))) {
                 Box(Modifier.fillMaxSize().tapTarget(a, Tap({}, {}, { under++ })))
-                MenuOverlay(m, o, v1, a, { 1000L }, onPick = { picks += it; true }, onClose = { closes++ }, layer = 1)
+                MenuOverlay(m, o, v1, a, { 1000L }, onPick = { picks += it; true }, onClose = { closes++ }, layer = 1, onHold = hold, onScrim = scrim)
             }
         }
         rule.waitForIdle()
@@ -432,7 +440,60 @@ class MenuOverlayTest {
         assertEquals(1, closes)
     }
 
+    private fun holdAt(x: Float, y: Float) {
+        rule.mainClock.autoAdvance = false
+        rule.onRoot().performTouchInput { down(Offset(x, y)) }
+        rule.mainClock.advanceTimeBy(Tok.input_keyHoldMs.toLong() + HOLD_STEP, ignoreFrameDuration = true)
+        rule.onRoot().performTouchInput { up() }
+        rule.mainClock.advanceTimeByFrame()
+        rule.mainClock.autoAdvance = true
+        rule.waitForIdle()
+    }
+
+    @Test
+    fun aHeldSheetItemCallsTheHoldAndPicksNothing() {
+        show(MenuForm.Sheet, OverKind.Sheet, hold = { holds += it; true })
+        holdAt(120f, 320f - 16f - 43f / 2)
+        assertEquals(listOf(2), holds)
+        assertEquals(emptyList<Int>(), picks)
+    }
+
+    @Test
+    fun aHoldWhileTheSheetOpensCallsNoHold() {
+        show(MenuForm.Sheet, OverKind.Sheet, hold = { holds += it; true }, opened = 1000L - LAG)
+        holdAt(120f, 320f - 16f - 43f / 2)
+        assertEquals(emptyList<Int>(), holds)
+    }
+
+    @Test
+    fun aHoldOnAClosedSheetCallsNoHold() {
+        show(MenuForm.Sheet, OverKind.Sheet, hold = { holds += it; true }, opened = -10_000L, closed = 0L)
+        holdAt(120f, 320f - 16f - 43f / 2)
+        assertEquals(emptyList<Int>(), holds)
+    }
+
+    @Test
+    fun withNoHoldAHeldItemStillPicksOnRelease() {
+        show(MenuForm.Sheet, OverKind.Sheet)
+        holdAt(120f, 320f - 16f - 43f / 2)
+        assertEquals(listOf(2), picks)
+        assertEquals(emptyList<Int>(), holds)
+    }
+
+    @Test
+    fun aScrimVetoKeepsTheSheetOpen() {
+        var keep = true
+        show(MenuForm.Sheet, OverKind.Sheet, scrim = { scrims++; keep })
+        tap(120f, 30f)
+        assertEquals(1, scrims)
+        assertEquals(0, closes)
+        keep = false
+        tap(120f, 30f)
+        assertEquals(1, closes)
+    }
+
     companion object {
+        private const val HOLD_STEP = 50L
         private const val A105_SCREEN = "w720dp-h1280dp-mdpi"
         private const val OPEN_FRAMES = 10
         private const val LAG = 16L
