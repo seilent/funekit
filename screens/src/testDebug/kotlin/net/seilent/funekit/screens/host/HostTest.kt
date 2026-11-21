@@ -191,8 +191,10 @@ class HostTest {
         frames(OPEN_FRAMES)
     }
 
+    private fun stridePx(step: Int) = np.board.vol_slideStride / step * np.ppu
+
     private fun dragBy(step: Int, vararg strides: Int) {
-        val stride = np.board.vol_slideStride / step * np.ppu
+        val stride = stridePx(step)
         rule.onRoot().performTouchInput {
             down(hudAt)
             moveBy(Offset(0f, -2 * Tok.touchSlop * np.ppu))
@@ -265,6 +267,38 @@ class HostTest {
         frames(OPEN_FRAMES)
         assertEquals("premise: the level lands on the last set", START, level.pct)
         assertEquals("the plate shows the level once the last set lands", level.pct, app.host.hud.percent)
+    }
+
+    @Test
+    fun aDragFollowsTheFingerWhenTheLevelTakesOneOfItsSetsBeforeThatSetReturnsAndReanchorsOnALevelItDidNotSend() {
+        val level = FifoLevel(START)
+        val app = app(level)
+        rule.runOnIdle { app.host.openVolume(rule.mainClock.currentTime) }
+        frames(OPEN_FRAMES)
+        val stride = stridePx(STEP)
+        rule.onRoot().performTouchInput {
+            down(hudAt)
+            moveBy(Offset(0f, -2 * Tok.touchSlop * np.ppu))
+            moveBy(Offset(0f, -stride))
+            moveBy(Offset(0f, -stride))
+        }
+        frames(OPEN_FRAMES)
+        assertEquals("premise: two strides up send two sets", listOf(START + 1, START + 2), level.sets)
+        assertEquals("premise: both sets wait for the device", 2, level.waits.size)
+        rule.runOnIdle { level.pct = level.waits.first().first }
+        assertEquals("premise: the level takes the first set with its waiter open", START + 1, level.percent())
+        rule.onRoot().performTouchInput { moveBy(Offset(0f, -stride)) }
+        frames(OPEN_FRAMES)
+        assertEquals("the next set is the finger's number, sets ${level.sets}", listOf(START + 3), level.sets.drop(2))
+        rule.runOnIdle { level.pct = START - STEP }
+        rule.onRoot().performTouchInput { moveBy(Offset(0f, -stride)) }
+        frames(OPEN_FRAMES)
+        assertEquals("a level the drag did not send anchors the drag there and sends nothing, sets ${level.sets}", listOf(START + 3), level.sets.drop(2))
+        rule.onRoot().performTouchInput { moveBy(Offset(0f, -stride)) }
+        frames(OPEN_FRAMES)
+        assertEquals("the drag goes on from that level anchored at the previous move's y, two strides back, sets ${level.sets}", listOf(START + 3, START - STEP + 2), level.sets.drop(2))
+        rule.onRoot().performTouchInput { up() }
+        frames(OPEN_FRAMES)
     }
 
     @Test

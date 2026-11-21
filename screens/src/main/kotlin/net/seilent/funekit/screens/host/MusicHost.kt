@@ -244,6 +244,7 @@ class MusicHost<S : Any> internal constructor(
     private var offsetTrack: Long? = null
     private var offsetEntry = false
     private var offsetWant by mutableStateOf(false)
+    private val volSets = mutableListOf<Int>()
     private val infoRole = Role(Roles.dialogItem.size, Roles.dialogItem.weight, Case.Mixed, Roles.dialogItem.alpha, Roles.dialogItem.tracking)
     val popKind: (Turn<S>) -> MoveKind = { t -> pop(t) ?: appPop(t) }
 
@@ -558,8 +559,14 @@ class MusicHost<S : Any> internal constructor(
             }
             VolumeHud.Act.Volume -> {
                 val n = volume.maxPct()?.let { minOf(hud.number, it) } ?: hud.number
+                volSets += n
                 scope.launch(FailFast) {
-                    quiet { volume.set(n) } ?: return@launch
+                    val done = try {
+                        quiet { volume.set(n) }
+                    } finally {
+                        volSets.remove(n)
+                    }
+                    done ?: return@launch
                     val p = volume.percent()
                     hud.took(p)
                     if (p != hud.percent) openVolume(now())
@@ -1319,7 +1326,9 @@ class MusicHost<S : Any> internal constructor(
                                 volAct(hud.up(now(), x, y))
                                 break
                             }
-                            volAct(hud.move(now(), x, y, volume.percent(), volPos()))
+                            val p = volume.percent()
+                            if (p in volSets) hud.took(p)
+                            volAct(hud.move(now(), x, y, p, volPos()))
                         }
                     } finally {
                         if (!ended) hud.cancel(now())
