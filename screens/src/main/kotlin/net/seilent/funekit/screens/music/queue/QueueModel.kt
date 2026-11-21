@@ -16,6 +16,7 @@ import net.seilent.funekit.kit.motion.lerp
 import net.seilent.funekit.kit.touch.ListTouch
 import net.seilent.funekit.kit.touch.RowSpec
 import net.seilent.funekit.kit.touch.RowTrack
+import net.seilent.funekit.api.Kind
 import net.seilent.funekit.api.LibraryView
 import net.seilent.funekit.api.Listing
 import net.seilent.funekit.api.PlayerState
@@ -219,9 +220,10 @@ class QueueModel(entry: Long) : PageModel(entry, MusicPage.Queue) {
 
     fun target(i: Int): SheetTarget? {
         val r = row(i) ?: return null
+        val library = r.kind != Kind.Service
         return SheetTarget(
-            SheetKind.Queue, r.title, Listing.Queue, paging.window?.generation ?: 0L, track = r.id,
-            slot = i, cur = index, size = size, revision = revision, library = true, from = SheetFrom.Queue,
+            SheetKind.Queue, r.title, Listing.Queue, paging.window?.generation ?: 0L, track = r.id.takeIf { library },
+            slot = i, cur = index, size = size, revision = revision, library = library, from = SheetFrom.Queue,
         )
     }
 

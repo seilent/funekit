@@ -35,6 +35,8 @@ sealed interface HistoryAct {
     data class Song(val id: Long) : HistoryAct
 
     data class Album(val listing: Listing, val index: Int) : HistoryAct
+
+    data class Service(val id: Long) : HistoryAct
 }
 
 class HistoryModel(entry: Long) : PivotPage(entry, MusicPage.History) {
@@ -119,11 +121,12 @@ class HistoryModel(entry: Long) : PivotPage(entry, MusicPage.History) {
 
     fun act(i: Int): HistoryAct {
         val r = rows(pivot)?.getOrNull(i) ?: return HistoryAct.None
+        if (r.kind == Kind.Service) return HistoryAct.Service(r.id)
         return if (pivot == HISTORY_RECENT) HistoryAct.Song(r.id) else HistoryAct.Album(Listing.AlbumTracks(r.id), -1)
     }
 
     fun target(i: Int): SheetTarget? {
-        val r = rows(pivot)?.getOrNull(i) ?: return null
+        val r = rows(pivot)?.getOrNull(i)?.takeIf { it.kind != Kind.Service } ?: return null
         return if (pivot == HISTORY_RECENT) {
             SheetTarget(SheetKind.Song, r.title, null, generation, 0, r.id, Kind.Song, r.id, from = SheetFrom.History)
         } else {

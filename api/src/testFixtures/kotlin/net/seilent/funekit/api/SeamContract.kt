@@ -63,6 +63,7 @@ class Subject(
     val busy: (suspend (String) -> Unit)? = null,
     val card: (suspend (Card) -> Unit)? = null,
     val bookTrack: Long? = null,
+    val serviceEntry: (suspend () -> Unit)? = null,
 ) {
     suspend fun <T> within(block: suspend () -> T): T = wait.within(block)
 
@@ -619,7 +620,7 @@ abstract class SeamContract {
         val history = view.history(0, 50)
         assertEquals(view.generation, history.generation)
         assertEquals(song.id, history.rows.first().id)
-        assertTrue(history.rows.all { it.kind == Kind.Song })
+        assertTrue(history.rows.all { it.kind == Kind.Song || it.kind == Kind.Service })
         assertEquals(history.rows.size, history.rows.map { it.id }.distinct().size)
 
         val fresh = view.newAlbums(0, 50)
@@ -1578,7 +1579,7 @@ abstract class SeamContract {
         assertEquals(r, s.quickplay.revision.value)
         assertEquals(full.rows, view.pins(0, cap).rows)
         assertFalse(view.pinned(Kind.Song, extra))
-        val held = full.rows.first()
+        val held = full.rows.first { it.kind != Kind.Service }
         s.quickplay.pin(held.kind, held.id)
         assertEquals(r, s.quickplay.revision.value)
         assertEquals(full.rows, view.pins(0, cap).rows)
@@ -1620,7 +1621,7 @@ abstract class SeamContract {
         val favorites = view.allRows(Listing.Favorites).map { it.id }
         val queued = queue(s)
         val pins = view.pins(0, 100).rows
-        val held = pins.first()
+        val held = pins.first { it.kind != Kind.Service }
         val free = songs(s, 20).first { id -> pins.none { it.kind == Kind.Song && it.id == id } }
         val g = view.generation
         val q = s.player.state.value.queueRevision
@@ -1877,6 +1878,69 @@ abstract class SeamContract {
         assertFalse(st.sleepEnd)
         assertEquals(0L, st.anchor.ms(s.elapsedNanos()))
         assertEquals(started, seen.value.count { it == EngineEvent.Started(b) })
+    }
+
+    @Test
+    fun serviceRowsKeepTheirOwnKindAndPlayThroughTheirDoor() = runTest {
+        val s = open(Edge.Main)
+        val view = s.library.view()
+        val hook = s.serviceEntry
+        if (hook == null) {
+            val song = songs(s, 1).single()
+            s.player.play(listOf(song), 0, 0)
+            assertNull(playing(s, song).service)
+            for (l in listOf(Listing.Pins, Listing.History, Listing.Queue)) assertTrue("$l", view.allRows(l).none { it.kind == Kind.Service })
+            val e = runCatching { s.player.playService(-1) }.exceptionOrNull()
+            assertTrue("$e", e is UnsupportedOperationException || e is Refused)
+            return@runTest
+        }
+        hook()
+        val pins = view.allRows(Listing.Pins)
+        val history = view.allRows(Listing.History)
+        val pin = pins.first { it.kind == Kind.Service }
+        assertTrue(history.any { it.kind == Kind.Service })
+        for (rows in listOf(pins, history)) rows.filter { it.kind == Kind.Service }.map { it.id }.let { assertEquals(it.distinct(), it) }
+        val songIds = view.allRows(Listing.Songs).map { it.id }.toSet()
+        for (l in listOf(Listing.Songs, Listing.Albums, Listing.Artists)) assertTrue("$l", view.allRows(l).none { it.kind == Kind.Service })
+        assertTrue((pins + history).filter { it.kind == Kind.Service }.none { it.id in songIds })
+        assertTrue(view.pinned(Kind.Service, pin.id))
+        if (s.library.caps.indexOf(Listing.Pins)) assertEquals(pins.indexOf(pin), view.indexOf(Listing.Pins, Kind.Service, pin.id))
+        for (q in listOf("", pin.title)) assertTrue(q, view.allRows(Listing.Search(q, Kind.Service)).isEmpty())
+        val seen = events(s.player)
+        s.player.playService(pin.id)
+        val st = s.until(s.player.state) { it.service == pin.id && it.playing }
+        assertNull(st.track)
+        assertEquals(0, st.index)
+        val row = view.page(Listing.Queue, 0, 1).rows.single()
+        assertEquals(Kind.Service, row.kind)
+        assertEquals(pin.id, row.id)
+        val newest = view.history(0, 1).rows.single()
+        assertEquals(Kind.Service to pin.id, newest.kind to newest.id)
+        s.player.pause()
+        s.until(s.player.state) { !it.playing }
+        val held = ms(s)
+        advanceTimeBy(1_000L)
+        assertEquals(held, ms(s))
+        s.player.resume()
+        s.until(s.player.state) { it.playing && it.service == pin.id }
+        s.player.seek(10_000)
+        s.until(s.player.state) { it.anchor.ms(s.elapsedNanos()) == 10_000L }
+        advanceTimeBy(st.durationMs + 1)
+        s.until(s.player.state) { !it.playing }
+        assertTrue("${seen.value}", seen.value.none { it == EngineEvent.Started(pin.id) || it == EngineEvent.Ended(pin.id) })
+        runCatching { s.player.play(listOf(pin.id), 0, 0) }
+        val asTrack = s.player.state.value
+        assertFalse("$asTrack", asTrack.playing && asTrack.service == pin.id)
+        val song = songs(s, 1).single()
+        s.player.play(listOf(song), 0, 0)
+        val next = playing(s, song)
+        assertTrue("${seen.value}", seen.value.none { it == EngineEvent.Started(pin.id) })
+        assertNull(next.service)
+        val r = s.quickplay.revision.value
+        s.quickplay.unpin(Kind.Service, pin.id)
+        s.until(s.quickplay.revision) { it > r }
+        assertFalse(view.pinned(Kind.Service, pin.id))
+        outcome(s, { it is Refused }) { s.player.playService(-1) }
     }
 
     private companion object {

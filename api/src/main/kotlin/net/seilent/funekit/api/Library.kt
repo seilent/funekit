@@ -6,7 +6,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import net.seilent.funekit.api.engine.Root
 import kotlin.reflect.KClass
 
-enum class Kind { Artist, Album, Song, Genre, Folder, Playlist }
+enum class Kind { Artist, Album, Song, Genre, Folder, Playlist, Service }
 
 sealed interface ArtRef {
     data class Embedded(val track: Long, val offset: Long, val length: Long) : ArtRef

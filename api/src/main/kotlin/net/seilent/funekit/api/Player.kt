@@ -37,4 +37,5 @@ interface Player {
     suspend fun speed(pct: Int): Unit = throw UnsupportedOperationException()
     suspend fun sleep(minutes: Int): Unit = throw UnsupportedOperationException()
     suspend fun endOfTrack(): Unit = throw UnsupportedOperationException()
+    suspend fun playService(id: Long): Unit = throw UnsupportedOperationException()
 }

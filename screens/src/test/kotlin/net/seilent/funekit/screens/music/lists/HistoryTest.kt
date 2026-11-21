@@ -23,6 +23,7 @@ import net.seilent.funekit.screens.music.lists.ViewKey
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.lang.reflect.Proxy
@@ -152,6 +153,17 @@ class HistoryTest {
     }
 
     @Test
+    fun aServiceRowPlaysThroughTheServiceDoorAndHasNoSheet() {
+        recent = recent.toMutableList().also { it[2] = Row(SERVICE, Kind.Service, "radio", "", null) }
+        val m = model()
+        load(m)
+        assertEquals(HistoryAct.Service(SERVICE), m.act(2))
+        assertNull(m.target(2))
+        assertEquals(HistoryAct.Song(recent[1].id), m.act(1))
+        assertNotNull(m.target(1))
+    }
+
+    @Test
     fun aRecentRowPlaysTheSongAloneAndANewRowItsAlbumWhole() {
         val m = model()
         load(m)
@@ -207,6 +219,7 @@ class HistoryTest {
 
     private companion object {
         const val FAKE = 150L
+        const val SERVICE = 9_000L
         const val ALBUM = 1000L
         const val CURRENT = 5L
         const val PLAYING = 3L

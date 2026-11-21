@@ -50,6 +50,7 @@ data class PlayerState(
     val book: Boolean = false,
     val sleepAtNanos: Long? = null,
     val sleepEnd: Boolean = false,
+    val service: Long? = null,
 ) {
     val durationMs: Long get() = anchor.durationMs
 

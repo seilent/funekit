@@ -170,6 +170,8 @@ internal object Fixture {
     const val BROKEN = "Worn Groove"
     const val REFUSED = "Room 12"
     const val BOOK = "Umber"
+    const val SERVICE = 3_000_000L
+    const val SERVICE_TITLE = "Harbor Radio"
     const val HUGE = 50_000
     const val HUGE_BASE = 1_000_000L
     const val FOLDER_BASE = 1_000L
@@ -295,6 +297,8 @@ internal object Fixture {
     private val DEMO: Shelf by lazy { Demo.shelf(ROOTS.take(1), props = false, playlists = true) }
     private val DEMO_PROPS: Shelf by lazy { Demo.shelf(ROOTS.take(1), props = true, playlists = true) }
     private val DEMO_NO_PLAYLISTS: Shelf by lazy { Demo.shelf(ROOTS.take(1), props = false, playlists = false) }
+
+    val SERVICE_TRACK = Track(SERVICE, SERVICE_TITLE, emptyList(), "", 0, null, null, null, MS_BASE, CD, Codec.Flac, null, false, "", "")
 
     val ALBUMS: List<Album> = MAIN.albums
     val PINS: List<Pin> = MAIN.pins

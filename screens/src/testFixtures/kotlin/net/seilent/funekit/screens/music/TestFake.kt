@@ -12,5 +12,6 @@ private const val NANOS_PER_MS = 1_000_000L
 fun testFake(
     set: FakeSet = FakeSet.Demo,
     scheduler: TestCoroutineScheduler = TestCoroutineScheduler(),
+    services: Boolean = false,
     clock: () -> Long = { scheduler.currentTime * NANOS_PER_MS },
-): Fake = Fake(CoroutineScope(StandardTestDispatcher(scheduler)), clock, set, 0L, LEASE_MS)
+): Fake = Fake(CoroutineScope(StandardTestDispatcher(scheduler)), clock, set, 0L, LEASE_MS, services = services)

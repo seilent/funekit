@@ -807,7 +807,7 @@ class MusicHost<S : Any> internal constructor(
         }
         if (h != null) opened = h
         scope.launch(FailFast) {
-            val ok = quiet { play(s) } == true && s.player.state.value.track != null
+            val ok = quiet { play(s) } == true && s.player.state.value.let { it.track != null || it.service != null }
             if (ok) h?.done() else h?.fail()
         }
         return true

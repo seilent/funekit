@@ -151,6 +151,7 @@ fun HistoryLayer(
                                 when (act) {
                                     is HistoryAct.Song -> src.player.play(listOf(act.id), 0, 0L)
                                     is HistoryAct.Album -> src.player.play(act.listing, m.generation, act.index, 0L)
+                                    is HistoryAct.Service -> src.player.playService(act.id)
                                     HistoryAct.None -> Unit
                                 }
                             }

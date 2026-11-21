@@ -42,6 +42,7 @@ class FakePlayer internal constructor(
     private var sleepAt: Long? = null
     private var sleepJob: Job? = null
     private var sleepEnd = false
+    private var streamed: Long? = null
 
     override val state: StateFlow<PlayerState> = _state.asStateFlow()
     override val events: SharedFlow<EngineEvent> = bus.asSharedFlow()
@@ -208,6 +209,11 @@ class FakePlayer internal constructor(
         publish(_state.value)
     }
 
+    override suspend fun playService(id: Long) = lock.withLock {
+        if (!library.service(id)) throw Refused()
+        start(listOf(id), 0, 0, null, false, id)
+    }
+
     override suspend fun endOfTrack() = lock.withLock {
         if (queue.current == null) throw Refused()
         sleepJob?.cancel()
@@ -278,8 +284,9 @@ class FakePlayer internal constructor(
         if (revision != queue.revision) throw Stale(revision)
     }
 
-    private fun start(ids: List<Long>, index: Int, posMs: Long, from: Listing?, shuffle: Boolean) {
+    private fun start(ids: List<Long>, index: Int, posMs: Long, from: Listing?, shuffle: Boolean, service: Long? = null) {
         origin = from
+        streamed = service
         sleepEnd = false
         queue.set(ids, index, shuffle)
         load(posMs, true)
@@ -303,7 +310,7 @@ class FakePlayer internal constructor(
 
     private fun proceed() {
         val s = _state.value
-        if (s.track == null) return
+        if (queue.current == null) return
         if (s.input == null || s.anchor.ms(clock()) >= s.durationMs) return load(0, true)
         stopped = false
         publish(s.copy(playing = true, anchor = s.anchor.copy(elapsedNanos = clock(), running = true)))
@@ -332,6 +339,7 @@ class FakePlayer internal constructor(
         stopped = true
         origin = null
         sleepEnd = false
+        streamed = null
         queue.clear()
         publish(_state.value.copy(playing = false, anchor = Anchor.NONE, input = null, output = null, resampled = false))
         emit(EngineEvent.QueueChanged)
@@ -343,16 +351,19 @@ class FakePlayer internal constructor(
 
     private fun publish(s: PlayerState) {
         if (store.queue.revision != queue.revision) store.queued(queue.ids(), queue.revision)
+        val current = queue.current
+        val service = current?.takeIf { it == streamed }
         _state.value = s.copy(
             queueSize = queue.size,
             queueRevision = queue.revision,
             index = queue.slot,
-            track = queue.current,
+            track = current.takeIf { service == null },
             origin = origin,
             shuffle = queue.shuffle,
-            book = queue.current?.let { library.track(it)?.book } == true,
+            book = service == null && current?.let { library.track(it)?.book } == true,
             sleepAtNanos = sleepAt,
             sleepEnd = sleepEnd,
+            service = service,
         )
     }
 
@@ -393,7 +404,7 @@ class FakePlayer internal constructor(
         var out: Format? = null
         while (true) {
             val id = queue.current ?: break
-            val found = library.track(id)
+            val found = entry(id)
             val o = found?.takeUnless { it.broken }?.let { outputOf(inputOf(it), route) }
             if (found != null && o != null) {
                 t = found
@@ -420,7 +431,7 @@ class FakePlayer internal constructor(
         emit(EngineEvent.RouteChanged(s.route, resampled))
         if (playing) {
             store.played(t.id)
-            emit(EngineEvent.Started(t.id))
+            if (t.id != streamed) emit(EngineEvent.Started(t.id))
         }
         schedule()
     }
@@ -439,8 +450,8 @@ class FakePlayer internal constructor(
     private fun ended() {
         end = null
         val s = _state.value
-        val id = s.track ?: return
-        emit(EngineEvent.Ended(id))
+        val id = queue.current ?: return
+        if (id != streamed) emit(EngineEvent.Ended(id))
         val play = !sleepEnd
         sleepEnd = false
         when {
@@ -459,6 +470,8 @@ class FakePlayer internal constructor(
             }
         }
     }
+
+    private fun entry(id: Long): Track? = if (id == streamed) Fixture.SERVICE_TRACK else library.track(id)
 
     private fun slept() {
         sleepJob = null

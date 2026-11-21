@@ -15,9 +15,10 @@ class Fake(
     leaseMs: Long,
     val pinCap: Int? = null,
     trackRefs: Boolean = false,
+    services: Boolean = false,
 ) {
     private val bus = MutableSharedFlow<EngineEvent>(extraBufferCapacity = EVENTS, onBufferOverflow = BufferOverflow.DROP_OLDEST)
-    private val store = Store(set)
+    private val store = Store(set, services)
     private val shelf = Fixture.shelf(set)
 
     val library = FakeLibrary(scope, clock, set, latencyMs, leaseMs, store, bus, trackRefs)

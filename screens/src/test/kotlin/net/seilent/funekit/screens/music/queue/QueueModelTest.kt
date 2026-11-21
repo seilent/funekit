@@ -2,18 +2,22 @@ package net.seilent.funekit.screens.music.queue
 
 import kotlinx.coroutines.runBlocking
 import net.seilent.funekit.kit.touch.RowSpec
+import net.seilent.funekit.api.Kind
 import net.seilent.funekit.api.Listing
 import net.seilent.funekit.api.PlayerState
 import net.seilent.funekit.fake.FakeSet
 import net.seilent.funekit.screens.music.MusicSource
+import net.seilent.funekit.screens.music.overlay.MOVE_DOWN
 import net.seilent.funekit.screens.music.overlay.MOVE_UP
 import net.seilent.funekit.screens.music.overlay.PLAY_NEXT
 import net.seilent.funekit.screens.music.overlay.REMOVE
+import net.seilent.funekit.screens.music.overlay.sheetItems
 import net.seilent.funekit.screens.music.queue.QueueModel
 import net.seilent.funekit.screens.music.testFake
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -128,6 +132,30 @@ class QueueModelTest {
     }
 
     @Test
+    fun aServiceRowKeepsItsSlotActsAndNoTrackActs() = runBlocking {
+        val g = testFake(services = true)
+        val s = MusicSource(g.library, g.player, g.quickplay, g.favorites, g.playlists, g.lyrics)
+        val service = g.library.view().page(Listing.History, 0, HISTORY).rows.first { it.kind == Kind.Service }.id
+        val song = g.library.view().page(Listing.Songs, 0, 1).rows.single().id
+        s.player.playService(service)
+        s.player.enqueue(listOf(song))
+        s.player.playAt(1, s.player.state.value.queueRevision)
+        val m = QueueModel(0)
+        m.geometry(RowSpec(PITCH, VIEW))
+        val st = s.player.state.value
+        m.state(st)
+        s.viewed { v -> m.show(v, 0, 2) }
+        assertTrue(m.open(st, 0L))
+        val t = checkNotNull(m.target(0))
+        assertNull(t.track)
+        assertFalse(t.library)
+        assertEquals(listOf(REMOVE, PLAY_NEXT, MOVE_DOWN), sheetItems(t, false))
+        assertEquals(song, m.target(1)?.track)
+        assertTrue(m.tap(0, s))
+        assertEquals(service, s.player.state.value.service)
+    }
+
+    @Test
     fun aVerbAtItsSheetTargetsRevisionAfterTheWindowFollowedAnEditIsStale() {
         val ids = songs(8)
         val m = opened(ids, 0)
@@ -204,6 +232,7 @@ class QueueModelTest {
         private const val PRESS_AT = 10_000L
         private const val PRESS_STEP = 10L
         private const val PITCH = 120
+        private const val HISTORY = 100
         private const val VIEW = 920
         private const val LONG = 800
         private const val FAR = 700

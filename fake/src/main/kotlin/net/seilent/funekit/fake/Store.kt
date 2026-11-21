@@ -19,7 +19,7 @@ internal data class PlaylistDoc(
     val source: String? = null,
 )
 
-internal class Store(set: FakeSet) {
+internal class Store(set: FakeSet, val services: Boolean = false) {
     private val _revision = MutableStateFlow(0L)
     private val _favorites = MutableStateFlow(0L)
     private val _playlists = MutableStateFlow(0L)
@@ -30,11 +30,11 @@ internal class Store(set: FakeSet) {
     val playlistsRevision: StateFlow<Long> = _playlists.asStateFlow()
 
     @Volatile
-    var pins: List<Pin> = if (seeded) Fixture.shelf(set).pins else emptyList()
+    var pins: List<Pin> = if (seeded) Fixture.shelf(set).pins + listOfNotNull(Pin(Kind.Service, Fixture.SERVICE).takeIf { services }) else emptyList()
         private set
 
     @Volatile
-    var history: List<Long> = if (seeded) Fixture.shelf(set).history else emptyList()
+    var history: List<Long> = if (seeded) Fixture.shelf(set).history + listOfNotNull(Fixture.SERVICE.takeIf { services }) else emptyList()
         private set
 
     @Volatile

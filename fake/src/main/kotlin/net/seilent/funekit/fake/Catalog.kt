@@ -90,9 +90,9 @@ internal class Catalog(set: FakeSet, private val roots: List<FakeRoot>, private 
         is Listing.FolderTracks -> Rows.of(folderTracks(listing.folder).map(::songRow))
         is Listing.Search -> search(listing.query, listing.kind)
         Listing.Pins -> Rows.of(store.pins.mapNotNull(::resolve))
-        Listing.History -> Rows.of(store.history.mapNotNull { track(it) }.map(::songRow))
+        Listing.History -> Rows.of(store.history.mapNotNull { if (store.services && it == Fixture.SERVICE) serviceRow else track(it)?.let(::songRow) })
         Listing.NewAlbums -> Rows.of(albums.sortedByDescending { it.mtime }.map(::albumRow))
-        Listing.Queue -> queueRows(store.queue.ids)
+        Listing.Queue -> queueRows(store.queue.ids, store.services)
         Listing.Favorites -> Rows.of(store.favorites.mapNotNull { trackById[it] }.map(::songRow))
     }
 
@@ -100,6 +100,7 @@ internal class Catalog(set: FakeSet, private val roots: List<FakeRoot>, private 
         Kind.Album -> albumById[pin.id]?.let(::albumRow)
         Kind.Artist -> artists.firstOrNull { it.id == pin.id }?.let(::artistRow)
         Kind.Song -> track(pin.id)?.let(::songRow)
+        Kind.Service -> serviceRow.takeIf { pin.id == Fixture.SERVICE }
         else -> null
     }
 
@@ -165,12 +166,14 @@ internal class Catalog(set: FakeSet, private val roots: List<FakeRoot>, private 
         { Kind.Song },
     ) { songRow(Fixture.hugeTrack(it)) }
 
-    private fun queueRows(ids: List<Long>) = Rows(
+    private fun queueRows(ids: List<Long>, services: Boolean) = Rows(
         ids.size,
         { ByteArray(ids.size) { i -> track(ids[i])?.let { Section.key(it.title).letter.toByte() } ?: 0.toByte() } },
         { ids[it] },
-        { Kind.Song },
-    ) { i -> track(ids[i])?.let(::songRow) ?: Row(ids[i], Kind.Song, "", "", null) }
+        { if (services && ids[it] == Fixture.SERVICE) Kind.Service else Kind.Song },
+    ) { i -> if (services && ids[i] == Fixture.SERVICE) serviceRow else track(ids[i])?.let(::songRow) ?: Row(ids[i], Kind.Song, "", "", null) }
+
+    private val serviceRow = Row(Fixture.SERVICE, Kind.Service, Fixture.SERVICE_TITLE, "", null, durationMs = Fixture.SERVICE_TRACK.ms)
 
     private fun folder(id: Long): Rows {
         if (id == 0L) return Rows.of(roots.map { Row(it.id, Kind.Folder, it.name, "", null, count = it.fixture?.let { f -> walk(f, "").size } ?: 0) })

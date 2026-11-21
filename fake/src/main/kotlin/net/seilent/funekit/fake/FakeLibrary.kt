@@ -161,6 +161,8 @@ class FakeLibrary internal constructor(
 
     internal fun track(id: Long): Track? = current.catalog.track(id)
 
+    internal fun service(id: Long): Boolean = store.services && id == Fixture.SERVICE
+
     internal fun resolves(pin: Pin): Boolean = current.catalog.resolve(pin) != null
 
     internal fun ids(listing: Listing, generation: Long): List<Long> {

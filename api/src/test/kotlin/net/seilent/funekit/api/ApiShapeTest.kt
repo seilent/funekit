@@ -31,7 +31,7 @@ class ApiShapeTest {
 
     @Test
     fun everyEnumKeepsItsEntriesInOrder() {
-        assertEquals("Kind", listOf("Artist", "Album", "Song", "Genre", "Folder", "Playlist"), Kind.entries.map { it.name })
+        assertEquals("Kind", listOf("Artist", "Album", "Song", "Genre", "Folder", "Playlist", "Service"), Kind.entries.map { it.name })
         assertEquals("Repeat", listOf("Off", "All", "One"), Repeat.entries.map { it.name })
         assertEquals("ReplayGain", listOf("Off", "Track", "Album"), ReplayGain.entries.map { it.name })
         assertEquals("Crossfeed", listOf("Off", "Default", "ChuMoy", "JanMeier"), Crossfeed.entries.map { it.name })
@@ -73,7 +73,7 @@ class ApiShapeTest {
             Page::class.java to listOf("generation", "offset", "total", "rows", "revision"),
             PlayerState::class.java to listOf(
                 "queueSize", "queueRevision", "index", "track", "origin", "playing", "anchor", "shuffle", "repeat", "route",
-                "resampled", "input", "output", "xruns", "book", "sleepAtNanos", "sleepEnd",
+                "resampled", "input", "output", "xruns", "book", "sleepAtNanos", "sleepEnd", "service",
             ),
             Anchor::class.java to listOf("frame", "rate", "elapsedNanos", "running", "durationMs", "speedPct"),
             Sound::class.java to listOf(

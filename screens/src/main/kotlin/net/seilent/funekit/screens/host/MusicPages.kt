@@ -437,6 +437,7 @@ class HistoryType(types: MusicTypes, private val chrome: Chrome) : MusicPageType
                     when (act) {
                         is HistoryAct.Song -> s.player.play(listOf(act.id), 0, 0L)
                         is HistoryAct.Album -> s.player.play(act.listing, m.generation, act.index, 0L)
+                        is HistoryAct.Service -> s.player.playService(act.id)
                         HistoryAct.None -> return@playOpen false
                     }
                     true
