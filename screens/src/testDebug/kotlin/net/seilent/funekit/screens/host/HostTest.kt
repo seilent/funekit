@@ -24,6 +24,7 @@ import net.seilent.funekit.api.Kind
 import net.seilent.funekit.api.Row
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.MenuForm
+import net.seilent.funekit.kit.np.NpLayout
 import net.seilent.funekit.kit.motion.MoveKind
 import net.seilent.funekit.kit.motion.OverKind
 import net.seilent.funekit.kit.motion.Overlay
@@ -650,7 +651,13 @@ class HostTest {
         val x = px(Tok.edge, page.stdPpu) + 2f
         val y = px(page.board.overlayRingY, page.stdPpu) - 2f
         rule.onRoot().performTouchInput { down(Offset(x, y)) }
-        frames(Tok.input_keyHoldMs.toInt() / FRAME_MS + CUT_FRAMES + 1)
+        var n = 0
+        while (app.host.offsetSheet!!.hud.shown && n < OPEN_FRAMES) {
+            frames(1)
+            n++
+        }
+        assertFalse(app.host.offsetSheet!!.hud.shown)
+        frames(CUT_FRAMES)
         assertNull(app.stack.overlay)
         rule.onRoot().performTouchInput { up() }
         frames(OPEN_FRAMES)
@@ -728,6 +735,76 @@ class HostTest {
         assertSame(next, app.host.offsetSheet)
         assertEquals(OverKind.Sheet, app.stack.overlay?.kind)
         assertEquals(listOf("entry false", "end"), e.calls)
+        assertTrue(rule.runOnIdle { app.menuHost.hold!!(0) })
+        frames(OPEN_FRAMES)
+        assertNull(app.stack.overlay)
+        assertSame(next, app.host.offsetSheet)
+        assertEquals(listOf("entry false", "end", "entry false"), e.calls)
+    }
+
+    @Test
+    fun turningTheLyricsViewOffClosesTheLyricsSheet() {
+        val e = Edit()
+        val app = lyricsApp(e)
+        rule.runOnIdle { app.host.openOffset() }
+        frames(OPEN_FRAMES)
+        assertNotNull(app.host.offsetSheet)
+        rule.runOnIdle { app.lyricsOn = false }
+        frames(OPEN_FRAMES)
+        assertNull(app.host.offsetSheet)
+        assertNull(app.stack.overlay)
+        assertEquals(listOf("end"), e.calls)
+    }
+
+    @Test
+    fun aReturnInTheFrameOfTheEntrysPopReopensTheSheet() {
+        val e = Edit()
+        val app = lyricsApp(e)
+        rule.runOnIdle { app.host.openOffset() }
+        frames(OPEN_FRAMES)
+        assertTrue(rule.runOnIdle { app.menuHost.hold!!(0) })
+        frames(CUT_FRAMES)
+        rule.runOnIdle { app.stack.push(MusicEntry(app.stack.entry(), MusicPage.Album(ALBUM)), MoveKind.T2) }
+        frames(OPEN_FRAMES)
+        rule.runOnIdle {
+            app.stack.back(app.host.popKind)
+            app.host.offsetReturn(false)
+        }
+        frames(2 * OPEN_FRAMES)
+        assertTrue(app.host.isNp(app.stack.top!!))
+        assertEquals(OverKind.Sheet, app.stack.overlay?.kind)
+        assertNotNull(app.host.offsetSheet)
+        assertEquals(listOf("entry false"), e.calls)
+    }
+
+    @Test
+    fun twoSheetOpensInOneFrameOpenOneSheet() {
+        val e = Edit()
+        val app = lyricsApp(e)
+        rule.runOnIdle {
+            app.host.openOffset()
+            app.host.openOffset()
+        }
+        val sheet = app.host.offsetSheet
+        frames(OPEN_FRAMES)
+        assertNotNull(sheet)
+        assertSame(sheet, app.host.offsetSheet)
+        assertEquals(OverKind.Sheet, app.stack.overlay?.kind)
+        assertEquals(emptyList<String>(), e.calls)
+    }
+
+    @Test
+    fun aSheetOverAHeldOneEndsTheHeldEditBeforeTheAppIsAsked() {
+        val e = Edit()
+        val app = lyricsApp(e)
+        app.asked = { e.calls += "asked" }
+        rule.runOnIdle { app.host.openOffset() }
+        frames(OPEN_FRAMES)
+        assertTrue(rule.runOnIdle { app.menuHost.hold!!(0) })
+        frames(CUT_FRAMES)
+        rule.runOnIdle { app.host.openOffset() }
+        frames(OPEN_FRAMES)
+        assertEquals(listOf("asked", "entry false", "end", "asked"), e.calls)
     }
 
     @Test
@@ -988,7 +1065,7 @@ class HostTest {
         val app = lyricsApp(Edit(), mode = false)
         val pic = NpPicture(ImageBitmap(4, 4))
         rule.runOnIdle {
-            app.host.blurContext = Dispatchers.Unconfined
+            app.music.np.workContext = Dispatchers.Unconfined
             app.music.np.art = ImageBitmap(COVER, COVER)
             app.backdropFlow.value = pic
         }
@@ -1005,7 +1082,7 @@ class HostTest {
     fun aCoverStillBlurringKeepsTheShownBackdrop() {
         val app = lyricsApp(Edit(), mode = false)
         rule.runOnIdle {
-            app.host.blurContext = Dispatchers.Unconfined
+            app.music.np.workContext = Dispatchers.Unconfined
             app.music.np.art = ImageBitmap(COVER, COVER)
             app.backdropFlow.value = NpPicture(ImageBitmap(4, 4))
         }
@@ -1015,7 +1092,7 @@ class HostTest {
         val first = app.host.npBackdrop.shown
         assertTrue(first!!.whole)
         rule.runOnIdle {
-            app.host.blurContext = StandardTestDispatcher()
+            app.music.np.workContext = StandardTestDispatcher()
             app.music.np.art = ImageBitmap(COVER, COVER)
         }
         frames(BLUR_FRAMES)
@@ -1026,7 +1103,7 @@ class HostTest {
     fun aNewSongsCoverBlurringHoldsThePreviousCoverUntilItLands() {
         val app = lyricsApp(Edit(), mode = false)
         rule.runOnIdle {
-            app.host.blurContext = Dispatchers.Unconfined
+            app.music.np.workContext = Dispatchers.Unconfined
             app.music.np.art = ImageBitmap(COVER, COVER)
             app.backdropFlow.value = NpPicture(ImageBitmap(4, 4))
         }
@@ -1039,7 +1116,7 @@ class HostTest {
         rule.runOnIdle {
             val key = app.music.np.artKey as List<*>
             app.music.np.artKey = listOf(2L) + key.drop(1)
-            app.host.blurContext = held
+            app.music.np.workContext = held
             app.music.np.sync(NpShown.of(listOf(song(2))), rule.mainClock.currentTime)
         }
         frames(BLUR_FRAMES)
@@ -1055,12 +1132,80 @@ class HostTest {
     }
 
     @Test
+    fun lyricsModeWithNoArtShowsTheAppPicture() {
+        val app = lyricsApp(Edit(), mode = false)
+        val pic = NpPicture(ImageBitmap(4, 4))
+        val next = NpPicture(ImageBitmap(4, 4))
+        rule.runOnIdle { app.backdropFlow.value = pic }
+        frames(2)
+        rule.runOnIdle { app.host.showLyrics(true) }
+        frames(BLUR_FRAMES)
+        assertNull(app.music.np.art)
+        assertSame(pic, app.host.npBackdrop.shown)
+        rule.runOnIdle { app.backdropFlow.value = next }
+        frames(BLUR_FRAMES)
+        assertSame(next, app.host.npBackdrop.shown)
+    }
+
+    @Test
+    fun aCoverBlurredAtOneSizeIsBlurredAgainAtTheNext() {
+        val shorter = scale(Window(W, H_SHORT, SDK, none, none, none, none, none), Nav.None, Surface.NowPlaying, false)
+        val app = lyricsApp(Edit(), mode = false)
+        rule.runOnIdle {
+            app.music.np.workContext = Dispatchers.Unconfined
+            app.music.np.art = ImageBitmap(COVER, COVER)
+            app.backdropFlow.value = NpPicture(ImageBitmap(4, 4))
+        }
+        frames(2)
+        rule.runOnIdle { app.host.showLyrics(true) }
+        frames(BLUR_FRAMES)
+        val first = app.host.npBackdrop.shown
+        assertTrue(first!!.whole)
+        rule.runOnIdle {
+            app.music.np.artKey = listOf(1L, null, NpLayout(shorter).artSide, null, false)
+            app.np = shorter
+        }
+        frames(BLUR_FRAMES)
+        val next = app.host.npBackdrop.shown
+        assertTrue(next!!.whole)
+        assertNotSame(first, next)
+    }
+
+    @Test
+    fun afterAPhoneSessionThePhoneArtGivesNoCover() {
+        val app = lyricsApp(Edit())
+        val pic = NpPicture(ImageBitmap(4, 4))
+        val art = Bitmap.createBitmap(COVER, COVER, Bitmap.Config.ARGB_8888)
+        val track = PhoneTrack("Radio", "Song", "Artist", "Album", true, false, DURATION, 0L, 0L, 1f, false, PhoneRepeat.Off, 0, 0, art)
+        rule.runOnIdle {
+            app.music.np.workContext = Dispatchers.Unconfined
+            app.backdropFlow.value = pic
+            app.phone.value = PhoneSession(track, {}, {})
+        }
+        frames(OPEN_FRAMES)
+        assertTrue(app.music.np.variant)
+        assertTrue(app.music.np.artPhone)
+        assertNotNull(app.music.np.art)
+        assertSame(pic, app.host.npBackdrop.shown)
+        val phoneArt = app.music.np.art
+        rule.runOnIdle { app.phone.value = null }
+        frames(OPEN_FRAMES)
+        assertFalse(app.music.np.variant)
+        rule.runOnIdle {
+            app.music.np.artPhone = true
+            app.music.np.art = phoneArt
+        }
+        frames(BLUR_FRAMES)
+        assertSame(pic, app.host.npBackdrop.shown)
+    }
+
+    @Test
     fun aCoverThatCannotBlurGivesTheAppPicture() {
         val app = lyricsApp(Edit(), mode = false)
         val pic = NpPicture(ImageBitmap(4, 4))
         val next = NpPicture(ImageBitmap(4, 4))
         rule.runOnIdle {
-            app.host.blurContext = Dispatchers.Unconfined
+            app.music.np.workContext = Dispatchers.Unconfined
             app.music.np.art = ImageBitmap(1, 1)
             app.backdropFlow.value = pic
         }
@@ -1088,10 +1233,9 @@ class HostTest {
         private const val DRAG_PX = 600f
         private const val STEPS = 10
         private const val OPEN_FRAMES = 30
-        private const val CUT_FRAMES = 3
+        private const val CUT_FRAMES = 2
         private const val BLUR_FRAMES = 4
         private const val COVER = 64
-        private const val FRAME_MS = 16
         private const val DURATION = 180_000L
         private const val H_SHORT = 1080
         private const val MIN_SHIFT = 10

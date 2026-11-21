@@ -16,6 +16,7 @@ import net.seilent.funekit.kit.Ink
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -98,6 +99,30 @@ class NpBackdropTest {
         assertEquals(0.5f, gone.single().alpha)
         d.stepTo(2 * fade)
         assertTrue(d.layers(2 * fade).isEmpty())
+    }
+
+    @Test
+    fun aChangeDuringAFadePaintsTheHeldFrameInPlace() {
+        val d = NpBackdrop()
+        d.size(4, 4)
+        d.set(a, 0)
+        d.set(b, fade / 2)
+        val held = d.layers(fade / 2).first().picture.image
+        d.set(NpPicture(ImageBitmap(4, 4)), fade / 2 + 1)
+        assertSame(held, d.layers(fade / 2 + 1).first().picture.image)
+    }
+
+    @Test
+    fun aHeldFrameFadingOutIsPaintedOverTheGroundInPlace() {
+        val d = NpBackdrop()
+        d.size(4, 4)
+        d.set(NpPicture(solid(4, 4) { true }), 0)
+        d.set(b, fade / 2)
+        d.set(null, fade / 2 + 1)
+        d.set(a, fade + 1)
+        val frozen = d.layers(fade + 1).first().picture.image.asAndroidBitmap()
+        val bg = Ink.bg.red * 255f
+        assertTrue(abs(((frozen.getPixel(2, 2) shr 16) and 0xFF) - over(bg, 0.5f, over(255f, 0.5f, bg))) <= 2)
     }
 
     @Test

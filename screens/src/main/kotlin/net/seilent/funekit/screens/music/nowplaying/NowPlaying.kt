@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
+import kotlinx.coroutines.Dispatchers
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.motion.Curves
 import net.seilent.funekit.kit.motion.Press
@@ -16,6 +17,7 @@ import net.seilent.funekit.kit.np.NP_RINGS
 import net.seilent.funekit.kit.np.NpLayout
 import net.seilent.funekit.api.PlayerState
 import net.seilent.funekit.api.Repeat
+import kotlin.coroutines.CoroutineContext
 
 class NpSlide {
     var touch = false
@@ -56,6 +58,7 @@ class NowPlayingModel {
     var mark by mutableStateOf(false)
     var art: ImageBitmap? by mutableStateOf(null)
     var artKey: Any? = null
+    var artPhone = false
     var ring by mutableIntStateOf(0)
         private set
     var titleFocus by mutableStateOf(false)
@@ -69,7 +72,8 @@ class NowPlayingModel {
 
     val variant: Boolean get() = phone != null
     val lyrics = LyricsModel()
-    var lyricsView = false
+    var lyricsView by mutableStateOf(false)
+    var workContext: CoroutineContext = Dispatchers.Default
 
     fun lyricsShown(): Boolean = lyricsView && lyrics.shown(variant)
     val press = Array(NP_PRESSES) { i -> Press().also { it.scaled = i == NP_MARK } }

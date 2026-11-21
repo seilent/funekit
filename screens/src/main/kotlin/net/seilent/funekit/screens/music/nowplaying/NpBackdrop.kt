@@ -63,6 +63,7 @@ class NpBackdrop {
         private set
 
     private var was: NpLayer? = null
+    private var frame: ImageBitmap? = null
     private var fadeAt = 0L
     private var fade = false
     private var w = 0
@@ -88,10 +89,18 @@ class NpBackdrop {
 
     private fun freeze(cur: List<NpLayer>): NpLayer? {
         if (w <= 0 || h <= 0) return null
-        val img = ImageBitmap(w, h)
+        val f = frame?.takeIf { it.width == w && it.height == h }
+        val img = f ?: ImageBitmap(w, h).also { frame = it }
+        val held = cur[0]
+        val over = held.picture.image === img
         CanvasDrawScope().draw(Density(1f), LayoutDirection.Ltr, ImageCanvas(img), Size(w.toFloat(), h.toFloat())) {
-            drawRect(Ink.bg)
-            npLayers(cur)
+            if (over) {
+                if (held.alpha < 1f) drawRect(Ink.bg, alpha = 1f - held.alpha)
+                npLayers(cur.drop(1))
+            } else {
+                drawRect(Ink.bg)
+                npLayers(cur)
+            }
         }
         return NpLayer(NpPicture(img, whole = true), 1f)
     }
@@ -119,6 +128,7 @@ class NpBackdrop {
         if (!fade || fading(now)) return
         fade = false
         was = null
+        if (shown == null) frame = null
         revision++
     }
 }

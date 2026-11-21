@@ -1,5 +1,6 @@
 package net.seilent.funekit.screens.music.nowplaying
 
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.runBlocking
@@ -614,7 +615,10 @@ class NowPlayingTest {
 
     @Test
     fun withTheLyricsViewTheMarkNeedsLyricLines() = runBlocking {
-        val m = NowPlayingModel().also { it.lyricsView = true }
+        val m = NowPlayingModel().also {
+            it.lyricsView = true
+            it.workContext = Dispatchers.Unconfined
+        }
         assertFalse(npMark(m, Text(""), 1))
         assertTrue(npMark(m, Text("[00:01.00]one"), 1))
         assertEquals(1, m.lyrics.lines.size)

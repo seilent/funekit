@@ -300,5 +300,5 @@ fun NpLyrics(m: LyricsModel, np: NowPlayingModel, g: NpLayout, covers: Covers?, 
 
 fun lyricTarget(h: NpHalf, plain: LyricPlain): Edges {
     val top = h.y - h.dy
-    return Edges(h.x + px(Tok.edge, h.g.p), maxOf(h.y, top + plain.y0), h.x + px(Tok.canvasW - Tok.edge, h.g.p), minOf(h.y + h.clip, top + plain.y1))
+    return Edges(h.x + px(Tok.edge, h.g.p), top + plain.y0, h.x + px(Tok.canvasW - Tok.edge, h.g.p), top + plain.y1)
 }

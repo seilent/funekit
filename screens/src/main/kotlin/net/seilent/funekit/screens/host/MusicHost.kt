@@ -30,7 +30,6 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.IntOffset
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -148,7 +147,6 @@ import net.seilent.funekit.screens.music.overlay.runSheet
 import net.seilent.funekit.screens.music.overlay.sheetItems
 import net.seilent.funekit.screens.music.pivotBy
 import net.seilent.funekit.screens.music.queue.QueueModel
-import kotlin.coroutines.CoroutineContext
 
 private const val OVER = 1
 private const val LEAD_MS = 17L
@@ -238,7 +236,6 @@ class MusicHost<S : Any> internal constructor(
     private val volumeOverlay = Overlay(OverKind.Volume, hud) { if (hud.pendingSeek() != null) volSeek() }
     private val menuOvers = ArrayList<Pair<Overlay, Long>>()
     private val backdrop = NpBackdrop()
-    internal var blurContext: CoroutineContext = Dispatchers.Default
     private var offset by mutableStateOf<OffsetSheet?>(null)
     private var offsetOver: Overlay? = null
     private var offsetTrack: Long? = null
@@ -1101,17 +1098,17 @@ class MusicHost<S : Any> internal constructor(
     private fun NpBackdropFeed() {
         val pic by app.backdrop.collectAsState()
         val shown = np.lyricsView && np.lyrics.mode && !np.variant
-        val art = np.art
+        val art = np.art?.takeIf { !np.artPhone }
         val gs = npGeo.s
-        var cover by remember { mutableStateOf<Pair<ImageBitmap, NpPicture?>?>(null) }
+        var cover by remember { mutableStateOf<Blurred?>(null) }
         LaunchedEffect(art, shown, gs) {
-            if (!shown || art == null || cover?.first === art) return@LaunchedEffect
-            val img = withContext(blurContext) { CoverBlur.image(art, gs.widthPx, gs.heightPx, gs) }
-            cover = art to img?.let { NpPicture(it, whole = true) }
+            if (!shown || art == null || cover?.of(art, gs) == true) return@LaunchedEffect
+            val img = withContext(np.workContext) { CoverBlur.image(art, gs.widthPx, gs.heightPx, gs) }
+            cover = Blurred(art, gs, img?.let { NpPicture(it, whole = true) })
         }
-        val done = cover?.takeIf { it.first === art }
+        val done = cover?.takeIf { it.of(art, gs) }
         val wait = shown && art != null && done == null
-        val want = (if (shown) done?.second else null) ?: pic
+        val want = (if (shown) done?.picture else null) ?: pic
         LaunchedEffect(want, wait) { if (!wait) backdrop.set(want, now()) }
     }
 
@@ -1159,8 +1156,8 @@ class MusicHost<S : Any> internal constructor(
 
     fun openOffset() {
         val track = offsetOpen() ?: return
-        val edit = app.offset(track) ?: return
         offsetEnd()
+        val edit = app.offset(track) ?: return
         val sheet = OffsetSheet(edit)
         offset = sheet
         offsetTrack = track
@@ -1170,6 +1167,7 @@ class MusicHost<S : Any> internal constructor(
 
     private fun offsetOpen(): Long? {
         if (!np.lyricsView || stack.top?.let(::isNp) != true || stack.overlay != null || stack.phase != Phase.Rest) return null
+        if (offset != null && !offsetEntry) return null
         val l = np.lyrics
         val t = now()
         if (l.fading(t)) l.land(np.variant)
@@ -1181,7 +1179,7 @@ class MusicHost<S : Any> internal constructor(
         if (offset == null) return false
         val l = np.lyrics
         val track = offsetTrack
-        return !l.shown(np.variant) || np.shown.track != track || l.track != track || !(l.pending || l.lines.isNotEmpty())
+        return !np.lyricsView || !l.shown(np.variant) || np.shown.track != track || l.track != track || !(l.pending || l.lines.isNotEmpty())
     }
 
     private fun offsetCells(sheet: OffsetSheet, m: Menu = menuHost.menu) {
@@ -1233,7 +1231,7 @@ class MusicHost<S : Any> internal constructor(
     fun offsetReturn(adjust: Boolean) {
         val sheet = offset ?: return
         scope.launch(FailFast) {
-            while (stack.overlay != null || stack.phase != Phase.Rest) withFrameMillis { }
+            while (stack.overlay != null || stack.moving) withFrameMillis { }
             if (offset !== sheet) return@launch
             if (offsetOpen() != offsetTrack) {
                 offsetEnd()
@@ -1369,6 +1367,10 @@ fun <S : Any> rememberMusicHost(
     val host = remember { MusicHost(music, models, toast, jump, menuHost, movePaint, scope, app, env, src, volume, types, npGeo, npHalves, npHalfInks, navGround, split, view) }
     host.update(app, env, src, volume, types, phone, feed, npGeo, npHalves, npHalfInks, navGround, split, view)
     return host
+}
+
+private class Blurred(val art: ImageBitmap, val scale: Scale, val picture: NpPicture?) {
+    fun of(a: ImageBitmap?, s: Scale): Boolean = art === a && scale == s
 }
 
 private class AdjustDown {

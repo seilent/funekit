@@ -4,7 +4,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import net.seilent.funekit.api.Lyrics
 import net.seilent.funekit.core.Lrc
@@ -17,6 +16,7 @@ import net.seilent.funekit.kit.motion.Curves
 import net.seilent.funekit.kit.motion.VariantMotion
 import net.seilent.funekit.kit.touch.RowSpec
 import net.seilent.funekit.kit.touch.RowTrack
+import kotlin.coroutines.CoroutineContext
 
 private const val MIRROR = 2L
 private const val WAKE_SLACK_MS = 25L
@@ -148,11 +148,11 @@ class LyricsModel {
         changed()
     }
 
-    suspend fun read(l: Lyrics, track: Long) {
+    suspend fun read(l: Lyrics, track: Long, on: CoroutineContext) {
         begin(track)
         val text = l.lyrics(track)
         val off = l.offsetMs(track)
-        val p = withContext(Dispatchers.Default) { parsed(text) }
+        val p = withContext(on) { parsed(text) }
         loaded(track, p, off)
     }
 

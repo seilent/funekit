@@ -70,7 +70,7 @@ suspend fun queueRows(source: MusicSource, s: PlayerState, next: Int): Pair<Long
 
 internal suspend fun npMark(np: NowPlayingModel, l: Lyrics, track: Long): Boolean {
     if (!np.lyricsView) return l.lyrics(track) != null
-    np.lyrics.read(l, track)
+    np.lyrics.read(l, track, np.workContext)
     return np.lyrics.has(track)
 }
 
@@ -129,6 +129,7 @@ fun NowPlayingFeed(np: NowPlayingModel, g: NpLayout, src: MusicSource?, phone: P
                 got.single()?.asImageBitmap()
             }
         }
+        np.artPhone = np.variant
         np.art = img
         np.artKey = key
     }

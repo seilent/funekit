@@ -87,8 +87,9 @@ class TestApp(page: Scale, np: Scale, private val src: MusicSource?, private val
     lateinit var menu: Menu
     lateinit var menuHost: MenuHost
     var pokes = 0
-    var lyricsOn = false
+    var lyricsOn by mutableStateOf(false)
     var edit: OffsetEdit? = null
+    var asked: () -> Unit = {}
     val backdropFlow = MutableStateFlow<NpPicture?>(null)
 
     override fun music(s: MusicEntry): MusicEntry = s
@@ -115,7 +116,7 @@ class TestApp(page: Scale, np: Scale, private val src: MusicSource?, private val
 
     override val lyricsView: Boolean get() = lyricsOn
 
-    override fun offset(track: Long): OffsetEdit? = edit
+    override fun offset(track: Long): OffsetEdit? = edit.also { asked() }
 
     private val home = object : HomePaint {
         override val quickplay = false
