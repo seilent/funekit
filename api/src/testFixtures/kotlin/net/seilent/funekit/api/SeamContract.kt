@@ -331,6 +331,7 @@ abstract class SeamContract {
         s.player.play(ids, 0, 1_000)
         val st = playing(s, ids[0])
         assertTrue(st.durationMs > 20_000)
+        assertEquals(100, st.anchor.speedPct)
         val start = ms(s)
         assertEquals(1_000L, start)
         advanceTimeBy(2_000L)

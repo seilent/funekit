@@ -75,7 +75,7 @@ class ApiShapeTest {
                 "queueSize", "queueRevision", "index", "track", "origin", "playing", "anchor", "shuffle", "repeat", "route",
                 "resampled", "input", "output", "xruns",
             ),
-            Anchor::class.java to listOf("frame", "rate", "elapsedNanos", "running", "durationMs"),
+            Anchor::class.java to listOf("frame", "rate", "elapsedNanos", "running", "durationMs", "speedPct"),
             Sound::class.java to listOf(
                 "gapless", "crossfadeMs", "replayGain", "preampDb", "crossfeed", "width", "tube", "output", "volume", "volumePct",
                 "volumeStepPct",

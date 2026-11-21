@@ -3,11 +3,23 @@ package net.seilent.funekit.api
 import net.seilent.funekit.api.engine.Format
 import net.seilent.funekit.api.engine.Output
 
-data class Anchor(val frame: Long, val rate: Int, val elapsedNanos: Long, val running: Boolean, val durationMs: Long) {
+data class Anchor(
+    val frame: Long,
+    val rate: Int,
+    val elapsedNanos: Long,
+    val running: Boolean,
+    val durationMs: Long,
+    val speedPct: Int = 100,
+) {
+    init {
+        require(speedPct >= 1) { "speed $speedPct" }
+    }
+
     fun ms(nowElapsedNanos: Long): Long {
         if (rate <= 0) return 0
         val base = frame / rate * NANOS + frame % rate * NANOS / rate
-        val run = if (running) (nowElapsedNanos - elapsedNanos).coerceAtLeast(0) else 0
+        val wall = if (running) (nowElapsedNanos - elapsedNanos).coerceAtLeast(0) else 0
+        val run = wall / PERCENT * speedPct + wall % PERCENT * speedPct / PERCENT
         val ms = ((base + run) / MILLI).coerceAtLeast(0)
         return if (durationMs > 0) ms.coerceAtMost(durationMs) else ms
     }
@@ -15,6 +27,7 @@ data class Anchor(val frame: Long, val rate: Int, val elapsedNanos: Long, val ru
     companion object {
         private const val NANOS = 1_000_000_000L
         private const val MILLI = 1_000_000L
+        private const val PERCENT = 100
         val NONE = Anchor(0, 0, 0, false, 0)
     }
 }

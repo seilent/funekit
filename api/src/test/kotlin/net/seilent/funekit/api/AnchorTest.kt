@@ -1,6 +1,7 @@
 package net.seilent.funekit.api
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AnchorTest {
@@ -28,6 +29,20 @@ class AnchorTest {
     @Test
     fun aClockBeforeTheAnchorDoesNotRewind() {
         assertEquals(1_000L, anchor.ms(0))
+    }
+
+    @Test
+    fun runsAtItsSpeed() {
+        val fast = anchor.copy(speedPct = 150)
+        assertEquals(4_000L, fast.ms(second * 3))
+        assertEquals(1_500L, anchor.copy(speedPct = 50).ms(second * 2))
+        assertEquals(1_000L, fast.copy(running = false).ms(second * 3))
+        assertEquals(10_000L, fast.ms(second * 60))
+    }
+
+    @Test
+    fun aSpeedBelowOneIsRefused() {
+        for (bad in listOf(0, -50)) assertTrue("$bad", runCatching { anchor.copy(speedPct = bad) }.exceptionOrNull() is IllegalArgumentException)
     }
 
     @Test
