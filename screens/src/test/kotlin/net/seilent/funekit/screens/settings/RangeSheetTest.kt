@@ -33,6 +33,10 @@ import net.seilent.funekit.kit.pageGround
 import net.seilent.funekit.px
 import net.seilent.funekit.scale
 import net.seilent.funekit.screens.host.frameMenu
+import net.seilent.funekit.screens.music.nowplaying.AdjustCol
+import net.seilent.funekit.screens.music.nowplaying.AdjustHud
+import net.seilent.funekit.screens.music.nowplaying.AdjustInk
+import net.seilent.funekit.screens.music.nowplaying.adjustHud
 import net.seilent.funekit.sheet.Render
 import net.seilent.funekit.sheet.Sheet
 import org.junit.Assert.assertEquals
@@ -44,6 +48,8 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -61,6 +67,7 @@ class RangeSheetTest {
     private val hues = (0 until Tok.accent_hueCount.toInt()).map { it * Tok.accent_hueStep.toInt() }
     private val words = listOf(OFF) + hues.map { it.toString() }
     private val at = words.indexOf(Accent.defaultHue.toString())
+    private val limit = (Tok.settings_balanceMax / Tok.settings_balanceStep).roundToInt()
 
     private fun display() = listOf(
         SettingRow("brightness", "brightness", "55%", SettingKind.Steps),
@@ -68,6 +75,25 @@ class RangeSheetTest {
         SettingRow("clock", "clock", "24h", SettingKind.Choice),
         SettingRow("batteryPercent", "battery percent", "off", SettingKind.Toggle),
         SettingRow("statusVolume", "status volume", "off", SettingKind.Toggle),
+    )
+
+    private fun halfDb(h: Int): String = (if (h < 0) "-" else "") + abs(h) / 2 + if (abs(h) % 2 == 1) ".5" else ".0"
+
+    private fun balanceText(b: Int): String = if (b == 0) CENTER else (if (b < 0) "l " else "r ") + abs(b) / 2 + (if (abs(b) % 2 == 1) ".5" else "") + " db"
+
+    private fun balanceCols(b: Int) = listOf(
+        AdjustCol(halfDb(if (b > 0) -b else 0), "left db", b > 0, b in 0 until limit),
+        AdjustCol(halfDb(if (b < 0) b else 0), "right db", b < 0, b <= 0 && b > -limit),
+    )
+
+    private fun output(b: Int) = listOf(
+        SettingRow("priority", "priority", "jack", SettingKind.Choice, sub = "jack or headset when both connect"),
+        SettingRow("volumeStep", "volume step", "5%", SettingKind.Steps),
+        SettingRow("maxVolume", "max volume", "100", SettingKind.Steps),
+        SettingRow("powerOnVolume", "power on volume", "last", SettingKind.Steps),
+        SettingRow(BALANCE, BALANCE, balanceText(b), SettingKind.Range, min = -limit, max = limit, step = 1, level = b),
+        SettingRow("filter", "digital filter", "fast", SettingKind.Choice),
+        SettingRow("sampleRate", "sample rate", "auto", flags = setOf(SettingFlag.ReadOnly)),
     )
 
     private fun model(rows: List<SettingRow>, p: Int): SettingsModel = SettingsModel(1L, SettingsId(SETTINGS)).also { m ->
@@ -134,9 +160,35 @@ class RangeSheetTest {
                 "# Kit settings range rows",
                 "",
                 "- `settings/accent.png`: the display pivot with the accent swatch, then its value sheet, at A105",
+                "- `settings/balance.png`: the balance HUD at l 4.5 db and at center over the output pivot, at A105",
                 "- Unpaired: the funeOS reference set has no display pivot, accent sheet or adjust HUD shot",
             ),
         )
+    }
+
+    @Test
+    fun theBalanceHudAtLeftFourAndAHalfAndAtCenter() {
+        val notes = listOf(
+            "720x1280, A105 board, page scale",
+            "funeOS player/ui/app.cpp half_db :277-281, adjust_cols :15747-15756, player/ui/settings.cpp balance_text :78-84, build :318-340, v0.4.2",
+        )
+        val tiles = listOf(LEFT_HALVES to "left", 0 to CENTER).map { (b, name) ->
+            val m = model(output(b), 0)
+            m.down(BALANCE_ROW, 0L)
+            m.tap(BALANCE_ROW, 0L)
+            m.edit(BALANCE, false)
+            val d = settingsDraw(m, a105, measurer, fonts, density, covers, accent, false)
+            val c = chromeFor(m)
+            val h = AdjustHud().also { it.open(0, balanceCols(b), BALANCE, balanceText(b)) }
+            val ink = AdjustInk(a105, measurer, fonts, density, covers)
+            val img = shot {
+                page(m, d, c)
+                adjustHud(h, a105, ink, NOW)
+            }
+            render.tile(FOLDER, "balance-$name", "the balance hud at ${balanceText(b)} over the output pivot", notes, img, emptyList(), a105.stdPpu)
+        }
+        assertEquals("v0.4.2 left of center", "l 4.5 db", balanceText(LEFT_HALVES))
+        render.write(Sheet(FOLDER, "balance", listOf("Kit settings balance edit in the adjust HUD (funeOS v0.4.2)."), tiles))
     }
 
     private companion object {
@@ -147,6 +199,10 @@ class RangeSheetTest {
         const val OFF = "off"
         const val DISPLAY = 3
         const val ACCENT_ROW = 1
+        const val BALANCE_ROW = 4
+        const val LEFT_HALVES = -9
+        const val BALANCE = "balance"
+        const val CENTER = "center"
         const val NOW = 5000L
         val PIVOTS = listOf("output", "effects", "library", "display", "screens", "power", "connect", "system")
     }

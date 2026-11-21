@@ -59,6 +59,16 @@ class AdjustLegs(val scrim: Float, val number: Float, val exit: Float, val group
     }
 }
 
+interface AdjustSource {
+    val hud: AdjustHud
+
+    fun tap(h: AdjustHit)
+
+    fun back()
+
+    fun number(side: Int): Boolean
+}
+
 private fun progress(e: Long, d: Float): Float = if (d <= 0f) 1f else (e / d).coerceIn(0f, 1f)
 
 class AdjustHud : OverHud {

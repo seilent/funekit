@@ -105,7 +105,9 @@ import net.seilent.funekit.screens.music.hub.hubPicked
 import net.seilent.funekit.screens.music.lists.ListViewModel
 import net.seilent.funekit.screens.music.lists.PlaylistsModel
 import net.seilent.funekit.screens.music.nowplaying.AdjustHit
+import net.seilent.funekit.screens.music.nowplaying.AdjustHud
 import net.seilent.funekit.screens.music.nowplaying.AdjustLayer
+import net.seilent.funekit.screens.music.nowplaying.AdjustSource
 import net.seilent.funekit.screens.music.nowplaying.CoverBlur
 import net.seilent.funekit.screens.music.nowplaying.NowPlayingLayer
 import net.seilent.funekit.screens.music.nowplaying.NowPlayingModel
@@ -149,6 +151,7 @@ import net.seilent.funekit.screens.music.overlay.runSheet
 import net.seilent.funekit.screens.music.overlay.sheetItems
 import net.seilent.funekit.screens.music.pivotBy
 import net.seilent.funekit.screens.music.queue.QueueModel
+import net.seilent.funekit.screens.settings.RangeAdjust
 import net.seilent.funekit.screens.settings.SettingFlag
 import net.seilent.funekit.screens.settings.SettingKind
 import net.seilent.funekit.screens.settings.SettingPivot
@@ -158,6 +161,7 @@ import net.seilent.funekit.screens.settings.SettingsId
 import net.seilent.funekit.screens.settings.SettingsLayer
 import net.seilent.funekit.screens.settings.SettingsModel
 import net.seilent.funekit.screens.settings.SettingsPage
+import net.seilent.funekit.screens.settings.SettingsRows
 import net.seilent.funekit.screens.settings.settingsChrome
 import net.seilent.funekit.screens.settings.valueSheet
 
@@ -260,6 +264,21 @@ class MusicHost<S : Any> internal constructor(
     private var edit: Pair<Overlay, SettingsModel>? = null
     private var editGone: Overlay? = null
     private var liftOver: Overlay? = null
+    private val rangeHud = AdjustHud()
+    private var range by mutableStateOf<Pair<Overlay, RangeAdjust>?>(null)
+    private val rangeSource = object : AdjustSource {
+        override val hud: AdjustHud get() = rangeHud
+
+        override fun tap(h: AdjustHit) {
+            range?.second?.tap(h)
+        }
+
+        override fun back() {
+            range?.second?.back()
+        }
+
+        override fun number(side: Int): Boolean = range?.second?.number(side) == true
+    }
     private var liftModel: SettingsModel? = null
     private val infoRole = Role(Roles.dialogItem.size, Roles.dialogItem.weight, Case.Mixed, Roles.dialogItem.alpha, Roles.dialogItem.tracking)
     val popKind: (Turn<S>) -> MoveKind = { t -> pop(t) ?: appPop(t) }
@@ -317,6 +336,7 @@ class MusicHost<S : Any> internal constructor(
             m.pivots = settingsRead.listed(m.id)
         }
         editEnd()
+        rangeLanded()
         val key = scaleKey(env.page)
         if (scaleAt != key) {
             scaleAt = key
@@ -419,6 +439,7 @@ class MusicHost<S : Any> internal constructor(
     fun starting(t: Turn<S>) {
         for (s in listOfNotNull(t.from, t.to)) modelOf(s)?.lists?.forEach { it.land() }
         modelOf(t.from)?.lists?.forEach { it.cancel() }
+        if (edit?.second?.let { it === modelOf(t.from) } == true && rangeLeft()) rangeHud.dismiss()
     }
 
     fun swapped(s: S, at: Long) = pageThumbAtSwap(s, at, ::thumbOf)
@@ -544,6 +565,7 @@ class MusicHost<S : Any> internal constructor(
     }
 
     fun closing(o: Overlay) {
+        if (o === range?.first) rangeLeft()
         if (o !== liftOver) return
         liftModel?.drop(minOf(o.dur().toFloat(), Tok.motion_scroll))
         liftModel?.poke()
@@ -556,7 +578,12 @@ class MusicHost<S : Any> internal constructor(
             rows.action(row.key)
             return
         }
-        if (!row.editable || row.kind == SettingKind.Range || row.words.isEmpty()) return
+        if (!row.editable) return
+        if (row.kind == SettingKind.Range && row.swatches.isEmpty()) {
+            openRange(m, rows, row)
+            return
+        }
+        if (row.words.isEmpty()) return
         openSheet(valueSheet(row)) { i ->
             val n = row.values.size
             val v = row.values.getOrNull(if (row.kind == SettingKind.Steps) n - 1 - i else i) ?: return@openSheet true
@@ -574,7 +601,61 @@ class MusicHost<S : Any> internal constructor(
         val k = m.editing ?: return
         if (writable(m, k)) return
         edit = null
-        if (stack.overlay === o) stack.close() else if (menuOvers.any { it.first === o }) editGone = o
+        if (o.kind == OverKind.Adjust) {
+            m.endEdit()
+            range?.second?.finish()
+            range = null
+            stack.cut()
+        } else if (stack.overlay === o) {
+            stack.close()
+        } else if (menuOvers.any { it.first === o }) {
+            editGone = o
+        }
+    }
+
+    private fun openRange(m: SettingsModel, rows: SettingsRows, row: SettingRow) {
+        val a = rows.adjust(row, row.level) ?: return
+        val o = Overlay(OverKind.Adjust, rangeHud)
+        stack.open(o)
+        rangeHud.open(now(), a.cols, a.line1, a.line2)
+        m.edit(row.key, false)
+        edit = o to m
+        range = o to RangeAdjust(row, rows, rangeHud, row.level, ::rangeEnd, scope)
+    }
+
+    private fun rangeEnd(typed: Boolean) {
+        val (o, src) = range ?: return
+        src.finish()
+        edit?.takeIf { it.first === o }?.let { (_, m) ->
+            m.endEdit()
+            edit = null
+        }
+        if (typed) {
+            range = null
+            stack.cut()
+        } else {
+            stack.close()
+        }
+    }
+
+    private fun rangeLeft(): Boolean {
+        val (o, src) = range ?: return false
+        val (eo, m) = edit ?: return false
+        if (eo !== o) return false
+        src.revert()
+        src.finish()
+        m.endEdit()
+        edit = null
+        return true
+    }
+
+    private fun rangeLanded() {
+        val (o, src) = range ?: return
+        val (eo, m) = edit ?: return
+        if (eo !== o) return
+        val landed = m.groups.firstNotNullOfOrNull { p -> p.rows.firstOrNull { it.key == src.row.key } } ?: return
+        if (landed == src.row) return
+        src.landed(landed)
     }
 
     fun openJump(owner: S) {
@@ -1067,6 +1148,11 @@ class MusicHost<S : Any> internal constructor(
         }
         LaunchedEffect(stack) {
             snapshotFlow { stack.overlay }.collect { o ->
+                val r = range
+                if (r != null && r.first !== o) {
+                    rangeLeft()
+                    range = null
+                }
                 if (o == null || o !== editGone) return@collect
                 editGone = null
                 stack.close()
@@ -1181,11 +1267,27 @@ class MusicHost<S : Any> internal constructor(
     @Composable
     fun MenuOverlayHost() {
         val over = stack.overlay
+        val r = range
+        if (r != null && r.first === over) {
+            AdjustOverlayHost(rangeSource)
+            return
+        }
         if (over == null || menuOvers.none { it.first === over }) return
         val sheet = offset?.takeIf { offsetOver === over }
         if (sheet != null) {
+            val src = remember(sheet) {
+                object : AdjustSource {
+                    override val hud = sheet.hud
+
+                    override fun tap(h: AdjustHit) = offsetTap(sheet, h)
+
+                    override fun back() = offsetBack(sheet)
+
+                    override fun number(side: Int): Boolean = offsetNumber(sheet)
+                }
+            }
             if (sheet.hud.shown) {
-                AdjustOverlayHost(sheet)
+                AdjustOverlayHost(src)
                 return
             }
             val want = offsetWant
@@ -1215,23 +1317,23 @@ class MusicHost<S : Any> internal constructor(
     }
 
     @Composable
-    private fun AdjustOverlayHost(sheet: OffsetSheet) {
+    private fun AdjustOverlayHost(src: AdjustSource) {
         val s = env.page
-        val at = remember(sheet) { AdjustDown() }
+        val at = remember(src.hud) { AdjustDown() }
         BlockBelow(env.a, OVER)
-        BackHandler { offsetBack(sheet) }
+        BackHandler { if (!src.hud.hiding) src.back() }
         Box(Modifier.pxSize(s.widthPx, s.heightPx)) {
-            AdjustLayer(sheet.hud, s, env.covers, env.now)
+            AdjustLayer(src.hud, s, env.covers, env.now)
             val tap = Tap(
                 onPress = { at.fresh = true },
                 onCancel = { at.hit = AdjustHit.None },
-                onTap = { offsetTap(sheet, at.hit) },
-                onLong = { at.number >= 0 && offsetNumber(sheet) },
+                onTap = { if (!src.hud.hiding) src.tap(at.hit) },
+                onLong = { at.number >= 0 && !src.hud.hiding && src.number(at.number) },
                 onAt = { o ->
                     if (at.fresh) {
                         at.fresh = false
-                        at.hit = sheet.hud.hit(o.x, o.y, s)
-                        at.number = if (at.hit == AdjustHit.None) sheet.hud.numberAt(o.x, o.y) else -1
+                        at.hit = src.hud.hit(o.x, o.y, s)
+                        at.number = if (at.hit == AdjustHit.None) src.hud.numberAt(o.x, o.y) else -1
                     }
                 },
             )

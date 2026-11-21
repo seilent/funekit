@@ -1,5 +1,8 @@
 package net.seilent.funekit.screens.host
 
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.view.View
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.mutableStateOf
@@ -9,12 +12,14 @@ import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.channels.Channel
 import net.seilent.funekit.Insets
 import net.seilent.funekit.Nav
 import net.seilent.funekit.Roles
 import net.seilent.funekit.Surface
 import net.seilent.funekit.Window
 import net.seilent.funekit.gen.Tok
+import net.seilent.funekit.kit.Accent
 import net.seilent.funekit.kit.MenuForm
 import net.seilent.funekit.kit.motion.MoveKind
 import net.seilent.funekit.kit.motion.OverKind
@@ -23,10 +28,13 @@ import net.seilent.funekit.kit.stack.Phase
 import net.seilent.funekit.kit.stack.Turn
 import net.seilent.funekit.kit.touch.Kind
 import net.seilent.funekit.kit.touch.ListTouch
+import net.seilent.funekit.px
 import net.seilent.funekit.scale
+import net.seilent.funekit.screens.music.nowplaying.AdjustCol
 import net.seilent.funekit.screens.settings.AimKind
 import net.seilent.funekit.screens.settings.HeaderLook
 import net.seilent.funekit.screens.settings.SETTINGS
+import net.seilent.funekit.screens.settings.SettingAdjust
 import net.seilent.funekit.screens.settings.SettingFlag
 import net.seilent.funekit.screens.settings.SettingKind
 import net.seilent.funekit.screens.settings.SettingPivot
@@ -66,6 +74,11 @@ class SettingsHostTest {
         val sets = mutableListOf<Map<String, String>>()
         val actions = mutableListOf<String>()
         val drafts = mutableListOf<Pair<String, String>>()
+        val entries = mutableListOf<Pair<String, Int>>()
+        var takes = false
+        var onEntry: () -> Unit = {}
+        var replies: Channel<Boolean>? = null
+        var adjusts: (SettingRow, Int) -> SettingAdjust? = { _, _ -> null }
         var opened: Set<String> = emptySet()
         var onSet: () -> Unit = {}
 
@@ -77,7 +90,12 @@ class SettingsHostTest {
         override suspend fun set(key: String, values: List<String>): Boolean {
             sets += mapOf(key to values.single())
             onSet()
-            return true
+            val r = replies ?: return true.also { echo(key, values.single()) }
+            return r.receive()
+        }
+
+        private fun echo(key: String, v: String) {
+            pivots.value = pivots.value.map { p -> SettingPivot(p.name, p.rows.map { if (it.key == key && it.kind == SettingKind.Range && it.swatches.isEmpty()) it.copy(value = v, level = v.toInt()) else it }) }
         }
 
         override fun action(key: String) {
@@ -87,6 +105,64 @@ class SettingsHostTest {
         override fun draft(key: String, value: String) {
             drafts += key to value
         }
+
+        override fun adjust(row: SettingRow, level: Int): SettingAdjust? = adjusts(row, level)
+
+        override fun hasEntry(row: SettingRow): Boolean = takes
+
+        override fun entry(row: SettingRow, side: Int) {
+            entries += row.key to side
+            onEntry()
+        }
+    }
+
+    private fun balance(level: Int = 0) = SettingRow(BAL, BAL, level.toString(), SettingKind.Range, min = -LIMIT, max = LIMIT, step = 1, level = level)
+
+    private fun hudRows(start: SettingRow = balance()) = Rows(pivot(start)).also { r ->
+        r.adjusts = { _, l -> SettingAdjust(listOf(AdjustCol(l.toString(), LEFT), AdjustCol(l.toString(), RIGHT)), BAL, l.toString()) }
+    }
+
+    private val upRightAt = Offset(px(Tok.canvasW - Tok.edge - Tok.adjustColumn, page.stdPpu).toFloat(), px(Tok.overlayPlusY, page.stdPpu).toFloat())
+
+    private val numberAt = Offset(px(Tok.canvasW - Tok.edge - Tok.adjustColumn, page.stdPpu).toFloat(), px(page.board.overlayRingY, page.stdPpu) - 2f)
+
+    private fun press(at: Offset, n: Int = OPEN_FRAMES) {
+        rule.onRoot().performTouchInput {
+            down(at)
+            up()
+        }
+        frames(n)
+    }
+
+    private fun upRight() = press(upRightAt)
+
+    private fun drawn() {
+        val v = rule.activity.findViewById<View>(android.R.id.content)
+        val b = Bitmap.createBitmap(v.width, v.height, Bitmap.Config.ARGB_8888)
+        rule.runOnUiThread { v.draw(Canvas(b)) }
+    }
+
+    private fun downRight() = press(Offset(upRightAt.x, px(page.board.overlayMinusY, page.stdPpu).toFloat()))
+
+    private fun held(): Rows = hudRows().also { it.replies = Channel(Channel.UNLIMITED) }
+
+    private fun reply(rows: Rows, ok: Boolean) {
+        rule.runOnIdle { rows.replies?.trySend(ok) }
+        frames(RESIZE_FRAMES)
+    }
+
+    private fun land(rows: Rows, vararg levels: Int) {
+        rule.runOnIdle { for (l in levels) rows.pivots.value = pivot(balance(l)) }
+        frames(RESIZE_FRAMES)
+    }
+
+    private fun exit() = press(Offset(px(Tok.adjustExit, page.stdPpu) / 2f, px(Tok.adjustExit, page.stdPpu) / 2f), HIDE_FRAMES)
+
+    private fun hudApp(rows: Rows): Pair<TestApp, SettingsModel> {
+        val app = app(SettingsPage(ID, rows, HeaderLook.Settings))
+        val (_, m) = open(app)
+        tap(app, m, 0)
+        return app to m
     }
 
     private fun choice(key: String, words: List<String> = WORDS) = SettingRow(key, key, words[0], SettingKind.Choice, values = words, words = words, at = 0)
@@ -431,6 +507,324 @@ class SettingsHostTest {
     }
 
     @Test
+    fun aRangeRowWithAnAdjustOpensItsHudAndMarksItsEdit() {
+        val rows = hudRows()
+        val app = app(SettingsPage(ID, rows, HeaderLook.Settings))
+        val (_, m) = open(app)
+        tap(app, m, 0)
+        assertEquals(OverKind.Adjust, app.stack.overlay?.kind)
+        assertEquals(BAL, m.editing)
+        assertTrue(rows.sets.isEmpty())
+    }
+
+    @Test
+    fun theBalanceHudTakesItsTapsWhileItsOverlayIsCurrent() {
+        val rows = hudRows()
+        val app = app(SettingsPage(ID, rows, HeaderLook.Settings))
+        val (_, m) = open(app)
+        tap(app, m, 0)
+        upRight()
+        assertEquals(listOf(mapOf(BAL to "1")), rows.sets)
+    }
+
+    @Test
+    fun aStepAfterTheRowsLandGoesFromTheLandedRow() {
+        val rows = hudRows()
+        val app = app(SettingsPage(ID, rows, HeaderLook.Settings))
+        val (_, m) = open(app)
+        tap(app, m, 0)
+        rule.runOnIdle { rows.pivots.value = pivot(balance(LANDED)) }
+        frames(RESIZE_FRAMES)
+        assertEquals("premise: the hud stays", OverKind.Adjust, app.stack.overlay?.kind)
+        upRight()
+        assertEquals(listOf(mapOf(BAL to (LANDED + 1).toString())), rows.sets)
+    }
+
+    @Test
+    fun aBalanceRowTurnedReadOnlyWhileItsHudIsUpDropsItAndSendsNothingMore() {
+        val rows = hudRows()
+        val app = app(SettingsPage(ID, rows, HeaderLook.Settings))
+        val (_, m) = open(app)
+        tap(app, m, 0)
+        upRight()
+        rule.runOnIdle { rows.pivots.value = pivot(balance(1).copy(flags = setOf(SettingFlag.ReadOnly))) }
+        frames(CLOSE_FRAMES)
+        assertNull("the hud drops at once", app.stack.overlay)
+        assertNull(m.editing)
+        assertEquals(listOf(mapOf(BAL to "1")), rows.sets)
+    }
+
+    @Test
+    fun aStepStopsAtTheRowsMax() {
+        val rows = hudRows(balance(LIMIT - 1))
+        val app = app(SettingsPage(ID, rows, HeaderLook.Settings))
+        val (_, m) = open(app)
+        tap(app, m, 0)
+        upRight()
+        upRight()
+        assertEquals(listOf(mapOf(BAL to LIMIT.toString())), rows.sets)
+    }
+
+    @Test
+    fun backSendsTheLevelAtOpenAndClosesTheHud() {
+        val rows = hudRows()
+        val app = app(SettingsPage(ID, rows, HeaderLook.Settings))
+        val (_, m) = open(app)
+        tap(app, m, 0)
+        upRight()
+        rule.runOnIdle { rule.activity.onBackPressedDispatcher.onBackPressed() }
+        frames(OPEN_FRAMES)
+        assertEquals(listOf(mapOf(BAL to "1"), mapOf(BAL to "0")), rows.sets)
+        assertNull(app.stack.overlay)
+        assertNull(m.editing)
+    }
+
+    @Test
+    fun aBackTheStackDrivesSendsTheLevelAtOpenAsTheHudCloses() {
+        val rows = hudRows()
+        val app = app(SettingsPage(ID, rows, HeaderLook.Settings))
+        val (_, m) = open(app)
+        tap(app, m, 0)
+        upRight()
+        rule.runOnIdle { app.stack.back(app.host.popKind) }
+        frames(CLOSE_FRAMES)
+        assertEquals("premise: the hud hides with its overlay up", OverKind.Adjust, app.stack.overlay?.kind)
+        assertEquals(listOf(mapOf(BAL to "1"), mapOf(BAL to "0")), rows.sets)
+        frames(OPEN_FRAMES)
+        assertNull(app.stack.overlay)
+        assertNull(m.editing)
+    }
+
+    @Test
+    fun aTurnOffItsSettingsScreenDropsTheHudAndSendsTheLevelAtOpen() {
+        val rows = hudRows()
+        val app = app(SettingsPage(ID, rows, HeaderLook.Settings))
+        val (_, m) = open(app)
+        tap(app, m, 0)
+        upRight()
+        rule.runOnIdle { app.stack.pop(MoveKind.T4n) }
+        frames(OPEN_FRAMES)
+        assertEquals(listOf(mapOf(BAL to "1"), mapOf(BAL to "0")), rows.sets)
+        assertNull(app.stack.overlay)
+    }
+
+    @Test
+    fun aHoldOnAColumnNumberTakesTheEntryAndDropsTheHudWithTheSteppedLevel() {
+        val rows = hudRows().also { it.takes = true }
+        val app = app(SettingsPage(ID, rows, HeaderLook.Settings))
+        val (_, m) = open(app)
+        tap(app, m, 0)
+        upRight()
+        drawn()
+        rule.onRoot().performTouchInput { down(numberAt) }
+        frames(Tok.input_keyHoldMs.toInt() / FRAME_MS + CUT_FRAMES + 1)
+        assertNull(app.stack.overlay)
+        rule.onRoot().performTouchInput { up() }
+        frames(OPEN_FRAMES)
+        assertEquals(listOf(BAL to 1), rows.entries)
+        assertEquals("the stepped level stays", listOf(mapOf(BAL to "1")), rows.sets)
+    }
+
+    @Test
+    fun aPressThatOutlivesALandingTakesItsStepFromTheLandedLevel() {
+        val rows = hudRows()
+        hudApp(rows)
+        rule.onRoot().performTouchInput { down(upRightAt) }
+        rule.runOnIdle { rows.pivots.value = pivot(balance(LANDED)) }
+        frames(RESIZE_FRAMES)
+        rule.onRoot().performTouchInput { up() }
+        frames(OPEN_FRAMES)
+        assertEquals(listOf(mapOf(BAL to (LANDED + 1).toString())), rows.sets)
+    }
+
+    @Test
+    fun anEntryThatOpensASheetShowsItOverTheDroppedHud() {
+        val rows = hudRows().also { it.takes = true }
+        val (app, _) = hudApp(rows)
+        rows.onEntry = { app.host.openSheet(SettingSheet(MenuForm.Dlg, OTHER, listOf(OTHER))) { true } }
+        drawn()
+        rule.onRoot().performTouchInput { down(numberAt) }
+        frames(Tok.input_keyHoldMs.toInt() / FRAME_MS + OPEN_FRAMES)
+        rule.onRoot().performTouchInput { up() }
+        frames(OPEN_FRAMES)
+        assertEquals(listOf(BAL to 1), rows.entries)
+        assertEquals("the entry's sheet is up", OverKind.Dlg, app.stack.overlay?.kind)
+    }
+
+    @Test
+    fun anExitKeepsTheSteppedLevelEndsTheEditAndHides() {
+        val rows = hudRows()
+        val (app, m) = hudApp(rows)
+        upRight()
+        exit()
+        assertEquals("the hud hides with its overlay up", OverKind.Adjust, app.stack.overlay?.kind)
+        assertNull(m.editing)
+        frames(OPEN_FRAMES)
+        assertNull(app.stack.overlay)
+        assertEquals(listOf(mapOf(BAL to "1")), rows.sets)
+    }
+
+    @Test
+    fun aStepWhileTheHudHidesAfterBackSendsNothing() {
+        val rows = hudRows()
+        val (app, _) = hudApp(rows)
+        upRight()
+        rule.runOnIdle { rule.activity.onBackPressedDispatcher.onBackPressed() }
+        frames(HIDE_FRAMES)
+        assertEquals("premise: the hud hides", OverKind.Adjust, app.stack.overlay?.kind)
+        press(upRightAt, HIDE_FRAMES)
+        assertEquals(listOf(mapOf(BAL to "1"), mapOf(BAL to "0")), rows.sets)
+    }
+
+    @Test
+    fun aBackWhileTheHudHidesAfterExitRevertsNothing() {
+        val rows = hudRows()
+        val (app, _) = hudApp(rows)
+        upRight()
+        exit()
+        assertEquals("premise: the hud hides", OverKind.Adjust, app.stack.overlay?.kind)
+        rule.runOnIdle { rule.activity.onBackPressedDispatcher.onBackPressed() }
+        frames(OPEN_FRAMES)
+        assertEquals(listOf(mapOf(BAL to "1")), rows.sets)
+    }
+
+    @Test
+    fun aHoldThatFiresWhileTheHudHidesTakesNoEntry() {
+        val rows = hudRows().also { it.takes = true }
+        val (app, _) = hudApp(rows)
+        upRight()
+        drawn()
+        rule.onRoot().performTouchInput { down(numberAt) }
+        frames(Tok.input_keyHoldMs.toInt() / FRAME_MS - HOLD_LEAD)
+        rule.runOnIdle { rule.activity.onBackPressedDispatcher.onBackPressed() }
+        frames(HIDE_FRAMES)
+        assertEquals("premise: the hud hides while the hold runs", OverKind.Adjust, app.stack.overlay?.kind)
+        frames(OPEN_FRAMES)
+        rule.onRoot().performTouchInput { up() }
+        assertTrue(rows.entries.isEmpty())
+    }
+
+    @Test
+    fun upUpAndDownWithInOrderRepliesKeepTheStepBase() {
+        val rows = held()
+        hudApp(rows)
+        upRight()
+        upRight()
+        downRight()
+        land(rows, 1)
+        reply(rows, true)
+        land(rows, 2)
+        upRight()
+        assertEquals("the landed 2 is the HUD's own step, the base stays 1", listOf("1", "2", "1", "2").map { mapOf(BAL to it) }, rows.sets)
+    }
+
+    @Test
+    fun aRefusedStepAdoptsTheRowsLevel() {
+        val rows = held()
+        hudApp(rows)
+        upRight()
+        reply(rows, false)
+        upRight()
+        assertEquals("the next step goes from the row's 0", listOf("1", "1").map { mapOf(BAL to it) }, rows.sets)
+    }
+
+    @Test
+    fun aMergeBackToTheStartLevelInOneFrameMovesTheBase() {
+        val rows = held()
+        hudApp(rows)
+        upRight()
+        land(rows, 1, 0)
+        reply(rows, true)
+        upRight()
+        assertEquals("the merged 0 is no step of the HUD's", listOf("1", "1").map { mapOf(BAL to it) }, rows.sets)
+    }
+
+    @Test
+    fun aDeviceResetAfterEveryStepResolvedMovesTheBase() {
+        val rows = held()
+        hudApp(rows)
+        upRight()
+        land(rows, 1)
+        reply(rows, true)
+        land(rows, 0)
+        upRight()
+        assertEquals(listOf("1", "1").map { mapOf(BAL to it) }, rows.sets)
+    }
+
+    @Test
+    fun aReplyBeforeItsEchoKeepsTheStepBase() {
+        val rows = held()
+        hudApp(rows)
+        upRight()
+        upRight()
+        reply(rows, true)
+        land(rows, 1)
+        upRight()
+        assertEquals("the echo of 1 lands with 2 still in flight, the base stays 2", listOf("1", "2", "3").map { mapOf(BAL to it) }, rows.sets)
+    }
+
+    @Test
+    fun theSecondPushLandingBeforeItsReplyKeepsTheStepBase() {
+        val rows = held()
+        hudApp(rows)
+        upRight()
+        upRight()
+        reply(rows, true)
+        land(rows, 1)
+        land(rows, 2)
+        reply(rows, true)
+        upRight()
+        assertEquals(listOf("1", "2", "3").map { mapOf(BAL to it) }, rows.sets)
+    }
+
+    @Test
+    fun theFirstOfTwoStepsRefusedAdoptsNothingWhileTheSecondIsInFlight() {
+        val rows = held()
+        hudApp(rows)
+        upRight()
+        upRight()
+        reply(rows, false)
+        upRight()
+        assertEquals("the base stays 2 until the last reply", listOf("1", "2", "3").map { mapOf(BAL to it) }, rows.sets)
+    }
+
+    @Test
+    fun anUnrelatedCompositionBetweenAStepAndItsEchoKeepsTheHud() {
+        val rows = held()
+        val (app, _) = hudApp(rows)
+        upRight()
+        rule.runOnIdle { app.lyricsOn = true }
+        frames(RESIZE_FRAMES)
+        upRight()
+        assertEquals("the unchanged row moves nothing", listOf("1", "2").map { mapOf(BAL to it) }, rows.sets)
+    }
+
+    @Test
+    fun aStepInTheFrameItsRowTurnsReadOnlySendsNothing() {
+        val rows = hudRows()
+        val (app, m) = hudApp(rows)
+        rule.runOnIdle { rows.pivots.value = pivot(balance().copy(flags = setOf(SettingFlag.ReadOnly))) }
+        frames(1)
+        assertTrue("premise: the read only row landed", SettingFlag.ReadOnly in m.rows(0)[0].flags)
+        press(upRightAt, CLOSE_FRAMES)
+        assertTrue(rows.sets.isEmpty())
+        assertNull(app.stack.overlay)
+    }
+
+    @Test
+    fun aRangeRowWithSwatchesOpensItsSwatchSheetAndAPickSetsAtOnce() {
+        val swatches = WORDS.indices.map { Accent.forHue(it * HUE_STEP) }
+        val rows = Rows(pivot(choice("a").copy(kind = SettingKind.Range, swatches = swatches)))
+        val app = app(SettingsPage(ID, rows, HeaderLook.Settings))
+        val (_, m) = open(app)
+        tap(app, m, 0)
+        assertEquals(OverKind.Sheet, app.stack.overlay?.kind)
+        assertEquals(swatches, app.menu.swatches)
+        assertTrue(rule.runOnIdle { app.menuHost.act(2) })
+        assertEquals(listOf(mapOf("a" to WORDS[2])), rows.sets)
+    }
+
+    @Test
     fun aMoveFromSettingsCancelsItsListDrag() {
         val app = app(SettingsPage(ID, Rows(pivot(choice("a"))), HeaderLook.Settings))
         val (sc, m) = open(app)
@@ -523,6 +917,16 @@ class SettingsHostTest {
         private const val GONE = 3000L
         private const val LIFT_ROWS = 4
         private const val LIFT_ROW = 2
+        private const val BAL = "balance"
+        private const val LEFT = "left db"
+        private const val RIGHT = "right db"
+        private const val LIMIT = 20
+        private const val LANDED = 5
+        private const val HUE_STEP = 10
+        private const val CUT_FRAMES = 3
+        private const val FRAME_MS = 16
+        private const val HIDE_FRAMES = 2
+        private const val HOLD_LEAD = 3
         private val ID = SettingsId(SETTINGS)
         private val WORDS = listOf("off", "low", "high")
         private val LATER = listOf("x", "y", "z")
