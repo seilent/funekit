@@ -40,7 +40,7 @@ class RangeAdjust internal constructor(
         show()
         scope.launch(FailFast, CoroutineStart.UNDISPATCHED) {
             try {
-                rows.set(row.key, listOf(v.toString()))
+                rows.set(row.key, v.toString())
             } finally {
                 pending.remove(v)
             }
@@ -54,7 +54,7 @@ class RangeAdjust internal constructor(
     }
 
     internal fun revert() {
-        scope.launch(FailFast, CoroutineStart.UNDISPATCHED) { rows.set(row.key, listOf(from.toString())) }
+        scope.launch(FailFast, CoroutineStart.UNDISPATCHED) { rows.set(row.key, from.toString()) }
     }
 
     override fun number(side: Int): Boolean {

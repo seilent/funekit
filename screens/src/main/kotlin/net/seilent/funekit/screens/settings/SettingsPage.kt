@@ -10,7 +10,7 @@ interface SettingsRows {
 
     fun open(row: SettingRow): Boolean = false
 
-    suspend fun set(key: String, values: List<String>): Boolean
+    suspend fun set(key: String, value: String): Boolean
 
     fun action(key: String) {}
 

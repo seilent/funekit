@@ -87,10 +87,10 @@ class SettingsHostTest {
             return row.key in opened
         }
 
-        override suspend fun set(key: String, values: List<String>): Boolean {
-            sets += mapOf(key to values.single())
+        override suspend fun set(key: String, value: String): Boolean {
+            sets += mapOf(key to value)
             onSet()
-            val r = replies ?: return true.also { echo(key, values.single()) }
+            val r = replies ?: return true.also { echo(key, value) }
             return r.receive()
         }
 

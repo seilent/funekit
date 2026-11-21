@@ -591,7 +591,7 @@ class MusicHost<S : Any> internal constructor(
             val v = row.values.getOrNull(if (row.kind == SettingKind.Steps) n - 1 - i else i) ?: return@openSheet true
             if (!writable(m, row.key)) return@openSheet true
             val opens = menuOpens
-            if (row.kind == SettingKind.Draft) rows.draft(row.key, v) else scope.launch(FailFast, CoroutineStart.UNDISPATCHED) { rows.set(row.key, listOf(v)) }
+            if (row.kind == SettingKind.Draft) rows.draft(row.key, v) else scope.launch(FailFast, CoroutineStart.UNDISPATCHED) { rows.set(row.key, v) }
             menuOpens == opens
         }
     }
