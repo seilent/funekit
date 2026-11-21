@@ -30,6 +30,13 @@ class MusicModelsTest {
     }
 
     @Test
+    fun aTrackArtRefRoundTripsThroughTheSaver() {
+        val head = full.copy(art = ArtRef.Track(TRACK, STAMP))
+        val e = MusicEntry(ENTRY, MusicPage.Album(ALBUM), PushFrom(UNDER, 0, "albums", ROW), true, head)
+        assertEquals(head, musicSaved(savedMusic(e, 0, null, null))!!.entry.head)
+    }
+
+    @Test
     fun aMusicPageSavedWithNoAnchorIndexRestoresItAsUnknown() {
         val old = arrayListOf<Any>(
             "music",
@@ -57,5 +64,6 @@ class MusicModelsTest {
         private const val LENGTH = 4096L
         private const val DURATION = 181_000L
         private const val YEAR = 2004
+        private const val STAMP = 9L
     }
 }

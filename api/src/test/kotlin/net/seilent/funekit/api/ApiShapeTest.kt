@@ -45,7 +45,9 @@ class ApiShapeTest {
     fun everySealedTypeKeepsItsVariantsAndTheirFields() {
         val none = emptyList<String>()
         val want = mapOf(
-            ArtRef::class.java to mapOf("Embedded" to listOf("track", "offset", "length"), "Cover" to listOf("track", "name")),
+            ArtRef::class.java to mapOf(
+                "Embedded" to listOf("track", "offset", "length"), "Cover" to listOf("track", "name"), "Track" to listOf("track", "stamp"),
+            ),
             Listing::class.java to mapOf(
                 "Artists" to none, "Albums" to none, "Songs" to none, "Genres" to none, "Playlists" to none,
                 "ArtistAlbums" to listOf("artist"), "ArtistTracks" to listOf("artist"), "AlbumTracks" to listOf("album"),

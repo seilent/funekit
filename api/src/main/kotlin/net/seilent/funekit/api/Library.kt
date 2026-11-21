@@ -11,6 +11,7 @@ enum class Kind { Artist, Album, Song, Genre, Folder, Playlist }
 sealed interface ArtRef {
     data class Embedded(val track: Long, val offset: Long, val length: Long) : ArtRef
     data class Cover(val track: Long, val name: String) : ArtRef
+    data class Track(val track: Long, val stamp: Long = 0) : ArtRef
 }
 
 data class Row(

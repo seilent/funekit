@@ -41,6 +41,7 @@ class FakeLibrary internal constructor(
     leaseMs: Long,
     private val store: Store,
     private val bus: MutableSharedFlow<EngineEvent>,
+    private val trackRefs: Boolean,
 ) : Library {
     private class Jumps {
         val seq = AtomicLong()
@@ -63,7 +64,7 @@ class FakeLibrary internal constructor(
     private val snaps = ConcurrentHashMap<Long, Snap>()
 
     @Volatile
-    private var current = Snap(1, Catalog(set, rootList)).also { snaps[it.generation] = it }
+    private var current = Snap(1, catalog()).also { snaps[it.generation] = it }
     private val _generation = MutableStateFlow(current.generation)
     private val _roots = MutableStateFlow(rootsOf(rootList))
     private val _scan = MutableStateFlow(ScanProgress(false, current.catalog.trackCount, false))
@@ -107,7 +108,7 @@ class FakeLibrary internal constructor(
             val before = current.catalog.trackIds
             rootList = rootList - root
             _roots.value = rootsOf(rootList)
-            publish(Catalog(set, rootList))
+            publish(catalog())
             before - current.catalog.trackIds
         }
         dropped(gone)
@@ -121,7 +122,7 @@ class FakeLibrary internal constructor(
     }
 
     private suspend fun scan() {
-        val total = lock.withLock { Catalog(set, rootList).trackCount }
+        val total = lock.withLock { catalog().trackCount }
         val first = current.catalog.trackCount == 0
         _state.update { it.copy(first = first) }
         progress(ScanProgress(true, 0, false))
@@ -134,7 +135,7 @@ class FakeLibrary internal constructor(
                 failNext = false
                 null
             } else {
-                publish(Catalog(set, rootList))
+                publish(catalog())
                 current.catalog.trackCount
             }
         }
@@ -188,6 +189,8 @@ class FakeLibrary internal constructor(
     }
 
     internal fun listRevision(docRevision: Long): Long = current.generation shl GENERATION_SHIFT or docRevision
+
+    private fun catalog() = Catalog(set, rootList, trackRefs)
 
     private fun rootsOf(list: List<FakeRoot>) = list.map { Root(it.id, it.uri, it.fixture == null || it.fixture !in unavailable) }
 
@@ -281,7 +284,7 @@ class FakeLibrary internal constructor(
 
         override suspend fun artRef(track: Long): ArtRef? {
             answer()
-            return snap.catalog.track(track)?.art
+            return snap.catalog.artRef(track)
         }
 
         override suspend fun art(ref: ArtRef, maxSide: Int): ByteArray? {

@@ -36,6 +36,7 @@ data class Caps(
     val outcomes: Boolean = false,
     val pinCap: Int? = null,
     val firstIndex: Boolean = false,
+    val trackRefs: Boolean = false,
 )
 
 class Subject(
@@ -241,7 +242,7 @@ abstract class SeamContract {
         val s = open(Edge.Main)
         val old = s.library.view()
         val g = old.generation
-        val ref = if (s.caps.artRefs) checkNotNull(old.page(Listing.Albums, 0, 50).rows.firstNotNullOfOrNull { it.art }) else ArtRef.Cover(-1, "cover.jpg")
+        val ref = if (s.caps.artRefs || s.caps.trackRefs) checkNotNull(old.page(Listing.Albums, 0, 50).rows.firstNotNullOfOrNull { it.art }) else ArtRef.Cover(-1, "cover.jpg")
         s.change()
         s.library.rescan()
         s.until(s.library.generation) { it > g }
@@ -675,6 +676,15 @@ abstract class SeamContract {
     fun artBytesForRowRefs() = runTest {
         val s = open(Edge.Main)
         val view = s.library.view()
+        assertFalse(s.caps.artRefs && s.caps.trackRefs)
+        if (s.caps.trackRefs) {
+            val rows = view.allRows(Listing.Albums) + view.page(Listing.Songs, 0, 10).rows
+            assertTrue(rows.all { it.art is ArtRef.Track })
+            val bytes = rows.mapNotNull { view.art(checkNotNull(it.art), SIDE) }
+            assertTrue(bytes.isNotEmpty() && bytes.all { it.isNotEmpty() })
+            assertNull(view.art(ArtRef.Track(-1), SIDE))
+            return@runTest
+        }
         if (!s.caps.artRefs) {
             noArt(view)
             return@runTest
@@ -1269,6 +1279,15 @@ abstract class SeamContract {
     fun artComesWithinMaxSideFolderCoversIncluded() = runTest {
         val s = open(Edge.Main)
         val view = s.library.view()
+        assertFalse(s.caps.artRefs && s.caps.trackRefs)
+        if (s.caps.trackRefs) {
+            val refs = view.allRows(Listing.Albums).map { checkNotNull(it.art) }
+            assertTrue(refs.all { it is ArtRef.Track })
+            val seen = refs.take(10).mapNotNull { ref -> view.art(ref, SIDE)?.let { ref to s.imageSide(it) } }
+            assertTrue(seen.isNotEmpty() && seen.all { it.second <= SIDE })
+            for ((ref) in seen) view.art(ref, SMALL)?.let { assertTrue(s.imageSide(it) <= SMALL) }
+            return@runTest
+        }
         if (!s.caps.artRefs) {
             noArt(view)
             return@runTest
@@ -1278,6 +1297,32 @@ abstract class SeamContract {
             assertTrue(s.imageSide(checkNotNull(view.art(ref, SIDE))) <= SIDE)
             assertTrue(s.imageSide(checkNotNull(view.art(ref, SMALL))) <= SMALL)
         }
+    }
+
+    @Test
+    fun aTrackRefAnswersTheTracksOwnPicture() = runTest {
+        val s = open(Edge.Main)
+        val view = s.library.view()
+        assertFalse(s.caps.artRefs && s.caps.trackRefs)
+        val songs = view.allRows(Listing.Songs)
+        when {
+            s.caps.trackRefs -> {
+                assertTrue(songs.all { (it.art as? ArtRef.Track)?.track == it.id })
+                assertEquals(songs.first().id, (view.artRef(songs.first().id) as? ArtRef.Track)?.track)
+                val seen = songs.take(20).mapNotNull { r -> view.art(checkNotNull(r.art), SIDE)?.let { r to s.imageSide(it) } }
+                assertTrue(seen.isNotEmpty() && seen.all { it.second <= SIDE })
+                for ((r) in seen) view.art(checkNotNull(r.art), SMALL)?.let { assertTrue(s.imageSide(it) <= SMALL) }
+            }
+            s.caps.artRefs -> {
+                val pictured = ArtRef.Track(songs.first { it.art != null }.id)
+                assertTrue(s.imageSide(checkNotNull(view.art(pictured, SIDE))) <= SIDE)
+                assertTrue(s.imageSide(checkNotNull(view.art(pictured, SMALL))) <= SMALL)
+                songs.firstOrNull { it.art == null }?.let { assertNull(view.art(ArtRef.Track(it.id), SIDE)) }
+            }
+            else -> assertNull(view.art(ArtRef.Track(songs.first().id), SIDE))
+        }
+        assertNull(view.art(ArtRef.Track(-1), SIDE))
+        assertNull(view.artRef(-1))
     }
 
     @Test

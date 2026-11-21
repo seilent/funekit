@@ -39,7 +39,7 @@ internal class Rows(
     }
 }
 
-internal class Catalog(set: FakeSet, private val roots: List<FakeRoot>) {
+internal class Catalog(set: FakeSet, private val roots: List<FakeRoot>, private val trackRefs: Boolean = false) {
     private val shelf = Fixture.shelf(set)
     private val present = roots.mapNotNull { r -> r.fixture?.let { it to r } }.toMap()
     private val albums = if (set == FakeSet.Empty) emptyList() else shelf.albums.filter { it.root in present }
@@ -103,14 +103,20 @@ internal class Catalog(set: FakeSet, private val roots: List<FakeRoot>) {
         else -> null
     }
 
+    fun artRef(id: Long): ArtRef? = track(id)?.let(::ref)
+
     fun art(ref: ArtRef, maxSide: Int): ByteArray? {
         val id = when (ref) {
             is ArtRef.Embedded -> ref.track
             is ArtRef.Cover -> ref.track
+            is ArtRef.Track -> ref.track
         }
-        if (track(id)?.art != ref) return null
+        val own = track(id)?.art ?: return null
+        if (ref !is ArtRef.Track && own != ref) return null
         return Placeholder.png(id, maxSide.coerceIn(1, Placeholder.SIDE))
     }
+
+    private fun ref(t: Track?): ArtRef? = if (trackRefs) t?.let { ArtRef.Track(it.id) } else t?.art
 
     fun ids(id: Long): TrackIds? {
         val t = trackById[id] ?: return null
@@ -189,7 +195,7 @@ internal class Catalog(set: FakeSet, private val roots: List<FakeRoot>) {
 
     private fun folderRow(root: Int, path: String): Row {
         val below = walk(root, path)
-        return Row(shelf.folders.getValue(root to path), Kind.Folder, path.substringAfterLast('/'), "", below.firstOrNull()?.art, count = below.size)
+        return Row(shelf.folders.getValue(root to path), Kind.Folder, path.substringAfterLast('/'), "", ref(below.firstOrNull()), count = below.size)
     }
 
     private fun search(query: String, kind: Kind?): Rows {
@@ -216,13 +222,13 @@ internal class Catalog(set: FakeSet, private val roots: List<FakeRoot>) {
         Row(a.id, Kind.Artist, a.name, "", null, count = byArtist[a.id].orEmpty().size, count2 = artistTracks(a.id).size)
 
     private fun albumRow(a: Album) = Row(
-        a.id, Kind.Album, a.title, a.credit, a.tracks.firstOrNull()?.art, year = a.year, count = a.tracks.size,
+        a.id, Kind.Album, a.title, a.credit, ref(a.tracks.firstOrNull()), year = a.year, count = a.tracks.size,
     )
 
     private fun songRow(t: Track): Row {
         val album = albumById[t.album]
         return Row(
-            t.id, Kind.Song, t.title, t.credit, t.art,
+            t.id, Kind.Song, t.title, t.credit, ref(t),
             no = t.no, durationMs = t.ms, year = album?.year, album = album?.title,
         )
     }

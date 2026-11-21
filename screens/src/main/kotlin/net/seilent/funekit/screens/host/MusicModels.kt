@@ -135,6 +135,7 @@ private fun artOf(a: ArtRef?): ArrayList<Any> = when (a) {
     null -> arrayListOf("n")
     is ArtRef.Embedded -> arrayListOf("e", a.track, a.offset, a.length)
     is ArtRef.Cover -> arrayListOf("c", a.track, a.name)
+    is ArtRef.Track -> arrayListOf("t", a.track, a.stamp)
 }
 
 private fun artFrom(v: List<*>): ArtRef? = when (v.firstOrNull()) {
@@ -145,6 +146,10 @@ private fun artFrom(v: List<*>): ArtRef? = when (v.firstOrNull()) {
     "c" -> {
         val (_, track, name) = v
         if (track is Long && name is String) ArtRef.Cover(track, name) else null
+    }
+    "t" -> {
+        val (_, track, stamp) = v
+        if (track is Long && stamp is Long) ArtRef.Track(track, stamp) else null
     }
     else -> null
 }
