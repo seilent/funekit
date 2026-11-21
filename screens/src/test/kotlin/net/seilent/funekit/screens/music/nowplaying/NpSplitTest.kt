@@ -183,6 +183,31 @@ class NpSplitTest {
     }
 
     @Test
+    fun inLyricsModeTheArtHalfTakesTheLyricsAndTheirTaps() {
+        val s = split()!!
+        val h = s.halves.holding(NpPart.Art)
+        assertSame(s.upper, h)
+        val plain = lyricPlain(h.g, LyricTable.of(h.g.s))
+        val e = lyricTarget(h, plain)
+        assertEquals(68 + px(Tok.edge, p), e.x0)
+        assertEquals(68 + px(Tok.canvasW - Tok.edge, p), e.x1)
+        assertEquals(plain.y0, e.y0)
+        assertTrue(e.y1 > e.y0 && e.y1 <= h.y + h.clip)
+        val m = NowPlayingModel()
+        m.sync(NpShown.of(listOf(Row(1, Kind.Song, "Song", "Artist", null, durationMs = 180000, album = "Album"))), 0)
+        m.lyricsView = true
+        m.lyrics.toggle(0)
+        m.lyrics.land()
+        val acts = mutableListOf<NpAct>()
+        val t = NpTouch(m, s.halves, { acts += it }, {})
+        val (ax, ay) = pt(60f, 160f, s.upper)
+        t.press()
+        t.at(ax, ay, 10)
+        t.tap(20)
+        assertEquals(listOf(NpAct.LyricsSheet), acts)
+    }
+
+    @Test
     fun theFlatHalfDrawsAndHitsAsThePage() {
         val g = NpLayout(scale(window(), Nav.None, Surface.NowPlaying, false))
         val f = npFlat(g)

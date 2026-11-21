@@ -1,5 +1,8 @@
 package net.seilent.funekit.screens.music.nowplaying
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.runBlocking
 import net.seilent.funekit.Insets
 import net.seilent.funekit.Nav
 import net.seilent.funekit.Surface
@@ -11,11 +14,14 @@ import net.seilent.funekit.kit.np.NpRingPlace
 import net.seilent.funekit.scale
 import net.seilent.funekit.api.Anchor
 import net.seilent.funekit.api.Kind
+import net.seilent.funekit.api.Lyrics
 import net.seilent.funekit.api.PlayerState
 import net.seilent.funekit.api.Row
+import net.seilent.funekit.screens.host.npMark
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -527,5 +533,90 @@ class NowPlayingTest {
         m.press[NP_MARK].draw(HELD_AT.toFloat())
         assertEquals(a, b)
         assertEquals(npMarkLook(m, HELD_AT), a)
+    }
+
+    private fun lyrics(view: Boolean): NowPlayingModel = NowPlayingModel().also {
+        it.feed(PlayerState(queueSize = 4, index = 0, track = 1, playing = true))
+        it.sync(shown(1), 0)
+        it.lyricsView = view
+        it.lyrics.toggle(0)
+        it.lyrics.land()
+    }
+
+    @Test
+    fun inLyricsModeATapOffTheRingsAsksForTheLyricsSheet() {
+        val m = lyrics(true)
+        assertTrue(m.lyricsShown())
+        m.down(a105, 80f, 200f, 10)
+        assertFalse(m.slide.armed)
+        assertEquals(NpAct.LyricsSheet, m.tap(a105, 20))
+        m.down(a105, 100f, 330f, 30)
+        assertFalse(m.titleFocus)
+        assertFalse(m.hold(a105))
+        assertEquals(NpAct.LyricsSheet, m.tap(a105, 40))
+        m.down(a105, 30f, 398f, 50)
+        assertEquals(NpAct.Shuffle, m.tap(a105, 60))
+        m.down(a105, 10f, 10f, 70)
+        assertEquals(NpAct.Back, m.tap(a105, 80))
+    }
+
+    @Test
+    fun inLyricsModeTheHiddenMarkTakesNoTap() {
+        val m = lyrics(true)
+        m.mark = true
+        m.down(a105, a105.markX / a105.p, a105.markY / a105.p, 10)
+        assertEquals(NpAct.LyricsSheet, m.tap(a105, 20))
+    }
+
+    @Test
+    fun inLyricsModeTheTimeBandDoesNotSeek() {
+        val m = lyrics(true)
+        m.down(a105, 14.1f + 152.7f / 4, 300f, 0)
+        assertFalse(m.seeking)
+    }
+
+    @Test
+    fun withoutTheLyricsViewTheLyricsModeChangesNoTap() {
+        val m = lyrics(false)
+        assertFalse(m.lyricsShown())
+        m.down(a105, 80f, 200f, 10)
+        assertEquals(NpAct.Controls, m.tap(a105, 20))
+    }
+
+    private class Text(private val text: String?) : Lyrics {
+        var offsets = 0
+
+        override val fetch: StateFlow<Boolean> = MutableStateFlow(false)
+
+        override val revision: StateFlow<Long> = MutableStateFlow(0L)
+
+        override suspend fun lyrics(track: Long): String? = text
+
+        override suspend fun offsetMs(track: Long): Int {
+            offsets++
+            return 0
+        }
+
+        override suspend fun setOffset(track: Long, ms: Int) {}
+
+        override suspend fun setFetch(on: Boolean) {}
+    }
+
+    @Test
+    fun withNoLyricsViewTheMarkReadsTheTextAndLoadsNoLyrics() = runBlocking {
+        val m = NowPlayingModel()
+        val l = Text("")
+        assertTrue(npMark(m, l, 1))
+        assertFalse(npMark(m, Text(null), 1))
+        assertNull(m.lyrics.track)
+        assertEquals(0, l.offsets)
+    }
+
+    @Test
+    fun withTheLyricsViewTheMarkNeedsLyricLines() = runBlocking {
+        val m = NowPlayingModel().also { it.lyricsView = true }
+        assertFalse(npMark(m, Text(""), 1))
+        assertTrue(npMark(m, Text("[00:01.00]one"), 1))
+        assertEquals(1, m.lyrics.lines.size)
     }
 }

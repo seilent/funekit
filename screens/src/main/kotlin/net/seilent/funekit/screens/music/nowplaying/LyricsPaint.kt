@@ -249,7 +249,7 @@ private fun plainTouch(m: LyricsModel, g: NpLayout, spec: RowSpec): ListTouch {
 }
 
 @Composable
-fun NpLyrics(m: LyricsModel, np: NowPlayingModel, g: NpLayout, covers: Covers?, a: Arbiter, now: () -> Long, alpha: () -> Float = { 1f }) {
+fun NpLyrics(m: LyricsModel, np: NowPlayingModel, g: NpLayout, covers: Covers?, a: Arbiter, now: () -> Long, half: NpHalf = npFlat(g), alpha: () -> Float = { 1f }) {
     val measurer = rememberTextMeasurer()
     val fonts = LocalFontFamilyResolver.current
     val density = LocalDensity.current
@@ -282,18 +282,23 @@ fun NpLyrics(m: LyricsModel, np: NowPlayingModel, g: NpLayout, covers: Covers?, 
             if (due < 0) wait() else withTimeoutOrNull(max(1L, due - frame)) { wait() }
         }
     }
-    Box(Modifier.pxSize(g.s.widthPx, g.s.heightPx)) {
-        Canvas(Modifier.pxSize(g.s.widthPx, g.s.heightPx)) {
-            when (val v = view) {
-                LyricView.Blank -> {}
-                LyricView.Plain -> npLyricPlain(g, m, ink, frame, alpha())
-                is LyricView.Column -> npLyricColumn(g, LyricRows.column(t, v.from, v.to, v.p, fx(g.p), ink.lines, ink.next, ink), ink, alpha())
+    val w = half.x + g.s.widthPx
+    val h = half.y + half.clip
+    Box(Modifier.pxSize(w, h)) {
+        Canvas(Modifier.pxSize(w, h)) {
+            npHalf(half) {
+                when (val v = view) {
+                    LyricView.Blank -> {}
+                    LyricView.Plain -> npLyricPlain(g, m, ink, frame, alpha())
+                    is LyricView.Column -> npLyricColumn(g, LyricRows.column(t, v.from, v.to, v.p, fx(g.p), ink.lines, ink.next, ink), ink, alpha())
+                }
             }
         }
-        if (view == LyricView.Plain) {
-            val x0 = px(Tok.edge, g.p)
-            val x1 = px(Tok.canvasW - Tok.edge, g.p)
-            Box(Modifier.pxAt(Edges(x0, plain.y0, x1, plain.y1)).listTarget(a, touch))
-        }
+        if (view == LyricView.Plain) Box(Modifier.pxAt(lyricTarget(half, plain)).listTarget(a, touch))
     }
+}
+
+fun lyricTarget(h: NpHalf, plain: LyricPlain): Edges {
+    val top = h.y - h.dy
+    return Edges(h.x + px(Tok.edge, h.g.p), maxOf(h.y, top + plain.y0), h.x + px(Tok.canvasW - Tok.edge, h.g.p), minOf(h.y + h.clip, top + plain.y1))
 }

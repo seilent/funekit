@@ -8,15 +8,20 @@ import androidx.activity.ComponentActivity
 import androidx.compose.runtime.State
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.test.StandardTestDispatcher
 import net.seilent.funekit.Insets
 import net.seilent.funekit.Nav
 import net.seilent.funekit.Scale
 import net.seilent.funekit.Surface
 import net.seilent.funekit.Window
+import net.seilent.funekit.api.Kind
+import net.seilent.funekit.api.Row
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.MenuForm
 import net.seilent.funekit.kit.motion.MoveKind
@@ -28,11 +33,16 @@ import net.seilent.funekit.scale
 import net.seilent.funekit.screens.music.MusicPage
 import net.seilent.funekit.screens.music.album.AlbumModel
 import net.seilent.funekit.screens.music.nowplaying.NowPlayingModel
+import net.seilent.funekit.screens.music.nowplaying.NpAct
+import net.seilent.funekit.screens.music.nowplaying.NpPicture
+import net.seilent.funekit.screens.music.nowplaying.NpShown
+import net.seilent.funekit.screens.music.nowplaying.OffsetEdit
 import net.seilent.funekit.screens.music.nowplaying.PhoneRepeat
 import net.seilent.funekit.screens.music.nowplaying.PhoneTrack
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -389,6 +399,537 @@ class HostTest {
         }
     }
 
+    private class Edit : OffsetEdit {
+        val calls = mutableListOf<String>()
+        override var shownMs = 0
+        override var editing = false
+
+        override fun begin() {
+            calls += "begin"
+            editing = true
+        }
+
+        override fun step(d: Int) {
+            calls += "step $d"
+        }
+
+        override fun coarse(d: Int) {
+            calls += "coarse $d"
+        }
+
+        override fun keep() {
+            calls += "keep"
+            editing = false
+        }
+
+        override fun restore() {
+            calls += "restore"
+            editing = false
+        }
+
+        override fun entry(adjust: Boolean) {
+            calls += "entry $adjust"
+        }
+
+        override fun end() {
+            calls += "end"
+        }
+    }
+
+    private fun song(id: Long) = Row(id, Kind.Song, "Song", "Artist", null, durationMs = DURATION, album = "Album")
+
+    private fun lyricsApp(e: Edit, view: Boolean = true, mode: Boolean = true): TestApp =
+        TestApp(page, np, null, Level(START, null)) { rule.mainClock.currentTime }.also {
+            it.lyricsOn = view
+            it.edit = e
+            it.compose(rule)
+            rule.waitForIdle()
+            rule.mainClock.autoAdvance = false
+            rule.runOnIdle {
+                val m = it.music.np
+                m.sync(NpShown.of(listOf(song(1))), 0)
+                m.lyrics.begin(1)
+                m.lyrics.load(1, "[00:01.00]one\n[00:02.00]two", 0)
+                if (mode) {
+                    m.lyrics.toggle(0)
+                    m.lyrics.land()
+                }
+                it.host.resetNp(listOf(MusicEntry(it.stack.entry(), MusicPage.Hub)))
+            }
+            frames(OPEN_FRAMES)
+        }
+
+    @Test
+    fun aLyricsSheetRowTapOpensTheAdjustOverlayOnlyOnceTheSheetHasSettled() {
+        val e = Edit()
+        val app = lyricsApp(e)
+        rule.runOnIdle { app.host.openOffset() }
+        frames(2)
+        assertEquals(OverKind.Sheet, app.stack.overlay?.kind)
+        val sheet = app.host.offsetSheet!!
+        rule.runOnIdle { app.menuHost.act(0) }
+        frames(1)
+        assertTrue(e.editing)
+        assertFalse(sheet.hud.shown)
+        frames(OPEN_FRAMES)
+        assertTrue(sheet.hud.shown)
+        assertTrue(rule.runOnIdle { app.host.offsetKey(1) })
+        assertEquals(listOf("begin", "coarse 1"), e.calls)
+    }
+
+    @Test
+    fun aRowHoldClosesTheSheetForTheEntryAndTheReturnReopensItWithTheOverlay() {
+        val e = Edit()
+        val app = lyricsApp(e)
+        rule.runOnIdle { app.host.openOffset() }
+        frames(OPEN_FRAMES)
+        assertTrue(rule.runOnIdle { app.menuHost.hold!!(0) })
+        frames(CUT_FRAMES)
+        assertNull(app.stack.overlay)
+        assertNotNull(app.host.offsetSheet)
+        rule.runOnIdle { app.host.offsetReturn(true) }
+        frames(3)
+        assertEquals(OverKind.Sheet, app.stack.overlay?.kind)
+        assertTrue(app.host.offsetSheet!!.hud.shown)
+        assertEquals(listOf("entry false", "begin"), e.calls)
+    }
+
+    @Test
+    fun aNumberHoldKeepsTheEditAndClosesTheSheetForTheEntry() {
+        val e = Edit()
+        val app = lyricsApp(e)
+        rule.runOnIdle { app.host.openOffset() }
+        frames(OPEN_FRAMES)
+        rule.runOnIdle { app.menuHost.act(0) }
+        frames(OPEN_FRAMES)
+        assertTrue(app.host.offsetSheet!!.hud.shown)
+        shot()
+        val x = px(Tok.edge, page.stdPpu) + 2f
+        val y = px(page.board.overlayRingY, page.stdPpu) - 2f
+        rule.onRoot().performTouchInput { down(Offset(x, y)) }
+        frames(Tok.input_keyHoldMs.toInt() / FRAME_MS + CUT_FRAMES + 1)
+        assertNull(app.stack.overlay)
+        rule.onRoot().performTouchInput { up() }
+        frames(OPEN_FRAMES)
+        assertNull(app.stack.overlay)
+        assertNotNull(app.host.offsetSheet)
+        assertEquals(listOf("begin", "keep", "entry true"), e.calls)
+    }
+
+    @Test
+    fun aHoldOffTheNumberTakesNoEntry() {
+        val e = Edit()
+        val app = lyricsApp(e)
+        rule.runOnIdle { app.host.openOffset() }
+        frames(OPEN_FRAMES)
+        rule.runOnIdle { app.menuHost.act(0) }
+        frames(OPEN_FRAMES)
+        shot()
+        rule.onRoot().performTouchInput { down(Offset(W - 2f, H / 2f)) }
+        frames(OPEN_FRAMES)
+        rule.onRoot().performTouchInput { up() }
+        frames(CUT_FRAMES)
+        assertTrue(app.host.offsetSheet!!.hud.shown)
+        assertEquals(OverKind.Sheet, app.stack.overlay?.kind)
+        assertEquals(listOf("begin"), e.calls)
+    }
+
+    @Test
+    fun aReturnOffNowPlayingEndsTheEditInsteadOfReopening() {
+        val e = Edit()
+        val app = lyricsApp(e)
+        rule.runOnIdle { app.host.openOffset() }
+        frames(OPEN_FRAMES)
+        assertTrue(rule.runOnIdle { app.menuHost.hold!!(0) })
+        frames(CUT_FRAMES)
+        rule.runOnIdle { app.stack.push(MusicEntry(app.stack.entry(), MusicPage.Album(ALBUM)), MoveKind.T2) }
+        frames(OPEN_FRAMES)
+        rule.runOnIdle { app.host.offsetReturn(false) }
+        frames(CUT_FRAMES)
+        assertNull(app.stack.overlay)
+        assertNull(app.host.offsetSheet)
+        assertEquals(listOf("entry false", "end"), e.calls)
+    }
+
+    @Test
+    fun aSheetOpenedOverAHeldOneEndsTheHeldEdit() {
+        val e = Edit()
+        val app = lyricsApp(e)
+        rule.runOnIdle { app.host.openOffset() }
+        frames(OPEN_FRAMES)
+        val held = app.host.offsetSheet
+        assertTrue(rule.runOnIdle { app.menuHost.hold!!(0) })
+        frames(CUT_FRAMES)
+        rule.runOnIdle { app.host.openOffset() }
+        frames(OPEN_FRAMES)
+        assertNotSame(held, app.host.offsetSheet)
+        assertEquals(OverKind.Sheet, app.stack.overlay?.kind)
+        assertEquals(listOf("entry false", "end"), e.calls)
+    }
+
+    @Test
+    fun aReturnForAReplacedSheetReopensNothing() {
+        val e = Edit()
+        val app = lyricsApp(e)
+        rule.runOnIdle { app.host.openOffset() }
+        frames(OPEN_FRAMES)
+        assertTrue(rule.runOnIdle { app.menuHost.hold!!(0) })
+        frames(CUT_FRAMES)
+        rule.runOnIdle {
+            app.host.offsetReturn(false)
+            app.host.openOffset()
+        }
+        val next = app.host.offsetSheet
+        frames(OPEN_FRAMES)
+        assertNotNull(next)
+        assertSame(next, app.host.offsetSheet)
+        assertEquals(OverKind.Sheet, app.stack.overlay?.kind)
+        assertEquals(listOf("entry false", "end"), e.calls)
+    }
+
+    @Test
+    fun aNewTrackClosesTheLyricsSheetAndDropsTheEdit() {
+        val e = Edit()
+        val app = lyricsApp(e)
+        rule.runOnIdle { app.host.openOffset() }
+        frames(OPEN_FRAMES)
+        rule.runOnIdle { app.menuHost.act(0) }
+        frames(2)
+        rule.runOnIdle { app.music.np.sync(NpShown.of(listOf(song(2))), rule.mainClock.currentTime) }
+        frames(OPEN_FRAMES)
+        assertNull(app.host.offsetSheet)
+        assertNull(app.stack.overlay)
+        assertEquals(listOf("begin", "restore", "end"), e.calls)
+    }
+
+    @Test
+    fun lyricsReadForAnotherTrackCloseTheLyricsSheet() {
+        val e = Edit()
+        val app = lyricsApp(e)
+        rule.runOnIdle { app.host.openOffset() }
+        frames(OPEN_FRAMES)
+        rule.runOnIdle { app.music.np.lyrics.begin(2) }
+        frames(OPEN_FRAMES)
+        assertNull(app.host.offsetSheet)
+        assertEquals(listOf("end"), e.calls)
+    }
+
+    @Test
+    fun turningTheLyricsOffClosesTheLyricsSheet() {
+        val e = Edit()
+        val app = lyricsApp(e)
+        rule.runOnIdle { app.host.openOffset() }
+        frames(OPEN_FRAMES)
+        rule.runOnIdle { app.host.showLyrics(false) }
+        frames(OPEN_FRAMES)
+        assertNull(app.host.offsetSheet)
+        assertEquals(listOf("end"), e.calls)
+    }
+
+    @Test
+    fun lyricsWithNoTimedLinesCloseTheLyricsSheet() {
+        val e = Edit()
+        val app = lyricsApp(e)
+        rule.runOnIdle { app.host.openOffset() }
+        frames(OPEN_FRAMES)
+        rule.runOnIdle {
+            app.music.np.lyrics.begin(1)
+            app.music.np.lyrics.load(1, "one\ntwo", 0)
+        }
+        frames(OPEN_FRAMES)
+        assertNull(app.host.offsetSheet)
+        assertEquals(listOf("end"), e.calls)
+    }
+
+    @Test
+    fun aReReadOfTheSameTrackKeepsTheLyricsSheet() {
+        val app = lyricsApp(Edit())
+        rule.runOnIdle { app.host.openOffset() }
+        frames(OPEN_FRAMES)
+        val sheet = app.host.offsetSheet
+        rule.runOnIdle { app.music.np.lyrics.begin(1) }
+        frames(OPEN_FRAMES)
+        assertSame(sheet, app.host.offsetSheet)
+        assertEquals(OverKind.Sheet, app.stack.overlay?.kind)
+    }
+
+    @Test
+    fun duringTheTurnBackToNowPlayingTheLyricsSheetStaysShut() {
+        val app = lyricsApp(Edit())
+        rule.runOnIdle { app.stack.push(MusicEntry(app.stack.entry(), MusicPage.Album(ALBUM)), MoveKind.T2) }
+        frames(OPEN_FRAMES)
+        rule.runOnIdle { app.stack.back(app.host.popKind) }
+        var n = 0
+        while (app.stack.phase != Phase.Enter && n < OPEN_FRAMES) {
+            frames(1)
+            n++
+        }
+        assertEquals(Phase.Enter, app.stack.phase)
+        assertTrue(app.host.isNp(app.stack.top!!))
+        rule.runOnIdle { app.host.openOffset() }
+        assertNull(app.host.offsetSheet)
+    }
+
+    @Test
+    fun aPhoneSessionKeepsTheLyricsSheetShut() {
+        val app = lyricsApp(Edit())
+        val track = PhoneTrack("Radio", "Song", "Artist", "Album", true, false, DURATION, 0L, 0L, 1f, false, PhoneRepeat.Off, 0, 0, null)
+        rule.runOnIdle {
+            app.music.np.feed(track)
+            app.host.openOffset()
+        }
+        assertNull(app.host.offsetSheet)
+    }
+
+    @Test
+    fun plainLyricsOpenNoLyricsSheet() {
+        val app = lyricsApp(Edit())
+        rule.runOnIdle {
+            app.music.np.lyrics.begin(1)
+            app.music.np.lyrics.load(1, "one\ntwo", 0)
+            app.host.openOffset()
+        }
+        assertNull(app.host.offsetSheet)
+    }
+
+    @Test
+    fun anAppWithNoEditForTheTrackOpensNoSheet() {
+        val app = lyricsApp(Edit())
+        app.edit = null
+        rule.runOnIdle { app.host.openOffset() }
+        frames(CUT_FRAMES)
+        assertNull(app.stack.overlay)
+        assertNull(app.host.offsetSheet)
+    }
+
+    @Test
+    fun withNoLyricsViewTheMarkTapLeavesTheLyricsMode() {
+        val app = lyricsApp(Edit(), view = false, mode = false)
+        rule.runOnIdle { app.host.npTap(NpAct.Lyrics) }
+        frames(CUT_FRAMES)
+        assertFalse(app.music.np.lyrics.mode)
+    }
+
+    @Test
+    fun aBackOnAPageOverNowPlayingPopsItAndLeavesTheLyrics() {
+        val app = lyricsApp(Edit())
+        rule.runOnIdle { app.stack.push(MusicEntry(app.stack.entry(), MusicPage.Album(ALBUM)), MoveKind.T2) }
+        frames(OPEN_FRAMES)
+        assertFalse(app.host.isNp(app.stack.top!!))
+        rule.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
+        frames(OPEN_FRAMES)
+        assertTrue(app.music.np.lyrics.mode)
+        assertTrue(app.host.isNp(app.stack.top!!))
+    }
+
+    @Test
+    fun aSheetOpenedDuringTheLyricsFadeLandsTheFade() {
+        val app = lyricsApp(Edit(), mode = false)
+        rule.runOnIdle { app.host.showLyrics(true) }
+        frames(2)
+        rule.runOnIdle { app.host.openOffset() }
+        assertFalse(app.music.np.lyrics.fading(rule.mainClock.currentTime))
+        frames(2)
+        assertEquals(OverKind.Sheet, app.stack.overlay?.kind)
+    }
+
+    @Test
+    fun aToggleDuringTheLyricsFadeRunsItBack() {
+        val app = lyricsApp(Edit(), mode = false)
+        rule.runOnIdle { app.host.showLyrics(true) }
+        frames(3)
+        val l = app.music.np.lyrics
+        val at = rule.mainClock.currentTime
+        val shown = l.fade(at)
+        assertNotNull(shown)
+        rule.runOnIdle { app.host.showLyrics(false) }
+        assertFalse(l.mode)
+        assertEquals(shown, l.fade(at))
+    }
+
+    @Test
+    fun backDuringTheLyricsFadeInRunsItBack() {
+        val app = lyricsApp(Edit(), mode = false)
+        rule.runOnIdle { app.host.showLyrics(true) }
+        frames(3)
+        val l = app.music.np.lyrics
+        val at = rule.mainClock.currentTime
+        val shown = l.fade(at)
+        assertTrue(rule.runOnIdle { app.host.npBack() })
+        assertFalse(l.mode)
+        assertEquals(shown, l.fade(at))
+    }
+
+    @Test
+    fun offNowPlayingTheLyricsSheetNeverOpens() {
+        val e = Edit()
+        val app = lyricsApp(e)
+        rule.runOnIdle { app.stack.push(MusicEntry(app.stack.entry(), MusicPage.Album(ALBUM)), MoveKind.T2) }
+        frames(OPEN_FRAMES)
+        rule.runOnIdle { app.host.openOffset() }
+        frames(2)
+        assertNull(app.stack.overlay)
+        assertNull(app.host.offsetSheet)
+    }
+
+    @Test
+    fun systemBackOnNowPlayingInLyricsModeLeavesTheLyricsFirst() {
+        val app = lyricsApp(Edit())
+        assertTrue(app.host.isNp(app.stack.top!!))
+        rule.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
+        frames(OPEN_FRAMES)
+        assertFalse(app.music.np.lyrics.mode)
+        assertTrue(app.host.isNp(app.stack.top!!))
+    }
+
+    @Test
+    fun backInTheOverlayDropsTheEditAndRaisesTheSheetAgain() {
+        val e = Edit()
+        val app = lyricsApp(e)
+        rule.runOnIdle { app.host.openOffset() }
+        frames(OPEN_FRAMES)
+        rule.runOnIdle { app.menuHost.act(0) }
+        frames(OPEN_FRAMES)
+        val sheet = app.host.offsetSheet!!
+        assertTrue(sheet.hud.shown)
+        rule.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
+        frames(OPEN_FRAMES)
+        assertFalse(sheet.hud.shown)
+        assertSame(sheet, app.host.offsetSheet)
+        assertEquals(OverKind.Sheet, app.stack.overlay?.kind)
+        assertEquals(listOf("begin", "restore"), e.calls)
+    }
+
+    @Test
+    fun exitInTheOverlayKeepsTheEditAndRaisesTheSheetAgain() {
+        val e = Edit()
+        val app = lyricsApp(e)
+        rule.runOnIdle { app.host.openOffset() }
+        frames(OPEN_FRAMES)
+        rule.runOnIdle { app.menuHost.act(0) }
+        frames(OPEN_FRAMES)
+        val sheet = app.host.offsetSheet!!
+        assertTrue(sheet.hud.shown)
+        tap(2f, 2f)
+        frames(2)
+        assertFalse(sheet.hud.shown)
+        assertSame(sheet, app.host.offsetSheet)
+        assertTrue(app.stack.overlay!!.moving(rule.mainClock.currentTime))
+        assertEquals(listOf("begin", "keep"), e.calls)
+    }
+
+    @Test
+    fun closingTheLyricsSheetEndsTheEdit() {
+        val e = Edit()
+        val app = lyricsApp(e)
+        rule.runOnIdle { app.host.openOffset() }
+        frames(OPEN_FRAMES)
+        rule.runOnIdle { app.stack.close() }
+        frames(OPEN_FRAMES)
+        assertNull(app.host.offsetSheet)
+        assertEquals(listOf("end"), e.calls)
+    }
+
+    @Test
+    fun withNoLyricsViewTheLyricsSheetNeverOpens() {
+        val e = Edit()
+        val app = lyricsApp(e, view = false)
+        rule.runOnIdle { app.host.openOffset() }
+        frames(2)
+        assertNull(app.stack.overlay)
+        assertNull(app.host.offsetSheet)
+    }
+
+    @Test
+    fun theBackdropShowsTheAppPictureAndGivesWayInLyricsMode() {
+        val app = lyricsApp(Edit(), mode = false)
+        val pic = NpPicture(ImageBitmap(4, 4))
+        rule.runOnIdle {
+            app.host.blurContext = Dispatchers.Unconfined
+            app.music.np.art = ImageBitmap(COVER, COVER)
+            app.backdropFlow.value = pic
+        }
+        frames(2)
+        assertSame(pic, app.host.npBackdrop.shown)
+        rule.runOnIdle { app.host.showLyrics(true) }
+        frames(BLUR_FRAMES)
+        val shown = app.host.npBackdrop.shown
+        assertNotSame(pic, shown)
+        assertTrue(shown!!.whole)
+    }
+
+    @Test
+    fun aCoverStillBlurringKeepsTheShownBackdrop() {
+        val app = lyricsApp(Edit(), mode = false)
+        rule.runOnIdle {
+            app.host.blurContext = Dispatchers.Unconfined
+            app.music.np.art = ImageBitmap(COVER, COVER)
+            app.backdropFlow.value = NpPicture(ImageBitmap(4, 4))
+        }
+        frames(2)
+        rule.runOnIdle { app.host.showLyrics(true) }
+        frames(BLUR_FRAMES)
+        val first = app.host.npBackdrop.shown
+        assertTrue(first!!.whole)
+        rule.runOnIdle {
+            app.host.blurContext = StandardTestDispatcher()
+            app.music.np.art = ImageBitmap(COVER, COVER)
+        }
+        frames(BLUR_FRAMES)
+        assertSame(first, app.host.npBackdrop.shown)
+    }
+
+    @Test
+    fun aNewSongsCoverBlurringHoldsThePreviousCoverUntilItLands() {
+        val app = lyricsApp(Edit(), mode = false)
+        rule.runOnIdle {
+            app.host.blurContext = Dispatchers.Unconfined
+            app.music.np.art = ImageBitmap(COVER, COVER)
+            app.backdropFlow.value = NpPicture(ImageBitmap(4, 4))
+        }
+        frames(2)
+        rule.runOnIdle { app.host.showLyrics(true) }
+        frames(BLUR_FRAMES)
+        val first = app.host.npBackdrop.shown
+        assertTrue(first!!.whole)
+        val held = StandardTestDispatcher()
+        rule.runOnIdle {
+            val key = app.music.np.artKey as List<*>
+            app.music.np.artKey = listOf(2L) + key.drop(1)
+            app.host.blurContext = held
+            app.music.np.sync(NpShown.of(listOf(song(2))), rule.mainClock.currentTime)
+        }
+        frames(BLUR_FRAMES)
+        assertSame(first, app.host.npBackdrop.shown)
+        rule.runOnIdle { app.music.np.art = ImageBitmap(COVER, COVER) }
+        frames(BLUR_FRAMES)
+        assertSame(first, app.host.npBackdrop.shown)
+        rule.runOnIdle { held.scheduler.advanceUntilIdle() }
+        frames(BLUR_FRAMES)
+        val next = app.host.npBackdrop.shown
+        assertTrue(next!!.whole)
+        assertNotSame(first, next)
+    }
+
+    @Test
+    fun aCoverThatCannotBlurGivesTheAppPicture() {
+        val app = lyricsApp(Edit(), mode = false)
+        val pic = NpPicture(ImageBitmap(4, 4))
+        val next = NpPicture(ImageBitmap(4, 4))
+        rule.runOnIdle {
+            app.host.blurContext = Dispatchers.Unconfined
+            app.music.np.art = ImageBitmap(1, 1)
+            app.backdropFlow.value = pic
+        }
+        frames(2)
+        rule.runOnIdle { app.host.showLyrics(true) }
+        frames(BLUR_FRAMES)
+        assertSame(pic, app.host.npBackdrop.shown)
+        rule.runOnIdle { app.backdropFlow.value = next }
+        frames(BLUR_FRAMES)
+        assertSame(next, app.host.npBackdrop.shown)
+    }
+
     companion object {
         private const val W = 720
         private const val H = 1280
@@ -401,6 +942,10 @@ class HostTest {
         private const val DRAG_PX = 600f
         private const val STEPS = 10
         private const val OPEN_FRAMES = 30
+        private const val CUT_FRAMES = 3
+        private const val BLUR_FRAMES = 4
+        private const val COVER = 64
+        private const val FRAME_MS = 16
         private const val DURATION = 180_000L
         private const val H_SHORT = 1080
         private const val MIN_SHIFT = 10

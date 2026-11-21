@@ -13,6 +13,7 @@ import androidx.compose.ui.platform.LocalFontFamilyResolver
 import androidx.compose.ui.test.junit4.ComposeContentTestRule
 import androidx.compose.ui.text.rememberTextMeasurer
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import net.seilent.funekit.FuneTheme
 import net.seilent.funekit.Scale
 import net.seilent.funekit.gen.Tok
@@ -44,6 +45,8 @@ import net.seilent.funekit.screens.music.MusicPage
 import net.seilent.funekit.screens.music.MusicSource
 import net.seilent.funekit.screens.music.PageModels
 import net.seilent.funekit.screens.music.hub.musicModel
+import net.seilent.funekit.screens.music.nowplaying.NpPicture
+import net.seilent.funekit.screens.music.nowplaying.OffsetEdit
 
 class TestApp(page: Scale, np: Scale, private val src: MusicSource?, private val level: VolumeLevel, private val now: () -> Long) : MusicApp<MusicEntry> {
     var page by mutableStateOf(page)
@@ -53,7 +56,11 @@ class TestApp(page: Scale, np: Scale, private val src: MusicSource?, private val
     lateinit var host: MusicHost<MusicEntry>
     lateinit var stack: PageStack<MusicEntry>
     lateinit var toast: Toast
+    lateinit var menuHost: MenuHost
     var pokes = 0
+    var lyricsOn = false
+    var edit: OffsetEdit? = null
+    val backdropFlow = MutableStateFlow<NpPicture?>(null)
 
     override fun music(s: MusicEntry): MusicEntry = s
 
@@ -74,6 +81,12 @@ class TestApp(page: Scale, np: Scale, private val src: MusicSource?, private val
     override fun cancel(top: MusicEntry?) {}
 
     override val phone = MutableStateFlow<PhoneSession?>(null)
+
+    override val backdrop: StateFlow<NpPicture?> get() = backdropFlow
+
+    override val lyricsView: Boolean get() = lyricsOn
+
+    override fun offset(track: Long): OffsetEdit? = edit
 
     private val home = object : HomePaint {
         override val quickplay = false
@@ -99,6 +112,7 @@ class TestApp(page: Scale, np: Scale, private val src: MusicSource?, private val
                 this@TestApp.toast = toast
                 val jump = remember { Overlay(OverKind.Jump) }
                 val menuHost = remember { MenuHost() }
+                this@TestApp.menuHost = menuHost
                 val move = remember { PageMove() }
                 val movePaint = remember { MovePaint(move) }
                 val bands = remember(page.heightPx) { groundBands(page.heightPx, true) }

@@ -46,11 +46,24 @@ class OffsetSheetTest {
     }
 
     @Test
+    fun theOverlayOpensOnlyForAnOpenEdit() {
+        val e = Edit()
+        val s = OffsetSheet(e)
+        assertFalse(s.adjust(0))
+        assertFalse(s.hud.shown)
+        s.press(0)
+        assertTrue(s.adjust(10))
+        assertFalse(s.adjust(20))
+    }
+
+    @Test
     fun aTapOnTheRowBeginsTheEditAndOpensTheAdjustOverlay() {
         val e = Edit()
         val s = OffsetSheet(e)
-        s.press(0, 1000)
-        s.press(0, 1100)
+        s.press(0)
+        s.adjust(1000)
+        s.press(0)
+        s.adjust(1100)
         assertEquals(listOf("begin"), e.calls)
         assertTrue(s.hud.shown)
         assertEquals("lyrics", s.hud.line1)
@@ -62,7 +75,8 @@ class OffsetSheetTest {
     fun plusAndMinusStepTheOffsetAndExitKeepsIt() {
         val e = Edit()
         val s = OffsetSheet(e)
-        s.press(0, 0)
+        s.press(0)
+        s.adjust(0)
         s.tap(AdjustHit.Up0)
         s.tap(AdjustHit.Up0)
         s.tap(AdjustHit.Down0)
@@ -79,7 +93,8 @@ class OffsetSheetTest {
         val e = Edit()
         val s = OffsetSheet(e)
         e.shownMs = 60000
-        s.press(0, 0)
+        s.press(0)
+        s.adjust(0)
         assertEquals(AdjustCol("60000", "offset ms", up = false, down = true), s.hud.cols.single())
         e.shownMs = -60000
         s.tap(AdjustHit.Down0)
@@ -90,7 +105,8 @@ class OffsetSheetTest {
     fun backInTheOverlayRestoresAndReturnsToTheSheet() {
         val e = Edit()
         val s = OffsetSheet(e)
-        s.press(0, 0)
+        s.press(0)
+        s.adjust(0)
         assertTrue(s.back())
         assertFalse(s.hud.shown)
         assertFalse(s.back())
@@ -102,7 +118,8 @@ class OffsetSheetTest {
         val e = Edit()
         val s = OffsetSheet(e)
         assertFalse(s.key(1))
-        s.press(0, 0)
+        s.press(0)
+        s.adjust(0)
         assertTrue(s.key(-1))
         assertEquals("-1000", s.hud.cols.single().num)
         s.tap(AdjustHit.Exit)
@@ -126,7 +143,8 @@ class OffsetSheetTest {
         val s = OffsetSheet(e)
         assertFalse(s.hold(1))
         assertTrue(s.hold(0))
-        s.press(0, 0)
+        s.press(0)
+        s.adjust(0)
         assertTrue(s.holdNumber())
         assertFalse(s.hud.shown)
         assertFalse(s.holdNumber())
@@ -138,10 +156,12 @@ class OffsetSheetTest {
     fun aHoldOrADismissDuringAnEditDropsTheEditFirst() {
         val e = Edit()
         val s = OffsetSheet(e)
-        s.press(0, 0)
+        s.press(0)
+        s.adjust(0)
         assertTrue(s.hold(0))
         assertFalse(e.editing)
-        s.press(0, 0)
+        s.press(0)
+        s.adjust(0)
         s.dismiss()
         assertFalse(s.hud.shown)
         assertEquals(listOf("begin", "restore", "entry false", "begin", "restore", "end"), e.calls)

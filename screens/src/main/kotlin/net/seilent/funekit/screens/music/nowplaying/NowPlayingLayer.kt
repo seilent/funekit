@@ -20,6 +20,7 @@ import androidx.compose.ui.platform.LocalFontFamilyResolver
 import androidx.compose.ui.text.rememberTextMeasurer
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
+import net.seilent.funekit.fxU
 import net.seilent.funekit.kit.Covers
 import net.seilent.funekit.kit.StatusInk
 import net.seilent.funekit.kit.np.NpLayout
@@ -100,6 +101,7 @@ fun NowPlayingLayer(
     onAct: (NpAct) -> Unit,
     onSeek: (Long) -> Unit,
     split: NpSplit? = null,
+    backdrop: NpBackdrop? = null,
 ) {
     val s = g.s
     val halves = remember(g, split) { split?.halves ?: listOf(npFlat(g)) }
@@ -115,9 +117,9 @@ fun NowPlayingLayer(
                 frame = at
             }
             if (m.animating(frame)) continue
-            val seen = m.revision
+            val seen = m.revision to m.lyrics.revision
             val wake = m.wakeAt(frame)
-            val wait = suspend { snapshotFlow { m.revision }.first { it != seen } }
+            val wait = suspend { snapshotFlow { m.revision to m.lyrics.revision }.first { it != seen } }
             if (wake == null) wait() else withTimeoutOrNull(maxOf(1L, wake - npUptime())) { wait() }
         }
     }
@@ -130,32 +132,44 @@ fun NowPlayingLayer(
     val seek by rememberUpdatedState(onSeek)
     val touch = remember(m, halves) { NpTouch(m, halves, { act(it) }, { seek(it) }) }
     PageLayer(visible, frozen, Modifier.pxSize(s.widthPx, s.heightPx)) { covered ->
+        if (backdrop != null) {
+            NpBackdropLayer(backdrop, now, dim = { t -> fxU(m.lyrics.dim(t)) }, dimming = { t -> m.lyrics.dimming(t) }, watch = { m.lyrics.revision })
+        }
+        val lyr = m.lyricsView
+        val fade = remember(m) { derivedStateOf { if (m.lyricsView) m.lyrics.fade(frame) else null } }.value
+        val lyricsNow = lyr && !variant && (if (fade != null && fade.from) !m.lyrics.mode else m.lyrics.mode)
+        val k = fade?.alpha ?: 1f
         val back = rememberLook(m, hideFocus, snap, covered = covered) { npBackLook(m, frame, hideFocus) }
         val text = rememberLook(m, halves, covered = covered) { halves.map { npTextLook(m, it.g, frame) } }
         val mark = rememberLook(m, covered = covered) { npMarkLook(m, frame) }
         val rings = rememberLook(m, hideFocus, snap, covered = covered) { npRingsLook(m, frame, hideFocus) }
         val statusAlpha = rememberLook(m, covered = covered) { npStatusAlpha(m, frame) }
         val full = Modifier.pxSize(s.widthPx, s.heightPx)
-        Canvas(full) { halves.forEach { h -> if (NpPart.Back in h.parts) npHalf(h) { npBackRing(h.g, back.value, 1f, null) } } }
-        Canvas(full) {
-            halves.forEachIndexed { i, h ->
-                val t = text.value[i]
-                npHalf(h) {
-                    if (NpPart.Top in h.parts) npTop(h.g, inks[i], variant, 1f, null)
-                    if (NpPart.Art in h.parts) npArt(h.g, art, variant, 1f, t.covers)
-                    if (NpPart.Title in h.parts) npTitle(h.g, inks[i], variant, 1f, null)
+        Canvas(full) { halves.forEach { h -> if (NpPart.Back in h.parts) npHalf(h) { npBackRing(h.g, back.value, k, null) } } }
+        if (lyricsNow) {
+            val lh = halves.holding(NpPart.Art)
+            NpLyrics(m.lyrics, m, lh.g, covers, a, now, lh) { k }
+        } else {
+            Canvas(full) {
+                halves.forEachIndexed { i, h ->
+                    val t = text.value[i]
+                    npHalf(h) {
+                        if (NpPart.Top in h.parts) npTop(h.g, inks[i], variant, k, null)
+                        if (NpPart.Art in h.parts) npArt(h.g, art, variant, k, t.covers)
+                        if (NpPart.Title in h.parts) npTitle(h.g, inks[i], variant, k, null)
+                    }
+                }
+            }
+            Canvas(full) { halves.forEach { h -> if (NpPart.Mark in h.parts) npHalf(h) { npMark(h.g, mark.value, k, null) } } }
+            Canvas(full) {
+                halves.forEachIndexed { i, h ->
+                    val t = text.value[i]
+                    if (NpPart.Times in h.parts) npHalf(h) { npTimeBand(h.g, time[i], t.shown.durationMs, accent, k, null) }
                 }
             }
         }
-        Canvas(full) { halves.forEach { h -> if (NpPart.Mark in h.parts) npHalf(h) { npMark(h.g, mark.value, 1f, null) } } }
-        Canvas(full) {
-            halves.forEachIndexed { i, h ->
-                val t = text.value[i]
-                if (NpPart.Times in h.parts) npHalf(h) { npTimeBand(h.g, time[i], t.shown.durationMs, accent, 1f, null) }
-            }
-        }
-        Canvas(full) { halves.forEach { h -> if (NpPart.Rings in h.parts) npHalf(h) { npRings(h.g, rings.value, 1f, null) } } }
-        if (status != null) Canvas(full) { halves.forEach { h -> if (NpPart.Status in h.parts) npHalf(h) { statusRow(status, accent, accentOff, statusAlpha.value) } } }
+        Canvas(full) { halves.forEach { h -> if (NpPart.Rings in h.parts) npHalf(h) { npRings(h.g, rings.value, k, null) } } }
+        if (status != null) Canvas(full) { halves.forEach { h -> if (NpPart.Status in h.parts) npHalf(h) { statusRow(status, accent, accentOff, statusAlpha.value * k) } } }
         Box(
             full.tapTarget(
                 a,

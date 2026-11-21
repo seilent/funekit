@@ -39,10 +39,15 @@ class OffsetSheet(val edit: OffsetEdit) {
         if (hud.shown) hud.set(cols(), value())
     }
 
-    fun press(i: Int, now: Long) {
+    fun press(i: Int) {
         if (i != 0 || edit.editing) return
         edit.begin()
+    }
+
+    fun adjust(now: Long): Boolean {
+        if (!edit.editing || hud.shown) return false
         hud.open(now, cols(), TITLE, value())
+        return true
     }
 
     fun tap(h: AdjustHit) {

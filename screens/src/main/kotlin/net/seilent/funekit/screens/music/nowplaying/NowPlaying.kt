@@ -39,7 +39,7 @@ class NpSlide {
     var cap = 0L
 }
 
-enum class NpAct { None, Back, Queue, Favorite, Lyrics, Controls, Shuffle, Repeat, Toggle, Info }
+enum class NpAct { None, Back, Queue, Favorite, Lyrics, LyricsSheet, Controls, Shuffle, Repeat, Toggle, Info }
 
 private fun progress(e: Long, d: Long): Float = if (d > 0) (e.toFloat() / d).coerceIn(0f, 1f) else 1f
 
@@ -68,6 +68,10 @@ class NowPlayingModel {
         private set
 
     val variant: Boolean get() = phone != null
+    val lyrics = LyricsModel()
+    var lyricsView = false
+
+    fun lyricsShown(): Boolean = lyricsView && lyrics.shown(variant)
     val press = Array(NP_PRESSES) { i -> Press().also { it.scaled = i == NP_MARK } }
 
     private var held = NpShown.None
@@ -282,7 +286,8 @@ class NowPlayingModel {
         } else {
             slide = NpSlide()
         }
-        if (seekable(g, x, y)) {
+        val lyr = lyricsShown()
+        if (!lyr && seekable(g, x, y)) {
             seeking = true
             seekX = x
             seekTrack = shown.track
@@ -293,10 +298,10 @@ class NowPlayingModel {
         touchDown = true
         downX = x
         downY = y
-        slide.armed = !holding && !variant && shown.track != null && y < g.s.stdH - Tok.gesture_bottom
+        slide.armed = !lyr && !holding && !variant && shown.track != null && y < g.s.stdH - Tok.gesture_bottom
         slide.touch = slide.armed
         if (!holding) slide.start = if (slide.armed) shown.track else null
-        markDown = markAt(now) && !variant && g.markHit(x, y)
+        markDown = !lyr && markAt(now) && !variant && g.markHit(x, y)
         val t = now.toFloat()
         when {
             g.backHit(x, y) -> press[NP_BACK].down(t)
@@ -310,7 +315,7 @@ class NowPlayingModel {
                 }
             }
         }
-        if (g.titleHit(x, y) && !titleFocus) titleFocus = true
+        if (!lyr && g.titleHit(x, y) && !titleFocus) titleFocus = true
         bump()
     }
 
@@ -367,13 +372,14 @@ class NowPlayingModel {
             if (i == NP_HEART) return NpAct.Favorite
             return if (i == 0) NpAct.Shuffle else NpAct.Repeat
         }
+        if (lyricsShown()) return NpAct.LyricsSheet
         if (g.titleHit(x, y)) return NpAct.Queue
         if (g.artHit(x, y)) return NpAct.Controls
         return NpAct.None
     }
 
     fun hold(g: NpLayout): Boolean {
-        if (!touchDown || seeking || variant || shown.track == null || !g.titleHit(downX, downY)) return false
+        if (!touchDown || seeking || variant || lyricsShown() || shown.track == null || !g.titleHit(downX, downY)) return false
         touchDown = false
         titleFocus = false
         slide.armed = false
@@ -384,7 +390,7 @@ class NowPlayingModel {
 
     fun pressing(now: Long): Boolean = press.any { it.stale(now.toFloat()) }
 
-    fun animating(now: Long): Boolean = !idleDone(now) || pressing(now) || slideBusy()
+    fun animating(now: Long): Boolean = !idleDone(now) || pressing(now) || slideBusy() || lyrics.fading(now)
 
     var slide = NpSlide()
         private set

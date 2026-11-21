@@ -2,6 +2,7 @@ package net.seilent.funekit.screens.host
 
 import android.os.SystemClock
 import android.view.View
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -21,6 +22,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -28,8 +30,10 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.IntOffset
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import net.seilent.funekit.Case
 import net.seilent.funekit.Role
 import net.seilent.funekit.Roles
@@ -77,6 +81,7 @@ import net.seilent.funekit.kit.stack.Turn
 import net.seilent.funekit.kit.textWidth
 import net.seilent.funekit.kit.toastPlace
 import net.seilent.funekit.kit.toastSurface
+import net.seilent.funekit.kit.touch.BlockBelow
 import net.seilent.funekit.kit.touch.Gesture
 import net.seilent.funekit.kit.touch.Pan
 import net.seilent.funekit.kit.touch.Swipe
@@ -98,16 +103,22 @@ import net.seilent.funekit.screens.music.hub.hubPickAtDrop
 import net.seilent.funekit.screens.music.hub.hubPicked
 import net.seilent.funekit.screens.music.lists.ListViewModel
 import net.seilent.funekit.screens.music.lists.PlaylistsModel
+import net.seilent.funekit.screens.music.nowplaying.AdjustHit
+import net.seilent.funekit.screens.music.nowplaying.AdjustLayer
+import net.seilent.funekit.screens.music.nowplaying.CoverBlur
 import net.seilent.funekit.screens.music.nowplaying.NowPlayingLayer
 import net.seilent.funekit.screens.music.nowplaying.NowPlayingModel
 import net.seilent.funekit.screens.music.nowplaying.NpAct
+import net.seilent.funekit.screens.music.nowplaying.NpBackdrop
 import net.seilent.funekit.screens.music.nowplaying.NpFeed
 import net.seilent.funekit.screens.music.nowplaying.NpHalf
 import net.seilent.funekit.screens.music.nowplaying.NpInks
 import net.seilent.funekit.screens.music.nowplaying.NpMeasure
 import net.seilent.funekit.screens.music.nowplaying.NpPaint
 import net.seilent.funekit.screens.music.nowplaying.NpPart
+import net.seilent.funekit.screens.music.nowplaying.NpPicture
 import net.seilent.funekit.screens.music.nowplaying.NpSplit
+import net.seilent.funekit.screens.music.nowplaying.OffsetSheet
 import net.seilent.funekit.screens.music.nowplaying.holding
 import net.seilent.funekit.screens.music.nowplaying.npFlat
 import net.seilent.funekit.screens.music.nowplaying.npNanosAt
@@ -137,6 +148,7 @@ import net.seilent.funekit.screens.music.overlay.runSheet
 import net.seilent.funekit.screens.music.overlay.sheetItems
 import net.seilent.funekit.screens.music.pivotBy
 import net.seilent.funekit.screens.music.queue.QueueModel
+import kotlin.coroutines.CoroutineContext
 
 private const val OVER = 1
 private const val LEAD_MS = 17L
@@ -225,6 +237,13 @@ class MusicHost<S : Any> internal constructor(
     val hud = VolumeHud(env.np.board, env.np.w, env.np.h)
     private val volumeOverlay = Overlay(OverKind.Volume, hud) { if (hud.pendingSeek() != null) volSeek() }
     private val menuOvers = ArrayList<Pair<Overlay, Long>>()
+    private val backdrop = NpBackdrop()
+    internal var blurContext: CoroutineContext = Dispatchers.Default
+    private var offset by mutableStateOf<OffsetSheet?>(null)
+    private var offsetOver: Overlay? = null
+    private var offsetTrack: Long? = null
+    private var offsetEntry = false
+    private var offsetWant by mutableStateOf(false)
     private val infoRole = Role(Roles.dialogItem.size, Roles.dialogItem.weight, Case.Mixed, Roles.dialogItem.alpha, Roles.dialogItem.tracking)
     val popKind: (Turn<S>) -> MoveKind = { t -> pop(t) ?: appPop(t) }
 
@@ -267,6 +286,7 @@ class MusicHost<S : Any> internal constructor(
         hud.board = env.np.board
         hud.w = env.np.w
         hud.h = env.np.h
+        np.lyricsView = app.lyricsView
     }
 
     fun applied() {
@@ -332,7 +352,7 @@ class MusicHost<S : Any> internal constructor(
 
     fun kind(s: S): PageKind? = entryOf(s)?.let { models[it.entry]?.kind ?: PageKind.Plain }
 
-    fun pageBack(s: S): Boolean = entryOf(s) != null && types.back(modelOf(s))
+    fun pageBack(s: S): Boolean = entryOf(s) != null && ((isNp(s) && npBack()) || types.back(modelOf(s)))
 
     fun retargets(s: S): Boolean = !isNp(s)
 
@@ -438,8 +458,10 @@ class MusicHost<S : Any> internal constructor(
         confirm: Boolean,
         act: (Int) -> Boolean,
         lift: Boolean = false,
+        hold: ((Int) -> Boolean)? = null,
+        scrim: () -> Boolean = { false },
         setup: (Menu) -> Unit = {},
-    ) {
+    ): Overlay {
         val menu = menuHost.menu
         if (stack.overlay != null) stack.accept()
         menu.open(form, title, items, now(), readOnly, mixedRow, lead = lead, confirm = confirm)
@@ -447,11 +469,14 @@ class MusicHost<S : Any> internal constructor(
         menuHost.lift = lift
         frameMenu(menu, env.page, lift) { app.liftRow(stack.top) }
         menuHost.act = act
+        menuHost.hold = hold
+        menuHost.scrim = scrim
         val o = Overlay(if (form == MenuForm.Sheet) OverKind.Sheet else OverKind.Dlg)
         val at = stack.clock
         menuOvers.retainAll { it.first === stack.overlay || it.second == at }
         menuOvers += o to at
         stack.open(o)
+        return o
     }
 
     fun openJump(owner: S) {
@@ -890,6 +915,19 @@ class MusicHost<S : Any> internal constructor(
         LaunchedEffect(stack) {
             snapshotFlow { stack.overlay }.collect { o -> if (o != null) toast.opened(o.kind, stack.top?.let(::isNp) == true, now()) }
         }
+        LaunchedEffect(stack) {
+            snapshotFlow { stack.overlay }.collect { o ->
+                val sheet = offset ?: return@collect
+                if (o === offsetOver || offsetEntry) return@collect
+                offset = null
+                offsetTrack = null
+                offsetOver = null
+                sheet.dismiss()
+            }
+        }
+        LaunchedEffect(stack) {
+            snapshotFlow { np.lyrics.revision to offsetGone() }.collect { (_, gone) -> if (gone) offsetEnd() }
+        }
         LaunchedEffect(volDue, stack.phase) {
             if (!volDue || stack.phase != Phase.Rest) return@LaunchedEffect
             while (homeBusy(now())) withFrameMillis { }
@@ -927,6 +965,7 @@ class MusicHost<S : Any> internal constructor(
 
     @Composable
     fun MusicPages(pages: Map<S, Shown>, status: StatusState) {
+        NpBackdropFeed()
         val npStatusScale = npHalves.holding(NpPart.Status).g.s
         val npStatusInk = rememberStatusInk(status, npStatusScale, npStatus(npStatusScale))
         val rest = stack.phase == Phase.Rest
@@ -938,17 +977,10 @@ class MusicHost<S : Any> internal constructor(
                         np, npGeo, env.covers, np.art, npStatusInk, env.a, env.accent, env.accentOff, env.now,
                         live = rest && stack.top == sc, visible = sh.visible, frozen = sh.frozen,
                         hideFocus = stack.hideFocus, snap = stack.snap,
-                        onAct = { act ->
-                            when (act) {
-                                NpAct.Back -> stack.back(popKind)
-                                NpAct.Queue -> openQueue()
-                                NpAct.Info -> npInfo()
-                                NpAct.Controls -> openVolume(now())
-                                else -> scope.launch(FailFast) { quiet { npAct(act, np, src, phone, toast, env.now) } }
-                            }
-                        },
+                        onAct = ::npTap,
                         onSeek = { ms -> scope.launch(FailFast) { quiet { src?.player?.seek(ms) } } },
                         split = split,
+                        backdrop = backdrop,
                     )
                 }
                 continue
@@ -1001,6 +1033,21 @@ class MusicHost<S : Any> internal constructor(
     fun MenuOverlayHost() {
         val over = stack.overlay
         if (over == null || menuOvers.none { it.first === over }) return
+        val sheet = offset?.takeIf { offsetOver === over }
+        if (sheet != null) {
+            if (sheet.hud.shown) {
+                AdjustOverlayHost(sheet)
+                return
+            }
+            val want = offsetWant
+            LaunchedEffect(over, sheet, want) {
+                if (!want) return@LaunchedEffect
+                while (!over.closing && over.moving(now())) withFrameMillis { }
+                if (over.closing || offset !== sheet) return@LaunchedEffect
+                offsetWant = false
+                sheet.adjust(now())
+            }
+        }
         MenuOverlay(
             menuHost.menu, over, env.page, env.a, env.now,
             onPick = { i ->
@@ -1013,7 +1060,204 @@ class MusicHost<S : Any> internal constructor(
             accent = env.accent,
             accentOff = env.accentOff,
             band = if (env.page.navOn) navGround else null,
+            onHold = menuHost.hold,
+            onScrim = menuHost.scrim,
         )
+    }
+
+    @Composable
+    private fun AdjustOverlayHost(sheet: OffsetSheet) {
+        val s = env.page
+        val at = remember(sheet) { AdjustDown() }
+        BlockBelow(env.a, OVER)
+        BackHandler { offsetBack(sheet) }
+        Box(Modifier.pxSize(s.widthPx, s.heightPx)) {
+            AdjustLayer(sheet.hud, s, env.covers, env.now)
+            val tap = Tap(
+                onPress = { at.fresh = true },
+                onCancel = { at.hit = AdjustHit.None },
+                onTap = { offsetTap(sheet, at.hit) },
+                onLong = { at.number >= 0 && offsetNumber(sheet) },
+                onAt = { o ->
+                    if (at.fresh) {
+                        at.fresh = false
+                        at.hit = sheet.hud.hit(o.x, o.y, s)
+                        at.number = if (at.hit == AdjustHit.None) sheet.hud.numberAt(o.x, o.y) else -1
+                    }
+                },
+            )
+            Box(Modifier.pxSize(s.widthPx, s.heightPx).tapTarget(env.a, tap, OVER))
+        }
+    }
+
+    @Composable
+    private fun NpBackdropFeed() {
+        val pic by app.backdrop.collectAsState()
+        val shown = np.lyricsView && np.lyrics.mode && !np.variant
+        val art = np.art
+        val gs = npGeo.s
+        var cover by remember { mutableStateOf<Pair<ImageBitmap, NpPicture?>?>(null) }
+        LaunchedEffect(art, shown, gs) {
+            if (!shown || art == null || cover?.first === art) return@LaunchedEffect
+            val img = withContext(blurContext) { CoverBlur.image(art, gs.widthPx, gs.heightPx, gs) }
+            cover = art to img?.let { NpPicture(it, whole = true) }
+        }
+        val done = cover?.takeIf { it.first === art }
+        val wait = shown && art != null && done == null
+        val want = (if (shown) done?.second else null) ?: pic
+        LaunchedEffect(want, wait) { if (!wait) backdrop.set(want, now()) }
+    }
+
+    fun npBack(): Boolean {
+        if (!np.lyricsView) return false
+        val l = np.lyrics
+        val t = now()
+        if (l.fading(t)) {
+            if (l.mode) {
+                l.reverse(t)
+                return true
+            }
+            l.land(np.variant)
+        }
+        if (!l.shown(np.variant)) return false
+        l.toggle(t, np.variant)
+        return true
+    }
+
+    private fun lyricsToggle() {
+        val l = np.lyrics
+        val t = now()
+        if (l.fading(t)) l.reverse(t) else l.toggle(t, np.variant)
+    }
+
+    fun showLyrics(on: Boolean) {
+        if (np.lyricsView && np.lyrics.mode != on) lyricsToggle()
+    }
+
+    val offsetSheet: OffsetSheet? get() = offset
+
+    internal val npBackdrop: NpBackdrop get() = backdrop
+
+    internal fun npTap(act: NpAct) {
+        when (act) {
+            NpAct.Back -> stack.back(popKind)
+            NpAct.Lyrics -> if (np.lyricsView) lyricsToggle()
+            NpAct.LyricsSheet -> openOffset()
+            NpAct.Queue -> openQueue()
+            NpAct.Info -> npInfo()
+            NpAct.Controls -> openVolume(now())
+            else -> scope.launch(FailFast) { quiet { npAct(act, np, src, phone, toast, env.now) } }
+        }
+    }
+
+    fun openOffset() {
+        val track = offsetOpen() ?: return
+        val edit = app.offset(track) ?: return
+        offsetEnd()
+        val sheet = OffsetSheet(edit)
+        offset = sheet
+        offsetTrack = track
+        offsetEntry = false
+        offsetMenu(sheet)
+    }
+
+    private fun offsetOpen(): Long? {
+        if (!np.lyricsView || stack.top?.let(::isNp) != true || stack.overlay != null || stack.phase != Phase.Rest) return null
+        val l = np.lyrics
+        val t = now()
+        if (l.fading(t)) l.land(np.variant)
+        val track = np.shown.track ?: return null
+        return if (!l.shown(np.variant) || l.track != track || l.lines.isEmpty()) null else track
+    }
+
+    private fun offsetGone(): Boolean {
+        if (offset == null) return false
+        val l = np.lyrics
+        val track = offsetTrack
+        return !l.shown(np.variant) || np.shown.track != track || l.track != track || !(l.pending || l.lines.isNotEmpty())
+    }
+
+    private fun offsetCells(sheet: OffsetSheet, m: Menu = menuHost.menu) {
+        m.cells(listOf(sheet.value()), listOf(false), sheet.mark())
+    }
+
+    private fun offsetMenu(sheet: OffsetSheet) {
+        offsetOver = openMenu(
+            MenuForm.Sheet, OffsetSheet.TITLE, sheet.items, readOnly = false, mixedRow = -1, lead = 0, confirm = false,
+            act = { i ->
+                sheet.press(i)
+                offsetCells(sheet)
+                offsetWant = sheet.edit.editing
+                false
+            },
+            setup = { m -> offsetCells(sheet, m) },
+            hold = { i -> offsetHold(sheet, i) },
+            scrim = { sheet.scrim().also { offsetCells(sheet) } },
+        )
+    }
+
+    private fun offsetRaise(sheet: OffsetSheet) {
+        offsetCells(sheet)
+        stack.swapMenu(offsetOver) { _ -> offsetCells(sheet) }
+    }
+
+    private fun offsetTap(sheet: OffsetSheet, h: AdjustHit) {
+        sheet.tap(h)
+        if (h == AdjustHit.Exit) offsetRaise(sheet)
+    }
+
+    private fun offsetBack(sheet: OffsetSheet) {
+        if (sheet.back()) offsetRaise(sheet)
+    }
+
+    private fun offsetNumber(sheet: OffsetSheet): Boolean {
+        offsetEntry = true
+        stack.cut()
+        return sheet.holdNumber()
+    }
+
+    private fun offsetHold(sheet: OffsetSheet, i: Int): Boolean {
+        if (i != 0) return false
+        offsetEntry = true
+        stack.cut()
+        return sheet.hold(i)
+    }
+
+    fun offsetReturn(adjust: Boolean) {
+        val sheet = offset ?: return
+        scope.launch(FailFast) {
+            while (stack.overlay != null || stack.phase != Phase.Rest) withFrameMillis { }
+            if (offset !== sheet) return@launch
+            if (offsetOpen() != offsetTrack) {
+                offsetEnd()
+                return@launch
+            }
+            offsetEntry = false
+            offsetMenu(sheet)
+            if (adjust) {
+                sheet.press(0)
+                offsetCells(sheet)
+                sheet.adjust(now())
+            }
+        }
+    }
+
+    fun offsetKey(d: Int): Boolean {
+        val sheet = offset ?: return false
+        if (!sheet.key(d)) return false
+        offsetCells(sheet)
+        return true
+    }
+
+    fun offsetEnd() {
+        val sheet = offset ?: return
+        offset = null
+        offsetTrack = null
+        offsetEntry = false
+        val over = offsetOver
+        offsetOver = null
+        sheet.dismiss()
+        if (over != null && stack.overlay === over) stack.close()
     }
 
     @Composable
@@ -1116,4 +1360,10 @@ fun <S : Any> rememberMusicHost(
     val host = remember { MusicHost(music, models, toast, jump, menuHost, movePaint, scope, app, env, src, volume, types, npGeo, npHalves, npHalfInks, navGround, split, view) }
     host.update(app, env, src, volume, types, phone, feed, npGeo, npHalves, npHalfInks, navGround, split, view)
     return host
+}
+
+private class AdjustDown {
+    var fresh = false
+    var hit = AdjustHit.None
+    var number = -1
 }

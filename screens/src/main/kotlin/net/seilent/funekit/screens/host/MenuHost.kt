@@ -11,6 +11,8 @@ class MenuHost {
     val menu = Menu()
     var lift = false
     var act: (Int) -> Boolean = { false }
+    var hold: ((Int) -> Boolean)? = null
+    var scrim: () -> Boolean = { false }
 }
 
 fun frameMenu(menu: Menu, s: Scale, lift: Boolean, liftRow: () -> Int?) {

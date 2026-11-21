@@ -6,6 +6,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -60,7 +61,7 @@ class AdjustLegs(val scrim: Float, val number: Float, val exit: Float, val group
 private fun progress(e: Long, d: Float): Float = if (d <= 0f) 1f else (e / d).coerceIn(0f, 1f)
 
 class AdjustHud {
-    var shown = false
+    var shown by mutableStateOf(false)
         private set
     var cols: List<AdjustCol> = emptyList()
         private set

@@ -11,6 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.withContext
 import net.seilent.funekit.api.Listing
+import net.seilent.funekit.api.Lyrics
 import net.seilent.funekit.api.PlayerState
 import net.seilent.funekit.api.Repeat
 import net.seilent.funekit.api.Row
@@ -67,6 +68,12 @@ suspend fun queueRows(source: MusicSource, s: PlayerState, next: Int): Pair<Long
     return prev to rows
 }
 
+internal suspend fun npMark(np: NowPlayingModel, l: Lyrics, track: Long): Boolean {
+    if (!np.lyricsView) return l.lyrics(track) != null
+    np.lyrics.read(l, track)
+    return np.lyrics.has(track)
+}
+
 @Composable
 fun NowPlayingFeed(np: NowPlayingModel, g: NpLayout, src: MusicSource?, phone: PhoneSession?, now: () -> Long): NpFeed? {
     val own by (src?.player?.state ?: noState).collectAsState()
@@ -101,7 +108,7 @@ fun NowPlayingFeed(np: NowPlayingModel, g: NpLayout, src: MusicSource?, phone: P
             return@LaunchedEffect
         }
         np.favorite = quietly { source.favorites.has(track) } == true
-        np.mark = quietly { source.lyrics.lyrics(track) } != null
+        np.mark = quietly { npMark(np, source.lyrics, track) } == true
     }
     val ref = np.shown.art
     val phoneArt = phone?.track?.art
