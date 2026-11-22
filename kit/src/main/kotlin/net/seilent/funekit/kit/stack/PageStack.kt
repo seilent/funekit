@@ -93,6 +93,7 @@ class PageStack<P : Any>(
     private var pending = 0
     private var replayDue = false
     private var cutOwed = false
+    private var leaveOwed: Pair<(P) -> Boolean, (Turn<P>) -> MoveKind>? = null
     fun heldTap(downAt: Long): Boolean = gate?.tapped(downAt) == true
 
     init {
@@ -193,6 +194,44 @@ class PageStack<P : Any>(
     }
 
     fun pick() = ask { if (overlay != null) snapshot(false, true) }
+
+    fun leave(leaves: (P) -> Boolean, popKind: (Turn<P>) -> MoveKind) {
+        onMain("PageStack.leave")
+        ask {
+            val was = leaveOwed?.first
+            leaveOwed = (if (was == null) leaves else { p: P -> was(p) || leaves(p) }) to popKind
+        }
+    }
+
+    fun cutOverlay(only: Overlay) {
+        onMain("PageStack.cutOverlay")
+        ask { now ->
+            if (overlay !== only) return@ask
+            if (!only.closing) closing(only, now)
+            only.drop()
+            dropOverlay()
+        }
+    }
+
+    private fun leaveNow(leaves: (P) -> Boolean, popKind: (Turn<P>) -> MoveKind, now: Long) {
+        leaveOwed = null
+        val gone = (pages.lastIndex - 1 downTo 0).filter { leaves(pages[it]) }
+        val page = top
+        val pops = page != null && leaves(page)
+        if (gone.isEmpty() && !pops) return
+        cutSeq = seq++
+        for (i in gone) erase(i)
+        if (!pops || page == null) return
+        val t = Turn(MoveKind.None, page, under, popping = true)
+        start(Turn(popKind(t), t.from, t.to, popping = true), now, retarget = false)
+    }
+
+    private fun erase(i: Int) {
+        val page = pages.removeAt(i)
+        if (i < pushRows.size) pushRows.removeAt(i)
+        if (i < pushRows.size) pushRows[i] = null
+        drop(page)
+    }
 
     fun swapMenu(only: Overlay? = null, swap: (Long) -> Unit) = ask { now ->
         val o = overlay
@@ -731,6 +770,8 @@ class PageStack<P : Any>(
         o?.rise(now)
         if (o != null && o.done(now)) dropOverlay()
         jumpSettled = overlay?.let { it.kind == OverKind.Jump && !it.closing && !it.moving(now) } == true
+        val l = leaveOwed
+        if (l != null && phase == Phase.Rest && overlay == null && opened == null && pending == 0 && asks.isEmpty() && !replayDue) leaveNow(l.first, l.second, now)
     }
 }
 
