@@ -13,6 +13,7 @@ import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.StandardTestDispatcher
 import net.seilent.funekit.Insets
@@ -20,6 +21,7 @@ import net.seilent.funekit.Nav
 import net.seilent.funekit.Scale
 import net.seilent.funekit.Surface
 import net.seilent.funekit.Window
+import net.seilent.funekit.fxInt
 import net.seilent.funekit.api.Kind
 import net.seilent.funekit.api.Row
 import net.seilent.funekit.gen.Tok
@@ -38,6 +40,7 @@ import net.seilent.funekit.screens.music.nowplaying.NpAct
 import net.seilent.funekit.screens.music.nowplaying.NpPicture
 import net.seilent.funekit.screens.music.nowplaying.NpShown
 import net.seilent.funekit.screens.music.nowplaying.OffsetEdit
+import net.seilent.funekit.screens.music.nowplaying.PhoneLyrics
 import net.seilent.funekit.screens.music.nowplaying.PhoneRepeat
 import net.seilent.funekit.screens.music.nowplaying.PhoneTrack
 import org.junit.Assert.assertEquals
@@ -433,7 +436,7 @@ class HostTest {
         frames(OPEN_FRAMES)
         assertFalse("premise: no session, no variant", app.music.np.variant)
         val track = PhoneTrack("Radio", "Song", "Artist", "Album", true, false, DURATION, 0L, 0L, 1f, false, PhoneRepeat.Off, 0, 0, null)
-        rule.runOnIdle { app.phone.value = PhoneSession(track, {}, {}) }
+        rule.runOnIdle { app.phone.value = PhoneSession(track, {}) {} }
         frames(OPEN_FRAMES)
         rule.runOnIdle { assertTrue("the late session shows as the variant", app.music.np.variant) }
     }
@@ -552,7 +555,7 @@ class HostTest {
         val watch = Snapshot.registerApplyObserver { changed, _ -> changed.forEach { (it as? State<*>)?.value?.let { v -> if (v is MusicEnv) envs += v } } }
         try {
             val track = PhoneTrack("Radio", "Song", "Artist", "Album", true, false, DURATION, 0L, 0L, 1f, false, PhoneRepeat.Off, 0, 0, null)
-            rule.runOnIdle { app.phone.value = PhoneSession(track, {}, {}) }
+            rule.runOnIdle { app.phone.value = PhoneSession(track, {}) {} }
             frames(OPEN_FRAMES)
             rule.runOnIdle { assertTrue("premise: the phone session recomposed the host", app.music.np.variant) }
             assertTrue("the recomposition writes no env, ${envs.size}", envs.isEmpty())
@@ -604,10 +607,11 @@ class HostTest {
 
     private fun song(id: Long) = Row(id, Kind.Song, "Song", "Artist", null, durationMs = DURATION, album = "Album")
 
-    private fun lyricsApp(e: Edit, view: Boolean = true, mode: Boolean = true): TestApp =
+    private fun lyricsApp(e: Edit, view: Boolean = true, mode: Boolean = true, pl: PhoneLyrics? = null): TestApp =
         TestApp(page, np, null, Level(START, null)) { rule.mainClock.currentTime }.also {
             it.lyricsOn = view
             it.edit = e
+            it.phoneLyricsOf = pl
             it.compose(rule)
             rule.waitForIdle()
             rule.mainClock.autoAdvance = false
@@ -912,6 +916,194 @@ class HostTest {
         assertNull(app.host.offsetSheet)
     }
 
+    private class Copy(private val off: OffsetEdit? = null) : PhoneLyrics {
+        override val mode = MutableStateFlow(false)
+        override val revision = MutableStateFlow(0L)
+        val sets = mutableListOf<Boolean>()
+        var refuses = false
+        var reads = 0
+        var offsets = 0
+
+        override fun setMode(on: Boolean) {
+            sets += on
+            if (!refuses) mode.value = on
+        }
+
+        override suspend fun lyrics(t: PhoneTrack): String? {
+            reads++
+            return LRC
+        }
+
+        override fun offset(t: PhoneTrack): OffsetEdit? {
+            offsets++
+            return off
+        }
+    }
+
+    private val phoneTrack = PhoneTrack("Radio", "Song", "Artist", "Album", true, false, DURATION, 0L, 0L, 1f, false, PhoneRepeat.Off, 0, 0, null)
+
+    private fun session(app: TestApp, track: PhoneTrack? = phoneTrack) {
+        rule.runOnIdle { app.phone.value = track?.let { PhoneSession(it, {}) {} } }
+        frames(OPEN_FRAMES)
+    }
+
+    private fun phoneApp(pl: Copy, e: Edit = Edit()): TestApp = lyricsApp(e, mode = false, pl = pl).also { session(it) }
+
+    private fun shade(app: TestApp): Long = rule.runOnIdle { app.music.np.lyrics.dim(rule.mainClock.currentTime) }
+
+    @Test
+    fun aPhoneCopyShowsInTheLyricsViewAndTheKeyFlipsThePhoneMode() {
+        val pl = Copy()
+        val app = phoneApp(pl)
+        val m = app.music.np
+        rule.runOnIdle {
+            assertTrue("premise: the session shows as the variant", m.variant)
+            assertTrue("the mark shows the phone copy", m.mark)
+            assertEquals("the copy is read for the shown id", m.shown.track, m.lyrics.track)
+            assertEquals(listOf(1000L, 2000L), m.lyrics.lines.map { it.ms })
+        }
+        rule.runOnIdle { app.host.npTap(NpAct.Lyrics) }
+        frames(OPEN_FRAMES)
+        rule.runOnIdle {
+            assertEquals("the key calls the app's mode", listOf(true), pl.sets)
+            assertTrue(m.lyrics.phoneMode)
+            assertFalse("the own mode stays", m.lyrics.mode)
+            assertTrue(m.lyricsShown())
+        }
+    }
+
+    @Test
+    fun aPhoneLyricsReadKeysOnTheShownIdNotThePosition() {
+        val pl = Copy()
+        val app = phoneApp(pl)
+        val reads = pl.reads
+        assertTrue("premise: the copy was read", reads > 0)
+        session(app, phoneTrack.copy(positionMs = POSITION, positionAt = POSITION))
+        assertEquals("a state that moves only the position reads nothing", reads, pl.reads)
+        rule.runOnIdle { pl.revision.value = 1L }
+        frames(OPEN_FRAMES)
+        assertEquals("a revision change reads again", reads + 1, pl.reads)
+    }
+
+    @Test
+    fun theLyricsTapOnAPhoneCopyOpensItsOffsetEdit() {
+        val e = Edit()
+        val pl = Copy(e)
+        val app = phoneApp(pl)
+        var asked = 0
+        app.asked = { asked++ }
+        rule.runOnIdle { pl.mode.value = true }
+        frames(OPEN_FRAMES)
+        assertTrue("premise: the phone copy shows", rule.runOnIdle { app.music.np.lyricsShown() })
+        rule.runOnIdle { app.host.openOffset() }
+        frames(2)
+        assertEquals(OverKind.Sheet, app.stack.overlay?.kind)
+        assertEquals("the phone copy's edit is asked", 1, pl.offsets)
+        assertEquals("the own edit is not asked", 0, asked)
+    }
+
+    @Test
+    fun aSourceSwitchLandsTheShadeOnTheNewSourcesMode() {
+        val pl = Copy()
+        val app = lyricsApp(Edit(), pl = pl)
+        assertEquals("premise: the own mode shows", fxInt(1), shade(app))
+        session(app)
+        assertEquals("the phone mode is off, the shade lands off", 0L, shade(app))
+        session(app, null)
+        assertEquals("back on the own source the shade lands on", fxInt(1), shade(app))
+        rule.runOnIdle {
+            app.host.showLyrics(false)
+            pl.mode.value = true
+        }
+        frames(FADE_FRAMES)
+        assertEquals("premise: the own mode is off", 0L, shade(app))
+        session(app)
+        assertEquals("the phone mode is on, the shade lands on", fxInt(1), shade(app))
+        session(app, null)
+        assertEquals("back on the own source the shade lands off", 0L, shade(app))
+    }
+
+    @Test
+    fun showLyricsDuringTheVariantSetsTheOwnModeOnly() {
+        val pl = Copy()
+        val app = phoneApp(pl)
+        val m = app.music.np
+        val before = shade(app)
+        rule.runOnIdle { app.host.showLyrics(true) }
+        frames(OPEN_FRAMES)
+        rule.runOnIdle {
+            assertTrue("the own mode is set", m.lyrics.mode)
+            assertFalse("the phone mode stays", m.lyrics.phoneMode)
+            assertTrue("no mode call reaches the app", pl.sets.isEmpty())
+            assertFalse(m.lyrics.fading(rule.mainClock.currentTime))
+        }
+        assertEquals("the shade does not move", before, shade(app))
+    }
+
+    @Test
+    fun theModeEchoOfAToggleKeepsItsFade() {
+        val pl = Copy()
+        val app = phoneApp(pl)
+        val l = app.music.np.lyrics
+        rule.runOnIdle { app.host.npTap(NpAct.Lyrics) }
+        frames(2)
+        rule.runOnIdle {
+            assertEquals(listOf(true), pl.sets)
+            assertTrue("premise: the app took the mode", pl.mode.value)
+            assertTrue("the echo keeps the fade", l.fading(rule.mainClock.currentTime))
+            assertTrue(l.dimming(rule.mainClock.currentTime))
+        }
+    }
+
+    @Test
+    fun anAppThatRefusesTheModeLandsTheShadeBack() {
+        val pl = Copy().also { it.refuses = true }
+        val app = phoneApp(pl)
+        val l = app.music.np.lyrics
+        rule.runOnIdle { app.host.npTap(NpAct.Lyrics) }
+        frames(2)
+        rule.runOnIdle {
+            assertEquals(listOf(true), pl.sets)
+            assertFalse("the refused mode lands back", l.phoneMode)
+            assertFalse(l.fading(rule.mainClock.currentTime))
+        }
+        assertEquals(0L, shade(app))
+    }
+
+    @Test
+    fun aSessionThatGainsShuffleTakesRingOne() {
+        val app = app(Level(START, null))
+        frames(OPEN_FRAMES)
+        session(app)
+        val m = app.music.np
+        val g = NpLayout(np)
+        assertEquals("premise: a session with no shuffle act", -1, rule.runOnIdle { m.ringAt(g, RING_ONE_X, RING_Y) })
+        rule.runOnIdle { app.phone.value = PhoneSession(phoneTrack, {}, { }) {} }
+        frames(OPEN_FRAMES)
+        assertTrue(rule.runOnIdle { m.phoneShuffle })
+        assertEquals("the same track with a shuffle act takes ring one", 1, rule.runOnIdle { m.ringAt(g, RING_ONE_X, RING_Y) })
+    }
+
+    @Test
+    fun withPhoneLyricsShownTheBackdropIsTheAppPictureWithTheShade() {
+        val pl = Copy().also { it.mode.value = true }
+        val app = lyricsApp(Edit(), mode = false, pl = pl)
+        val pic = NpPicture(ImageBitmap(4, 4))
+        val art = Bitmap.createBitmap(COVER, COVER, Bitmap.Config.ARGB_8888)
+        rule.runOnIdle {
+            app.music.np.workContext = Dispatchers.Unconfined
+            app.backdropFlow.value = pic
+        }
+        session(app, phoneTrack.copy(art = art))
+        frames(BLUR_FRAMES)
+        rule.runOnIdle {
+            assertTrue("premise: the phone copy shows", app.music.np.lyricsShown())
+            assertTrue("premise: the art is the phone's", app.music.np.artPhone)
+        }
+        assertSame("the phone art stays out of the blur", pic, app.host.npBackdrop.shown)
+        assertEquals("the shade is on", fxInt(1), shade(app))
+    }
+
     @Test
     fun aPhoneSessionKeepsTheLyricsSheetShut() {
         val app = lyricsApp(Edit())
@@ -1202,7 +1394,7 @@ class HostTest {
         rule.runOnIdle {
             app.music.np.workContext = Dispatchers.Unconfined
             app.backdropFlow.value = pic
-            app.phone.value = PhoneSession(track, {}, {})
+            app.phone.value = PhoneSession(track, {}) {}
         }
         frames(OPEN_FRAMES)
         assertTrue(app.music.np.variant)
@@ -1268,5 +1460,10 @@ class HostTest {
         private const val ALBUM = 20L
         private const val STALE = 7L
         private const val TOP_Y = 40f
+        private const val FADE_FRAMES = 60
+        private const val POSITION = 5000L
+        private const val RING_ONE_X = 120f
+        private const val RING_Y = 398f
+        private const val LRC = "[00:01.00]one\n[00:02.00]two"
     }
 }

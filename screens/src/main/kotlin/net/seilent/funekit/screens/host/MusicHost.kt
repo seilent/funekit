@@ -355,6 +355,8 @@ class MusicHost<S : Any> internal constructor(
         this.volume = volume
         this.types = types
         this.phone = phone
+        np.phoneShuffle = phone?.shuffle != null
+        np.phoneRepeat = phone?.repeat != null
         this.feed = feed
         this.npGeo = npGeo
         this.npHalves = npHalves
@@ -367,6 +369,7 @@ class MusicHost<S : Any> internal constructor(
         hud.w = env.np.w
         hud.h = env.np.h
         np.lyricsView = app.lyricsView
+        np.lyrics.phoneLyrics = app.phoneLyrics != null
     }
 
     fun applied() {
@@ -1486,7 +1489,7 @@ class MusicHost<S : Any> internal constructor(
     @Composable
     private fun NpBackdropFeed() {
         val pic by app.backdrop.collectAsState()
-        val shown = np.lyricsView && np.lyrics.mode && !np.variant
+        val shown = np.lyricsView && np.lyrics.shown(np.variant)
         val art = np.art?.takeIf { !np.artPhone }
         val gs = npGeo.s
         var cover by remember { mutableStateOf<Blurred?>(null) }
@@ -1506,25 +1509,37 @@ class MusicHost<S : Any> internal constructor(
         val l = np.lyrics
         val t = now()
         if (l.fading(t)) {
-            if (l.mode) {
-                l.reverse(t)
+            if (l.on(np.variant)) {
+                l.reverse(t, np.variant)
+                syncPhoneMode()
                 return true
             }
             l.land(np.variant)
         }
         if (!l.shown(np.variant)) return false
         l.toggle(t, np.variant)
+        syncPhoneMode()
         return true
+    }
+
+    private fun syncPhoneMode() {
+        val pl = app.phoneLyrics ?: return
+        if (!np.variant) return
+        pl.setMode(np.lyrics.phoneMode)
+        np.lyrics.echo(pl.mode.value, true)
     }
 
     private fun lyricsToggle() {
         val l = np.lyrics
         val t = now()
-        if (l.fading(t)) l.reverse(t) else l.toggle(t, np.variant)
+        if (l.fading(t)) l.reverse(t, np.variant) else l.toggle(t, np.variant)
+        syncPhoneMode()
     }
 
     fun showLyrics(on: Boolean) {
-        if (np.lyricsView && np.lyrics.mode != on) lyricsToggle()
+        val l = np.lyrics
+        if (!np.lyricsView || l.mode == on) return
+        if (np.variant && l.phoneLyrics) l.turn(on, false) else lyricsToggle()
     }
 
     val offsetSheet: OffsetSheet? get() = offset
@@ -1546,7 +1561,8 @@ class MusicHost<S : Any> internal constructor(
     fun openOffset() {
         val track = offsetOpen() ?: return
         offsetEnd()
-        val edit = app.offset(track) ?: return
+        val p = phone?.track
+        val edit = (if (np.variant && p != null) app.phoneLyrics?.offset(p) else app.offset(track)) ?: return
         val sheet = OffsetSheet(edit)
         offset = sheet
         offsetTrack = track
@@ -1749,7 +1765,9 @@ fun <S : Any> rememberMusicHost(
     val npGeo = remember(env.np) { NpLayout(env.np) }
     val npHalves = remember(npGeo, split) { split?.halves ?: listOf(npFlat(npGeo)) }
     val phone by app.phone.collectAsState()
-    val feed = NowPlayingFeed(np, npHalves.holding(NpPart.Art).g, src, phone) { SystemClock.uptimeMillis() }
+    val phoneLyrics = app.phoneLyrics
+    val feed = NowPlayingFeed(np, npHalves.holding(NpPart.Art).g, src, phone, phoneLyrics) { SystemClock.uptimeMillis() }
+    LaunchedEffect(phoneLyrics) { phoneLyrics?.mode?.collect { np.lyrics.echo(it, np.variant) } }
     val npHalfInks = remember(npHalves, env.measurer, env.fonts, env.density, env.covers) { npHalves.map { NpInks(NpMeasure(it.g, env.measurer, env.fonts, env.density, env.covers), np) } }
     val types = rememberMusicTypes(env, app::homeItem)
     val pages = app.settingsPages

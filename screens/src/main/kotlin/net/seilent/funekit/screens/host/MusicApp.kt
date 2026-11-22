@@ -5,6 +5,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import net.seilent.funekit.screens.music.nowplaying.NpPicture
 import net.seilent.funekit.screens.music.nowplaying.OffsetEdit
+import net.seilent.funekit.screens.music.nowplaying.PhoneLyrics
+import net.seilent.funekit.screens.music.nowplaying.PhoneRepeat
 import net.seilent.funekit.screens.music.nowplaying.PhoneTrack
 import net.seilent.funekit.screens.music.overlay.SheetDelete
 import net.seilent.funekit.screens.music.overlay.SheetExtra
@@ -12,7 +14,13 @@ import net.seilent.funekit.screens.music.overlay.SheetTarget
 import net.seilent.funekit.screens.settings.SettingsPage
 import net.seilent.funekit.screens.settings.SettingsScreen
 
-class PhoneSession(val track: PhoneTrack, val toggle: () -> Unit, val skip: (Int) -> Unit)
+class PhoneSession(
+    val track: PhoneTrack,
+    val toggle: () -> Unit,
+    val shuffle: ((Boolean) -> Unit)? = null,
+    val repeat: ((PhoneRepeat) -> Unit)? = null,
+    val skip: (Int) -> Unit,
+)
 
 private val noBackdrop: StateFlow<NpPicture?> = MutableStateFlow<NpPicture?>(null).asStateFlow()
 
@@ -46,6 +54,8 @@ interface MusicApp<S : Any> {
     fun sheetDelete(t: SheetTarget): SheetDelete? = null
 
     fun sheetExtras(t: SheetTarget): List<SheetExtra> = emptyList()
+
+    val phoneLyrics: PhoneLyrics? get() = null
 
     fun log(line: String) {}
 

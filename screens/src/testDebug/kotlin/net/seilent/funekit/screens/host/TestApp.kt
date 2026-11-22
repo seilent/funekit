@@ -69,6 +69,7 @@ import net.seilent.funekit.screens.music.hub.musicModel
 import net.seilent.funekit.screens.music.nowplaying.NpPicture
 import net.seilent.funekit.screens.music.nowplaying.OffsetEdit
 import net.seilent.funekit.screens.music.nowplaying.NpSplit
+import net.seilent.funekit.screens.music.nowplaying.PhoneLyrics
 import net.seilent.funekit.screens.music.overlay.SheetDelete
 import net.seilent.funekit.screens.music.overlay.SheetExtra
 import net.seilent.funekit.screens.music.overlay.SheetTarget
@@ -117,6 +118,7 @@ class TestApp(page: Scale, np: Scale, src: MusicSource?, private val level: Volu
     var deletes: (SheetTarget) -> SheetDelete? = { null }
     var extras: (SheetTarget) -> List<SheetExtra> = { emptyList() }
     val logs = mutableListOf<String>()
+    var phoneLyricsOf: PhoneLyrics? = null
 
     override fun music(s: TestScreen): MusicEntry? = (s as? TestScreen.Music)?.music
 
@@ -153,6 +155,8 @@ class TestApp(page: Scale, np: Scale, src: MusicSource?, private val level: Volu
     override fun log(line: String) {
         logs += line
     }
+
+    override val phoneLyrics: PhoneLyrics? get() = phoneLyricsOf
 
     private val home = object : HomePaint {
         override val quickplay = false

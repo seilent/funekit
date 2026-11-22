@@ -7,11 +7,16 @@ import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.motion.Curves
 import net.seilent.funekit.kit.motion.VariantMotion
 import net.seilent.funekit.kit.touch.RowSpec
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.coroutines.EmptyCoroutineContext
+
+private const val DURATION = 180000L
 
 class LyricsModelTest {
     private val text = "[00:01.00]one\n[00:02.00]two\n[00:03.00]three"
@@ -169,6 +174,90 @@ class LyricsModelTest {
         m.plainRows(RowSpec(10, 50), 12)
         assertEquals(12, m.plainTrack.count)
         assertEquals(70, m.plainTrack.max)
+    }
+
+    private class Copy(private val text: String?, private val off: Int = 0) : PhoneLyrics {
+        override val mode = MutableStateFlow(false)
+
+        override fun setMode(on: Boolean) {
+            mode.value = on
+        }
+
+        override val revision = MutableStateFlow(0L)
+
+        override suspend fun lyrics(t: PhoneTrack): String? = text
+
+        override fun offsetMs(t: PhoneTrack): Int = off
+    }
+
+    private val phone = PhoneTrack("Radio", "T", "A", "B", true, false, DURATION, 1400, 0, 1f, false, PhoneRepeat.Off, 0, 0, null)
+
+    private fun phoneModel(copy: Copy): NowPlayingModel = NowPlayingModel().also { np ->
+        np.lyrics.phoneLyrics = true
+        np.feed(phone)
+        val shown = NpShown.of(phone)
+        np.sync(shown, 0)
+        runBlocking { np.lyrics.readPhone(copy, phone, requireNotNull(shown.track), EmptyCoroutineContext) }
+    }
+
+    @Test
+    fun withNoPhoneLyricsTheVariantShowsNoLyricsAsBefore() {
+        val m = loaded()
+        m.toggle(0)
+        assertTrue("premise: the own source shows its lyrics", m.shown(false))
+        assertFalse(m.shown(true))
+        assertFalse(m.on(true) && m.phoneLyrics)
+        assertEquals(LYRIC_NONE, m.index(LyricAt(1, 1, 1600, true, true)))
+        assertEquals(-1L, m.due(LyricAt(1, 1, 1400, true, true), 10_000, 10_000))
+    }
+
+    @Test
+    fun aPhoneCopyIndexesAndWakesOnThePhoneTrack() {
+        val np = phoneModel(Copy(text))
+        val m = np.lyrics
+        m.toggle(0, variant = true)
+        val id = np.shown.track
+        val at = lyricAt(np, 0, 0)
+        assertEquals("the copy is keyed on the shown id", id, m.track)
+        assertEquals(id, at.shown)
+        assertEquals("the variant plays its shown id", id, at.playing)
+        assertTrue("the phone runs", at.running)
+        assertEquals(1400L, at.pos)
+        assertEquals(0, m.index(at))
+        assertEquals("the wake is at the next line", 600L, m.due(at, 0, 0))
+    }
+
+    @Test
+    fun thePhoneModeAndTheOwnModeAreApart() {
+        val m = loaded()
+        m.phoneLyrics = true
+        m.toggle(0, variant = true)
+        assertTrue(m.phoneMode)
+        assertFalse("a variant toggle leaves the own mode", m.mode)
+        assertTrue(m.shown(true))
+        assertFalse("the own source reads its own mode", m.shown(false))
+        m.toggle(1000, variant = false)
+        assertTrue(m.mode)
+        assertTrue("an own toggle leaves the phone mode", m.phoneMode)
+    }
+
+    @Test
+    fun aSecondTapDuringTheFadeInTheVariantReversesThePhoneMode() {
+        val m = loaded()
+        m.phoneLyrics = true
+        m.toggle(1000, variant = true)
+        assertTrue("premise: the fade runs", m.fading(1100))
+        m.reverse(1100, variant = true)
+        assertFalse(m.phoneMode)
+        assertFalse("the reverse leaves the own mode", m.mode)
+        assertEquals(VariantMotion.frame(VariantMotion.Dir.Out, 100), m.fade(1100))
+    }
+
+    @Test
+    fun aPhoneCopyAppliesItsOffsetMs() {
+        val m = phoneModel(Copy(text, 500)).lyrics
+        assertEquals(500, m.offsetMs)
+        assertEquals(listOf(500L, 1500L, 2500L), m.lines.map { it.ms })
     }
 
     @Test

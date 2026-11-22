@@ -27,6 +27,9 @@ import net.seilent.funekit.screens.music.nowplaying.NpAct
 import net.seilent.funekit.screens.music.nowplaying.NpFeed
 import net.seilent.funekit.screens.music.nowplaying.NpInks
 import net.seilent.funekit.screens.music.nowplaying.NpShown
+import net.seilent.funekit.screens.music.nowplaying.PhoneLyrics
+import net.seilent.funekit.screens.music.nowplaying.PhoneRepeat
+import net.seilent.funekit.screens.music.nowplaying.PhoneTrack
 import net.seilent.funekit.screens.music.nowplaying.Variant
 
 const val FAV_ADDED = "added to favorites"
@@ -45,6 +48,12 @@ fun nextRepeat(r: Repeat): Repeat = when (r) {
     Repeat.Off -> Repeat.All
     Repeat.All -> Repeat.One
     Repeat.One -> Repeat.Off
+}
+
+fun nextPhoneRepeat(r: PhoneRepeat): PhoneRepeat = when (r) {
+    PhoneRepeat.Off -> PhoneRepeat.All
+    PhoneRepeat.All -> PhoneRepeat.One
+    PhoneRepeat.One -> PhoneRepeat.Off
 }
 
 fun npHasTrack(np: NowPlayingModel): Boolean = np.shown.track != null
@@ -74,11 +83,18 @@ internal suspend fun npMark(np: NowPlayingModel, l: Lyrics, track: Long): Boolea
     return np.lyrics.has(track)
 }
 
+internal suspend fun npPhoneMark(np: NowPlayingModel, pl: PhoneLyrics, t: PhoneTrack, shown: Long): Boolean {
+    if (!np.lyricsView) return pl.lyrics(t) != null
+    np.lyrics.readPhone(pl, t, shown, np.workContext)
+    return np.lyrics.has(shown)
+}
+
 @Composable
-fun NowPlayingFeed(np: NowPlayingModel, g: NpLayout, src: MusicSource?, phone: PhoneSession?, now: () -> Long): NpFeed? {
+fun NowPlayingFeed(np: NowPlayingModel, g: NpLayout, src: MusicSource?, phone: PhoneSession?, phoneLyrics: PhoneLyrics? = null, now: () -> Long): NpFeed? {
     val own by (src?.player?.state ?: noState).collectAsState()
     val lyricsRevision by (src?.lyrics?.revision ?: noRevision).collectAsState()
     val favoritesRevision by (src?.favorites?.revision ?: noRevision).collectAsState()
+    val phoneRevision by (phoneLyrics?.revision ?: noRevision).collectAsState()
     val feed = Variant.pick(if (src != null) own else null, phone?.track)
     LaunchedEffect(feed, src) {
         when (feed) {
@@ -100,8 +116,15 @@ fun NowPlayingFeed(np: NowPlayingModel, g: NpLayout, src: MusicSource?, phone: P
         }
     }
     val track = np.shown.track
-    LaunchedEffect(track, src, np.variant, lyricsRevision, favoritesRevision) {
+    LaunchedEffect(track, src, np.variant, lyricsRevision, favoritesRevision, phoneLyrics, phoneRevision) {
         val source = src
+        val pl = phoneLyrics
+        val p = np.phone
+        if (np.variant && pl != null && track != null && p != null) {
+            np.favorite = false
+            np.mark = quietly { npPhoneMark(np, pl, p, track) } == true
+            return@LaunchedEffect
+        }
         if (track == null || source == null || np.variant) {
             np.favorite = false
             np.mark = false
@@ -149,7 +172,12 @@ suspend fun npSkip(d: Int, np: NowPlayingModel, src: MusicSource?, phone: PhoneS
 suspend fun npAct(a: NpAct, np: NowPlayingModel, src: MusicSource?, phone: PhoneSession?, toast: Toast, now: () -> Long) {
     if (np.variant) {
         val p = phone ?: return
-        if (a == NpAct.Toggle) p.toggle()
+        when (a) {
+            NpAct.Toggle -> p.toggle()
+            NpAct.Shuffle -> p.shuffle?.invoke(!p.track.shuffle)
+            NpAct.Repeat -> p.repeat?.invoke(nextPhoneRepeat(p.track.repeat))
+            else -> Unit
+        }
         return
     }
     val source = src ?: return

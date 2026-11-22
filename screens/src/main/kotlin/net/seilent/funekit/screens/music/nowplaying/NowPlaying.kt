@@ -69,6 +69,8 @@ class NowPlayingModel {
         private set
     var seekX by mutableStateOf(0f)
         private set
+    var phoneShuffle by mutableStateOf(false)
+    var phoneRepeat by mutableStateOf(false)
 
     val variant: Boolean get() = phone != null
     val lyrics = LyricsModel()
@@ -99,16 +101,22 @@ class NowPlayingModel {
         revision++
     }
 
+    private fun phoneIs(p: PhoneTrack?) {
+        val edge = (p == null) != (phone == null)
+        phone = p
+        if (edge) lyrics.land(p != null)
+    }
+
     fun feed(s: PlayerState) {
         if (s == state && phone == null) return
         state = s
-        phone = null
+        phoneIs(null)
         bump()
     }
 
     fun feed(p: PhoneTrack) {
         if (p == phone) return
-        phone = p
+        phoneIs(p)
         bump()
     }
 
@@ -207,7 +215,7 @@ class NowPlayingModel {
     }
 
     fun clear() {
-        phone = null
+        phoneIs(null)
         state = PlayerState()
         shown = NpShown.None
         slide = NpSlide()
@@ -234,7 +242,7 @@ class NowPlayingModel {
 
     fun ringAt(g: NpLayout, x: Float, y: Float): Int {
         val i = g.ringHit(x, y, rings())
-        return if (variant && i > 0) -1 else i
+        return if (variant && ((i == 1 && !phoneShuffle) || (i > 1 && !phoneRepeat))) -1 else i
     }
 
     fun heartShown(): Boolean = variant || shown.track != null
@@ -305,7 +313,7 @@ class NowPlayingModel {
         slide.armed = !lyr && !holding && !variant && shown.track != null && y < g.s.stdH - Tok.gesture_bottom
         slide.touch = slide.armed
         if (!holding) slide.start = if (slide.armed) shown.track else null
-        markDown = !lyr && markAt(now) && !variant && g.markHit(x, y)
+        markDown = !lyr && markAt(now) && (!variant || lyrics.phoneLyrics) && g.markHit(x, y)
         val t = now.toFloat()
         when {
             g.backHit(x, y) -> press[NP_BACK].down(t)
@@ -366,13 +374,13 @@ class NowPlayingModel {
         val x = downX
         val y = downY
         if (g.backHit(x, y)) return NpAct.Back
-        if (markDown && markAt(now) && !variant && g.markHit(x, y)) return NpAct.Lyrics
+        if (markDown && markAt(now) && (!variant || lyrics.phoneLyrics) && g.markHit(x, y)) return NpAct.Lyrics
         val i = ringAt(g, x, y)
         if (i >= 0) {
             ring = i
             titleFocus = false
             bump()
-            if (variant) return NpAct.Toggle
+            if (variant) return if (i == 0) NpAct.Toggle else if (i == 1) NpAct.Shuffle else NpAct.Repeat
             if (i == NP_HEART) return NpAct.Favorite
             return if (i == 0) NpAct.Shuffle else NpAct.Repeat
         }

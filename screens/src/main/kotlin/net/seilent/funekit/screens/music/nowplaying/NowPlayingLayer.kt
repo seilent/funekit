@@ -137,7 +137,8 @@ fun NowPlayingLayer(
         }
         val lyr = m.lyricsView
         val fade = remember(m) { derivedStateOf { if (m.lyricsView) m.lyrics.fade(frame) else null } }.value
-        val lyricsNow = lyr && !variant && (if (fade != null && fade.from) !m.lyrics.mode else m.lyrics.mode)
+        val on = m.lyrics.on(variant)
+        val lyricsNow = lyr && (!variant || m.lyrics.phoneLyrics) && (if (fade != null && fade.from) !on else on)
         val k = fade?.alpha ?: 1f
         val back = rememberLook(m, hideFocus, snap, covered = covered) { npBackLook(m, frame, hideFocus) }
         val text = rememberLook(m, halves, covered = covered) { halves.map { npTextLook(m, it.g, frame) } }

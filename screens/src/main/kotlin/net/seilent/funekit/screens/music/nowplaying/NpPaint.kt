@@ -125,7 +125,7 @@ fun npRingsLook(m: NowPlayingModel, now: Long, hideFocus: Boolean): NpRingsLook 
     val idle = m.idleAlpha(now)
     return NpRingsLook(
         (0 until m.rings()).map { i ->
-            val dead = m.variant && i > 0
+            val dead = m.variant && ((i == 1 && !m.phoneShuffle) || (i > 1 && !m.phoneRepeat))
             val focused = !dead && !hideFocus && !m.titleFocus && m.ring == i
             val lit = if (dead) false else if (m.variant && i == 0) focused else m.on(i)
             NpRingLook(m.glyph(i), lit, focused, m.press[i].at(now.toFloat()).lit, if (focused) 1f else idle)
@@ -140,7 +140,7 @@ fun npBackLook(m: NowPlayingModel, now: Long, hideFocus: Boolean): NpBackLook {
 
 fun npMarkLook(m: NowPlayingModel, now: Long): NpMarkLook {
     m.revision
-    return NpMarkLook(m.markAt(now) && !m.variant, m.press[NP_MARK].at(now.toFloat()).factor)
+    return NpMarkLook(m.markAt(now) && (!m.variant || m.lyrics.phoneLyrics), m.press[NP_MARK].at(now.toFloat()).factor)
 }
 
 fun npTextLook(m: NowPlayingModel, g: NpLayout, now: Long): NpTextLook {

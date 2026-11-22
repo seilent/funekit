@@ -12,12 +12,17 @@ import net.seilent.funekit.kit.np.NP_BACK
 import net.seilent.funekit.kit.np.NP_MARK
 import net.seilent.funekit.kit.np.NpLayout
 import net.seilent.funekit.kit.np.NpRingPlace
+import net.seilent.funekit.kit.Toast
+import net.seilent.funekit.fxInt
 import net.seilent.funekit.scale
 import net.seilent.funekit.api.Anchor
 import net.seilent.funekit.api.Kind
 import net.seilent.funekit.api.Lyrics
 import net.seilent.funekit.api.PlayerState
 import net.seilent.funekit.api.Row
+import net.seilent.funekit.screens.host.PhoneSession
+import net.seilent.funekit.screens.host.nextPhoneRepeat
+import net.seilent.funekit.screens.host.npAct
 import net.seilent.funekit.screens.host.npMark
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -466,6 +471,97 @@ class NowPlayingTest {
     fun thePhoneTrackKeyIsTheFnvHashOfItsLines() {
         val p = PhoneTrack("Radio", "T", "A", "B", true, false, 0, 0, 0, 1f, false, PhoneRepeat.Off, 0, 0, null)
         assertEquals(1460936240L, NpShown.of(p).track)
+    }
+
+    private val radio = PhoneTrack("Radio", "T", "A", "B", true, false, 0, 0, 0, 1f, false, PhoneRepeat.Off, 0, 0, null)
+
+    private fun phoneShown(p: PhoneTrack = radio) = NowPlayingModel().also {
+        it.feed(p)
+        it.sync(NpShown.of(p), 0)
+    }
+
+    @Test
+    fun withPhoneLyricsTheMarkTakesATapInTheVariant() {
+        val m = phoneShown()
+        m.lyricsView = true
+        m.mark = true
+        m.down(a105, a105.markX / a105.p, a105.markY / a105.p, 10)
+        assertNotEquals("premise: with no phone lyrics the variant mark takes no tap", NpAct.Lyrics, m.tap(a105, 20))
+        assertFalse(npMarkLook(m, 30).shown)
+        m.lyrics.phoneLyrics = true
+        m.down(a105, a105.markX / a105.p, a105.markY / a105.p, 40)
+        assertEquals(NpAct.Lyrics, m.tap(a105, 50))
+        assertTrue(npMarkLook(m, 60).shown)
+    }
+
+    private class Acts {
+        val shuffles = mutableListOf<Boolean>()
+        val repeats = mutableListOf<PhoneRepeat>()
+
+        fun session(p: PhoneTrack) = PhoneSession(p, {}, { shuffles += it }, { repeats += it }) {}
+    }
+
+    @Test
+    fun aPhoneSessionWithShuffleAndRepeatTakesRingsOneAndTwo() {
+        val m = phoneShown()
+        m.phoneShuffle = true
+        m.phoneRepeat = true
+        assertEquals(0, m.ringAt(a105, 30f, 398f))
+        assertEquals(1, m.ringAt(a105, 120f, 398f))
+        assertEquals(2, m.ringAt(a105, 207f, 398f))
+        m.down(a105, 30f, 398f, 10)
+        assertEquals(NpAct.Toggle, m.tap(a105, 20))
+        m.down(a105, 120f, 398f, 30)
+        assertEquals(NpAct.Shuffle, m.tap(a105, 40))
+        m.down(a105, 207f, 398f, 50)
+        assertEquals(NpAct.Repeat, m.tap(a105, 60))
+        val a = Acts()
+        val toast = Toast()
+        for (r in PhoneRepeat.entries) {
+            val p = radio.copy(shuffle = r == PhoneRepeat.All, repeat = r)
+            m.feed(p)
+            runBlocking {
+                npAct(NpAct.Shuffle, m, null, a.session(p), toast) { 0L }
+                npAct(NpAct.Repeat, m, null, a.session(p), toast) { 0L }
+            }
+        }
+        assertEquals(listOf(true, false, true), a.shuffles)
+        assertEquals("repeat cycles off, all, one, off", listOf(PhoneRepeat.All, PhoneRepeat.One, PhoneRepeat.Off), a.repeats)
+        assertEquals(PhoneRepeat.All, nextPhoneRepeat(PhoneRepeat.Off))
+    }
+
+    @Test
+    fun aPhoneRingWithAnActDrawsLitByItsStateAndTakesFocus() {
+        val m = phoneShown(radio.copy(shuffle = true, repeat = PhoneRepeat.All))
+        m.phoneShuffle = true
+        m.phoneRepeat = true
+        val l = npRingsLook(m, 0, false)
+        assertTrue("shuffle on draws lit", l.rings[1].lit)
+        assertTrue("repeat all draws lit", l.rings[2].lit)
+        for (i in 1..2) {
+            val x = if (i == 1) 120f else 207f
+            m.down(a105, x, 398f, i * 100L)
+            m.tap(a105, i * 100L + 10)
+            assertTrue("ring $i takes focus", npRingsLook(m, i * 100L + 20, false).rings[i].focused)
+        }
+    }
+
+    @Test
+    fun aFeedEdgeLandsTheShadeWithNoPhoneLyrics() {
+        val one = fxInt(1)
+        val m = NowPlayingModel()
+        m.sync(shown(1), 0)
+        m.lyrics.toggle(0)
+        m.lyrics.land()
+        assertEquals("premise: the own mode shows", one, m.lyrics.dim(1000))
+        m.feed(radio)
+        assertEquals("a phone feed lands the shade off", 0L, m.lyrics.dim(1000))
+        m.feed(PlayerState())
+        assertEquals("the own state lands it on", one, m.lyrics.dim(1000))
+        m.feed(radio)
+        assertEquals(0L, m.lyrics.dim(1000))
+        m.clear()
+        assertEquals("a clear lands it on the own mode", one, m.lyrics.dim(1000))
     }
 
     @Test

@@ -140,8 +140,12 @@ class LyricsInk(
     override fun bottom(line: Int, big: Boolean, row: Int): Int = ceil(words(line, big)[row].inkBottom).toInt()
 }
 
-fun lyricAt(np: NowPlayingModel, now: Long): LyricAt =
-    LyricAt(np.shownAt(now).track, np.state.track, np.position(now, npNanosAt(now)), np.variant, np.state.playing && !np.seeking)
+fun lyricAt(np: NowPlayingModel, now: Long, nanos: Long = npNanosAt(now)): LyricAt {
+    val p = np.phone
+    val pos = np.position(now, nanos)
+    if (p != null) return LyricAt(np.shownAt(now).track, np.shown.track, pos, true, p.playing && !np.seeking)
+    return LyricAt(np.shownAt(now).track, np.state.track, pos, false, np.state.playing && !np.seeking)
+}
 
 class LyricRowDraw(val word: Word, val x64: Int, val base: Int, val alpha: Float, val x0: Int, val y0: Int, val x1: Int, val y1: Int)
 

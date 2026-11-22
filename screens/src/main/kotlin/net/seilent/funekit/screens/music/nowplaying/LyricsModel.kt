@@ -91,6 +91,9 @@ class LyricsModel {
         private set
     var mode by mutableStateOf(false)
         private set
+    var phoneLyrics by mutableStateOf(false)
+    var phoneMode by mutableStateOf(false)
+        private set
     var revision by mutableIntStateOf(0)
         private set
     var lineShown = LYRIC_NONE
@@ -156,6 +159,14 @@ class LyricsModel {
         loaded(track, p, off)
     }
 
+    suspend fun readPhone(pl: PhoneLyrics, t: PhoneTrack, shown: Long, on: CoroutineContext) {
+        begin(shown)
+        val text = pl.lyrics(t)
+        val off = pl.offsetMs(t)
+        val p = withContext(on) { parsed(text) }
+        loaded(shown, p, off)
+    }
+
     fun retime(offsetMs: Int) {
         this.offsetMs = offsetMs
         lines = Lrc.shift(src, offsetMs.toLong())
@@ -167,10 +178,12 @@ class LyricsModel {
 
     fun has(shown: Long?): Boolean = shown != null && track == shown && !pending && (lines.isNotEmpty() || plain.isNotEmpty())
 
-    fun shown(variant: Boolean): Boolean = mode && !variant
+    fun on(variant: Boolean): Boolean = if (variant && phoneLyrics) phoneMode else mode
+
+    fun shown(variant: Boolean): Boolean = on(variant) && (!variant || phoneLyrics)
 
     fun index(at: LyricAt): Int {
-        if (at.variant || at.shown == null || track != at.shown || at.playing != at.shown) return LYRIC_NONE
+        if ((at.variant && !phoneLyrics) || at.shown == null || track != at.shown || at.playing != at.shown) return LYRIC_NONE
         if (pending) return LYRIC_TITLE
         if (lines.isEmpty()) return LYRIC_NONE
         return lineAt(at.pos)
@@ -237,22 +250,30 @@ class LyricsModel {
 
     fun sliding(now: Long): Boolean = slide && now - slideAt < slideD
 
-    private fun turn(on: Boolean) {
-        mode = on
+    internal fun turn(on: Boolean, variant: Boolean) {
+        if (variant && phoneLyrics) phoneMode = on else mode = on
         lineTrack = null
         slide = false
         bump()
     }
 
+    fun echo(on: Boolean, variant: Boolean) {
+        if (on == phoneMode) return
+        phoneMode = on
+        lineTrack = null
+        slide = false
+        if (variant) land(true) else bump()
+    }
+
     fun toggle(now: Long, variant: Boolean = false) {
-        turn(!mode)
+        turn(!on(variant), variant)
         dim.run(now, if (shown(variant)) ONE else 0L, Tok.motion_variantFade.toLong())
         fadeAt = now
         backAt = -1
     }
 
-    fun reverse(now: Long) {
-        turn(!mode)
+    fun reverse(now: Long, variant: Boolean = false) {
+        turn(!on(variant), variant)
         dim.mirror(now)
         if (backAt < 0) {
             backAt = now
