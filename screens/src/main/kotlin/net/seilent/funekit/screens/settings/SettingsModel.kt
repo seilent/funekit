@@ -163,6 +163,7 @@ class SettingsModel(entry: Long, page: SettingsId) : PivotPage(entry, page) {
             if (v == groups) return
             val was = groups.getOrNull(pivot)?.name
             val from = groups.getOrNull(switchFrom)?.name
+            val kept = groups.getOrNull(pivot)?.let { panes[it.name] }?.key?.takeIf { k -> rows(pivot).any { it.key == k } }
             if (v.isEmpty()) {
                 if (groups.isNotEmpty()) restored = state()
                 held = held ?: was
@@ -175,6 +176,7 @@ class SettingsModel(entry: Long, page: SettingsId) : PivotPage(entry, page) {
             val back = groups.indexOfFirst { it.name == from }
             switchFrom = if (back >= 0) back else switchFrom.coerceIn(0, max(0, groups.size - 1))
             resync()
+            if (kept != null && groups.getOrNull(pivot)?.name == was && rows(pivot).none { it.key == kept }) rows(pivot).getOrNull(pane.focus.row)?.let { pane.key = it.key }
         }
     private var restored: List<Any>? = null
     private var held: String? = null

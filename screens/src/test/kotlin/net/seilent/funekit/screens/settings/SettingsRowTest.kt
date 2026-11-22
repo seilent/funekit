@@ -39,6 +39,8 @@ class SettingsRowTest {
     private fun row(kind: SettingKind, values: List<String> = emptyList(), flags: Set<SettingFlag> = emptySet()) =
         SettingRow("key", "title", "value", kind, values = values, flags = flags)
 
+    private fun keyed(name: String, vararg keys: String) = SettingPivot(name, keys.map { SettingRow(it, it, "") })
+
     @Test
     fun aRowIsEditableByItsKindUnlessReadOnlyAndADraftOnlyWithValues() {
         for (k in listOf(SettingKind.Choice, SettingKind.Steps, SettingKind.Toggle, SettingKind.Range)) {
@@ -108,6 +110,41 @@ class SettingsRowTest {
         assertEquals("the rows that land again take the pivot by its name", 1, m.pivot)
         assertEquals("and its focus by key", 1, m.focusRow(1))
         assertEquals(saved, m.state())
+    }
+
+    @Test
+    fun aRemovedFocusedRowPassesItsFocusToTheRowInItsPlace() {
+        val m = model()
+        m.pivots = listOf(keyed(SYSTEM, "a", "b", "c"))
+        m.down(1, 0L)
+        m.pivots = listOf(keyed(SYSTEM, "a", "c"))
+        assertEquals("the row in its place takes the focus", 1, m.focusRow(0))
+        m.pivots = listOf(keyed(SYSTEM, "a", "b", "c"))
+        assertEquals("and keeps it when the removed row lands again", 2, m.focusRow(0))
+    }
+
+    @Test
+    fun aRestoredKeyTheFirstRowsLackWaitsForRowsThatHoldIt() {
+        val m = model()
+        m.pivots = listOf(keyed(SYSTEM, "a", "c"))
+        m.restoreState(listOf(SYSTEM, arrayListOf<Any>(SYSTEM, "b", 0f)))
+        m.pivots = listOf(keyed(SYSTEM, "a", "c", "d"))
+        m.pivots = listOf(keyed(SYSTEM, "a", "b", "c"))
+        assertEquals("the restored row takes the focus once it lands", 1, m.focusRow(0))
+    }
+
+    @Test
+    fun aLandingThatMovesTheShownPivotLeavesTheNewPivotsKey() {
+        val m = model()
+        m.pivots = listOf(keyed(EFFECTS, "a", "b"), keyed(SYSTEM, "c", "d"))
+        m.pivot = 1
+        m.down(1, 0L)
+        m.pivot = 0
+        m.down(0, 0L)
+        m.pivots = listOf(keyed(SYSTEM, "c"))
+        assertEquals("premise: the shown pivot is gone, so the page shows system", listOf(SYSTEM), m.names)
+        m.pivots = listOf(keyed(SYSTEM, "c", "d"))
+        assertEquals("system keeps its own key", 1, m.focusRow(0))
     }
 
     @Test
