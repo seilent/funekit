@@ -14,6 +14,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import net.seilent.funekit.core.Section
 import net.seilent.funekit.api.ArtRef
+import net.seilent.funekit.api.Busy
 import net.seilent.funekit.api.EngineEvent
 import net.seilent.funekit.api.Expired
 import net.seilent.funekit.api.Kind
@@ -31,6 +32,7 @@ import net.seilent.funekit.api.pins
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -169,6 +171,41 @@ class FakeTest {
         f.library.generation.first { it > g + 1 }
         assertEquals(1, f.library.view().page(Listing.Folder(), 0, 10).total)
         assertTrue(f.library.view().allRows(Listing.Albums).none { it.title == "Paper Lanterns" })
+    }
+
+    @Test
+    fun aDropAtRescanLeavesTheAlbumOutOfTheNextGenerationOnly() = runTest {
+        val f = fake()
+        val a = album("Paper Lanterns")
+        val g = f.library.generation.value
+        f.dropAtRescan(a)
+        assertEquals("the drop waits for the rescan", g, f.library.generation.value)
+        assertNotNull("the album is listed until the rescan", f.library.view().indexOf(Listing.Albums, Kind.Album, a))
+        f.library.rescan()
+        f.library.generation.first { it > g }
+        val v = f.library.view()
+        assertNull(v.indexOf(Listing.Albums, Kind.Album, a))
+        assertEquals(0, v.page(Listing.AlbumTracks(a), 0, 0).total)
+        assertNotNull("the generation before keeps it", f.library.view(g).indexOf(Listing.Albums, Kind.Album, a))
+        val next = f.library.generation.value
+        f.library.rescan()
+        f.library.generation.first { it > next }
+        assertNull("a later rescan keeps it out", f.library.view().indexOf(Listing.Albums, Kind.Album, a))
+    }
+
+    @Test
+    fun aScopedBusyThrowsOnlyForItsListing() = runTest {
+        val f = fake()
+        val v = f.library.view()
+        val a = album("Paper Lanterns")
+        f.busyNext("scan", Listing.Albums)
+        v.page(Listing.Songs, 0, 1)
+        v.trackIds(id("Slow Comet"))
+        val e = runCatching { v.indexOf(Listing.Albums, Kind.Album, a) }.exceptionOrNull()
+        assertTrue("a read of the listing throws, $e", e is Busy && e.text == "scan")
+        assertNotNull("the busy is thrown once", v.indexOf(Listing.Albums, Kind.Album, a))
+        f.busyNext("any")
+        assertTrue("with no listing the first read throws", runCatching { v.page(Listing.Songs, 0, 1) }.exceptionOrNull() is Busy)
     }
 
     @Test

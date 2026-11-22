@@ -4,6 +4,7 @@ import net.seilent.funekit.api.Kind
 import net.seilent.funekit.api.Listing
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -72,5 +73,47 @@ class VerbsTest {
         assertEquals(listOf(REMOVE, PLAY_NEXT, MOVE_DOWN, INFO), sheetItems(queue(0), false))
         assertEquals(listOf(REMOVE, PLAY_NEXT, MOVE_UP, INFO), sheetItems(queue(5), false))
         assertEquals(listOf(REMOVE, PLAY_NEXT, MOVE_UP, MOVE_DOWN), sheetItems(queue(4).copy(library = false), false))
+    }
+
+    private val pickImage = SheetExtra("pick image") { null }
+
+    @Test
+    fun deleteIsTheLastKitWordOnSongAndAlbumSheetsAndTheExtrasFollow() {
+        val song = SheetTarget(SheetKind.Song, "song", Listing.Songs, track = 3L, pin = Kind.Song, id = 3, from = SheetFrom.Hub)
+        for (t in listOf(song, song.copy(from = SheetFrom.Album), song.copy(listing = Listing.Search("q", Kind.Song), from = SheetFrom.Search))) {
+            assertEquals("from ${t.from}", sheetItems(t, false) + DELETE, sheetWords(t, false, true, emptyList()))
+            assertEquals("from ${t.from}", sheetItems(t, true) + DELETE + "pick image", sheetWords(t, true, true, listOf(pickImage)))
+            assertEquals("from ${t.from}, no delete", sheetItems(t, false), sheetWords(t, false, false, emptyList()))
+        }
+        val album = SheetTarget(SheetKind.Album, "album", Listing.AlbumTracks(2), pin = Kind.Album, id = 2, from = SheetFrom.Hub)
+        assertEquals(listOf(PLAY, PLAY_NEXT, ADD, SHUFFLE, ADD_TO_PLAYLIST, PIN, DELETE), sheetWords(album, false, true, emptyList()))
+        assertEquals(listOf(PLAY, PLAY_NEXT, ADD, SHUFFLE, ADD_TO_PLAYLIST, PIN, DELETE, "pick image"), sheetWords(album, false, true, listOf(pickImage)))
+        assertEquals(listOf(PLAY, PLAY_NEXT, ADD, SHUFFLE, ADD_TO_PLAYLIST, PIN, "pick image"), sheetWords(album, false, false, listOf(pickImage)))
+    }
+
+    @Test
+    fun noOtherSheetKindTakesDelete() {
+        val targets = listOf(
+            SheetTarget(SheetKind.Artist, "a"),
+            SheetTarget(SheetKind.Genre, "g"),
+            SheetTarget(SheetKind.Folder, "f"),
+            SheetTarget(SheetKind.Playlist, "p", songs = 2, writable = true),
+            SheetTarget(SheetKind.Favorites, "favorites", songs = 3),
+            SheetTarget(SheetKind.Tile, "t", pin = Kind.Album, id = 1),
+            queue(2),
+            SheetTarget(SheetKind.Entry, "e", Listing.PlaylistTracks(1), slot = 1, size = 4, writable = true),
+        )
+        for (t in targets) assertEquals("${t.kind}", sheetItems(t, false), sheetWords(t, false, true, emptyList()))
+    }
+
+    @Test
+    fun anExtraWordThatAnyKitSheetShowsIsRefused() {
+        val artist = SheetTarget(SheetKind.Artist, "a")
+        for (w in listOf(PLAY, DELETE, REMOVE)) {
+            assertThrows("$w on an artist sheet", IllegalArgumentException::class.java) { sheetWords(artist, false, false, listOf(SheetExtra(w) { null })) }
+        }
+        val album = SheetTarget(SheetKind.Album, "album", pin = Kind.Album, id = 2)
+        assertThrows(IllegalArgumentException::class.java) { sheetWords(album, false, true, listOf(SheetExtra(UNPIN_QP) { null })) }
+        assertEquals(sheetItems(artist, false) + "pick image", sheetWords(artist, false, false, listOf(pickImage)))
     }
 }

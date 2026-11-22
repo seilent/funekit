@@ -44,7 +44,7 @@ data class NpShown(
                 for (ch in (t + "\n").toByteArray()) h = ((h xor (ch.toLong() and BYTE)) * FNV_PRIME) and FNV_MASK
             }
             val count = if (p.track > 0 && p.tracks > 0) "${p.track} of ${p.tracks}" else ""
-            return NpShown(h and ID_MASK, p.durationMs, p.artist, p.album, p.title, count, emptyList(), null, "from ${p.app}")
+            return NpShown(h and ID_MASK, p.durationMs, p.artist, p.album, p.title, count, emptyList(), null, if (p.app.isBlank()) "" else "from ${p.app}")
         }
 
         private const val BYTE = 0xFFL

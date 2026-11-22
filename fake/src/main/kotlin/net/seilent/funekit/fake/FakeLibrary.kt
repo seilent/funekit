@@ -62,6 +62,7 @@ class FakeLibrary internal constructor(
     private var rootList: List<FakeRoot> = if (set == FakeSet.Empty) emptyList() else known.mapIndexed { i, uri -> FakeRoot(nextRoot++, uri, i) }
     private val unavailable = if (set == FakeSet.Unavailable) setOf(Fixture.UNAVAILABLE_ROOT) else emptySet()
     private val snaps = ConcurrentHashMap<Long, Snap>()
+    private var cut: Set<Long> = emptySet()
 
     @Volatile
     private var current = Snap(1, catalog()).also { snaps[it.generation] = it }
@@ -75,7 +76,8 @@ class FakeLibrary internal constructor(
     private var failNext = false
     private val built = AtomicLong()
     private val loads = AtomicLong()
-    private val busy = AtomicReference<String?>()
+    private val busy = AtomicReference<Pair<String, Listing?>?>()
+    private val dropsOwed = AtomicReference<Set<Long>>(emptySet())
 
     internal var dropped: suspend (Set<Long>) -> Unit = {}
 
@@ -122,6 +124,7 @@ class FakeLibrary internal constructor(
     }
 
     private suspend fun scan() {
+        var gone = emptySet<Long>()
         val total = lock.withLock { catalog().trackCount }
         val first = current.catalog.trackCount == 0
         _state.update { it.copy(first = first) }
@@ -135,10 +138,14 @@ class FakeLibrary internal constructor(
                 failNext = false
                 null
             } else {
+                val before = current.catalog.trackIds
+                cut = cut + dropsOwed.getAndSet(emptySet())
                 publish(catalog())
+                gone = before - current.catalog.trackIds
                 current.catalog.trackCount
             }
         }
+        if (gone.isNotEmpty()) dropped(gone)
         _state.update { it.copy(first = false) }
         progress(ScanProgress(false, found ?: total, found == null))
     }
@@ -147,8 +154,18 @@ class FakeLibrary internal constructor(
         failNext = true
     }
 
-    internal fun busyNext(text: String) {
-        busy.set(text)
+    internal fun busyNext(text: String, listing: Listing?) {
+        busy.set(text to listing)
+    }
+
+    internal fun dropAtRescan(album: Long) {
+        dropsOwed.updateAndGet { it + album }
+    }
+
+    private fun takeBusy(listing: Listing?) {
+        val b = busy.get() ?: return
+        if (b.second != null && b.second != listing) return
+        if (busy.compareAndSet(b, null)) throw Busy(b.first)
     }
 
     internal fun card(card: Card) {
@@ -192,7 +209,7 @@ class FakeLibrary internal constructor(
 
     internal fun listRevision(docRevision: Long): Long = current.generation shl GENERATION_SHIFT or docRevision
 
-    private fun catalog() = Catalog(set, rootList, trackRefs)
+    private fun catalog() = Catalog(set, rootList, trackRefs, cut)
 
     private fun rootsOf(list: List<FakeRoot>) = list.map { Root(it.id, it.uri, it.fixture == null || it.fixture !in unavailable) }
 
@@ -223,18 +240,16 @@ class FakeLibrary internal constructor(
 
         private suspend fun answer() {
             delay(latencyMs)
-            busy.getAndSet(null)?.let { throw Busy(it) }
+            takeBusy(null)
             if (expired(snap)) throw Expired(snap.generation)
         }
 
         private suspend fun answer(listing: Listing): Snap {
-            if (!live(listing)) {
-                answer()
-                return snap
-            }
             delay(latencyMs)
-            busy.getAndSet(null)?.let { throw Busy(it) }
-            return current
+            takeBusy(listing)
+            if (live(listing)) return current
+            if (expired(snap)) throw Expired(snap.generation)
+            return snap
         }
 
         private fun load(at: Snap, listing: Listing, offset: Int, count: Int): Page {

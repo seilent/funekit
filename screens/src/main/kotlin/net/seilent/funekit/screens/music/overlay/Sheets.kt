@@ -14,6 +14,13 @@ const val INFO = "info"
 const val DELETE_PLAYLIST = "delete playlist"
 const val KEEP_PLAYLIST = "keep playlist"
 const val DELETE_ASK = "delete playlist?"
+const val DELETE = "delete"
+const val DELETE_SONG = "delete song"
+const val KEEP_SONG = "keep song"
+const val DELETE_SONG_ASK = "delete song?"
+const val DELETE_ALBUM = "delete album"
+const val KEEP_ALBUM = "keep album"
+const val DELETE_ALBUM_ASK = "delete album?"
 const val REMOVE = "remove"
 const val MOVE_UP = "move up"
 const val MOVE_DOWN = "move down"
@@ -21,6 +28,11 @@ const val ADD_TO_PLAYLIST = "add to playlist"
 const val OPEN_PLAYLIST = "open playlist"
 const val GO_TO_ALBUM = "go to album"
 const val GO_TO_ARTIST = "go to artist"
+
+private val kitWords = setOf(
+    PLAY, PLAY_NEXT, ADD, SHUFFLE, PIN, UNPIN_QP, UNPIN, INFO, DELETE_PLAYLIST, REMOVE, MOVE_UP, MOVE_DOWN, ADD_TO_PLAYLIST,
+    OPEN_PLAYLIST, GO_TO_ALBUM, GO_TO_ARTIST, DELETE,
+)
 
 enum class SheetKind { Song, Album, Artist, Genre, Folder, Playlist, Favorites, Tile, Queue, Entry }
 
@@ -45,6 +57,16 @@ data class SheetTarget(
     val pinned: Boolean? = null,
     val from: SheetFrom = SheetFrom.Other,
 )
+
+class SheetExtra(val word: String, val act: (Long) -> ExtraSheet?)
+
+class ExtraSheet(val title: String, val items: List<String>, val pick: (Int) -> Boolean)
+
+fun sheetWords(t: SheetTarget, pinned: Boolean, delete: Boolean, extras: List<SheetExtra>): List<String> {
+    for (e in extras) require(e.word !in kitWords) { "an extra takes a word no kit sheet shows: ${e.word}" }
+    val del = delete && (t.kind == SheetKind.Song || t.kind == SheetKind.Album)
+    return sheetItems(t, pinned) + listOfNotNull(DELETE.takeIf { del }) + extras.map { it.word }
+}
 
 fun sheetItems(t: SheetTarget, pinned: Boolean): List<String> {
     val pin = if (pinned) UNPIN_QP else PIN

@@ -69,6 +69,9 @@ import net.seilent.funekit.screens.music.hub.musicModel
 import net.seilent.funekit.screens.music.nowplaying.NpPicture
 import net.seilent.funekit.screens.music.nowplaying.OffsetEdit
 import net.seilent.funekit.screens.music.nowplaying.NpSplit
+import net.seilent.funekit.screens.music.overlay.SheetDelete
+import net.seilent.funekit.screens.music.overlay.SheetExtra
+import net.seilent.funekit.screens.music.overlay.SheetTarget
 import net.seilent.funekit.screens.music.pivotBy
 import net.seilent.funekit.screens.music.pivotPan
 import net.seilent.funekit.screens.music.pivotSwitch
@@ -88,8 +91,9 @@ sealed interface TestScreen {
     data class Settings(override val entry: Long, override val page: SettingsId, val pivot: String? = null) : TestScreen
 }
 
-class TestApp(page: Scale, np: Scale, private val src: MusicSource?, private val level: VolumeLevel, private val now: () -> Long) : MusicApp<TestScreen> {
+class TestApp(page: Scale, np: Scale, src: MusicSource?, private val level: VolumeLevel, private val now: () -> Long) : MusicApp<TestScreen> {
     var page by mutableStateOf(page)
+    var source by mutableStateOf(src)
     var np by mutableStateOf(np)
     var split by mutableStateOf<NpSplit?>(null)
     var accentOff by mutableStateOf(true)
@@ -110,6 +114,9 @@ class TestApp(page: Scale, np: Scale, private val src: MusicSource?, private val
     var edit: OffsetEdit? = null
     var asked: () -> Unit = {}
     val backdropFlow = MutableStateFlow<NpPicture?>(null)
+    var deletes: (SheetTarget) -> SheetDelete? = { null }
+    var extras: (SheetTarget) -> List<SheetExtra> = { emptyList() }
+    val logs = mutableListOf<String>()
 
     override fun music(s: TestScreen): MusicEntry? = (s as? TestScreen.Music)?.music
 
@@ -138,6 +145,14 @@ class TestApp(page: Scale, np: Scale, private val src: MusicSource?, private val
     override val lyricsView: Boolean get() = lyricsOn
 
     override fun offset(track: Long): OffsetEdit? = edit.also { asked() }
+
+    override fun sheetDelete(t: SheetTarget): SheetDelete? = deletes(t)
+
+    override fun sheetExtras(t: SheetTarget): List<SheetExtra> = extras(t)
+
+    override fun log(line: String) {
+        logs += line
+    }
 
     private val home = object : HomePaint {
         override val quickplay = false
@@ -186,7 +201,7 @@ class TestApp(page: Scale, np: Scale, private val src: MusicSource?, private val
         val grid = remember(page) { page.kept() }
         val accent = Accent.color(Accent.defaultHue, true)
         val env = MusicEnv(page, np, m, fonts, density, covers, bands, accent, accentOff, a, now, { pokes++ }, grid)
-        val h = rememberMusicHost(this@TestApp, music, models, env, src, split, level, toast, jump, menuHost, movePaint)
+        val h = rememberMusicHost(this@TestApp, music, models, env, source, split, level, toast, jump, menuHost, movePaint)
         host = h
         stack = remember {
             PageStack<TestScreen>(

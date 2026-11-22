@@ -42,6 +42,7 @@ import net.seilent.funekit.screens.music.testFake
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -262,6 +263,52 @@ class SheetActsTest {
         assertEquals(SheetDone.Close, done)
         assertEquals(ROWS_DRIVE - 1, count(Listing.PlaylistTracks(id)))
         assertTrue(m.row(0)?.id != gone)
+    }
+
+    private val songT = SheetTarget(SheetKind.Song, "Rain Song", Listing.Songs, track = 4L, pin = Kind.Song, id = 4)
+    private val albumT = SheetTarget(SheetKind.Album, "Blue Hours", Listing.AlbumTracks(2), pin = Kind.Album, id = 2)
+
+    @Test
+    fun theDeleteConfirmsAreTheUnitWordsWithKeepFocused() {
+        val song = deleteAsk(songT, 0)
+        assertEquals(DELETE_SONG_ASK, song.title)
+        assertEquals(listOf("Rain Song", DELETE_SONG, KEEP_SONG), song.items)
+        assertEquals(1, song.lead)
+        assertEquals(2, song.focus)
+        assertEquals(DELETE_SONG, song.yes)
+        val one = deleteAsk(albumT, 1)
+        assertEquals(DELETE_ALBUM_ASK, one.title)
+        assertEquals(listOf("Blue Hours", "1 song", DELETE_ALBUM, KEEP_ALBUM), one.items)
+        assertEquals(2, one.lead)
+        assertEquals(3, one.focus)
+        assertEquals(DELETE_ALBUM, one.yes)
+        assertEquals(listOf("Blue Hours", "4 songs", DELETE_ALBUM, KEEP_ALBUM), deleteAsk(albumT, 4).items)
+    }
+
+    @Test
+    fun eachDeleteOutcomeShowsTheUnitWords() {
+        fun toast(t: SheetTarget, d: DeleteDone) = deleteToast(t, d)?.let { it.line to it.title }
+        assertEquals(null, toast(songT, DeleteDone.Done))
+        assertEquals(null, toast(albumT, DeleteDone.Done))
+        assertEquals(SONG_NOT_DELETED to "Rain Song", toast(songT, DeleteDone.Refused))
+        assertEquals(ALBUM_NOT_DELETED to "Blue Hours", toast(albumT, DeleteDone.Refused))
+        assertEquals(SONG_NOT_DELETED to READ_ONLY, toast(songT, DeleteDone.ReadOnly))
+        assertEquals(ALBUM_NOT_DELETED to READ_ONLY, toast(albumT, DeleteDone.ReadOnly))
+        assertEquals(SONG_NOT_DELETED to CUE_PART, toast(songT, DeleteDone.Cue))
+        assertEquals(ALBUM_NOT_DELETED to CUE_PART, toast(albumT, DeleteDone.Cue))
+        assertEquals(CARD_GONE to "", toast(songT, DeleteDone.NoCard))
+        assertEquals(CARD_GONE to "", toast(albumT, DeleteDone.NoCard))
+        assertEquals("1 song not deleted" to "Blue Hours", toast(albumT, DeleteDone.Partly(1)))
+        assertEquals("3 songs not deleted" to "Blue Hours", toast(albumT, DeleteDone.Partly(3)))
+        assertEquals("a song batch is one path, so a partly song reads as refused", SONG_NOT_DELETED to "Rain Song", toast(songT, DeleteDone.Partly(1)))
+        assertEquals("song not deleted" to "no answer from the dap", toast(songT, DeleteDone.Words("song not deleted", "no answer from the dap")))
+        assertEquals("album not deleted" to "declined on the dap", toast(albumT, DeleteDone.Words("album not deleted", "declined on the dap")))
+    }
+
+    @Test
+    fun aWordsOutcomeRefusesABlankLine() {
+        assertThrows(IllegalArgumentException::class.java) { DeleteDone.Words("", "Rain Song") }
+        assertThrows(IllegalArgumentException::class.java) { DeleteDone.Words(" ", "Rain Song") }
     }
 
     companion object {

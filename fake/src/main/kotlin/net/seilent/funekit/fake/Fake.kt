@@ -5,6 +5,7 @@ import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import net.seilent.funekit.api.Card
 import net.seilent.funekit.api.EngineEvent
+import net.seilent.funekit.api.Listing
 import net.seilent.funekit.api.engine.Dac
 
 class Fake(
@@ -48,7 +49,9 @@ class Fake(
 
     fun failNextScan() = library.failNextScan()
 
-    fun busyNext(text: String) = library.busyNext(text)
+    fun dropAtRescan(album: Long) = library.dropAtRescan(album)
+
+    fun busyNext(text: String, listing: Listing? = null) = library.busyNext(text, listing)
 
     fun card(card: Card) = library.card(card)
 

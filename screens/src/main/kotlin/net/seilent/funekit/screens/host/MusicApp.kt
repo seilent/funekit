@@ -6,6 +6,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import net.seilent.funekit.screens.music.nowplaying.NpPicture
 import net.seilent.funekit.screens.music.nowplaying.OffsetEdit
 import net.seilent.funekit.screens.music.nowplaying.PhoneTrack
+import net.seilent.funekit.screens.music.overlay.SheetDelete
+import net.seilent.funekit.screens.music.overlay.SheetExtra
+import net.seilent.funekit.screens.music.overlay.SheetTarget
 import net.seilent.funekit.screens.settings.SettingsPage
 import net.seilent.funekit.screens.settings.SettingsScreen
 
@@ -39,6 +42,12 @@ interface MusicApp<S : Any> {
     val lyricsView: Boolean get() = false
 
     fun offset(track: Long): OffsetEdit? = null
+
+    fun sheetDelete(t: SheetTarget): SheetDelete? = null
+
+    fun sheetExtras(t: SheetTarget): List<SheetExtra> = emptyList()
+
+    fun log(line: String) {}
 
     fun settings(s: S): SettingsScreen? = null
 

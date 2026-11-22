@@ -1,5 +1,6 @@
 package net.seilent.funekit.screens.host
 
+import android.os.Looper
 import android.os.SystemClock
 import android.view.View
 import androidx.activity.compose.BackHandler
@@ -32,15 +33,23 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import net.seilent.funekit.Case
 import net.seilent.funekit.Role
 import net.seilent.funekit.Roles
 import net.seilent.funekit.Scale
+import net.seilent.funekit.api.Busy
+import net.seilent.funekit.api.Card
+import net.seilent.funekit.api.Disconnected
+import net.seilent.funekit.api.Expired
 import net.seilent.funekit.api.FailFast
 import net.seilent.funekit.api.Kind as ApiKind
 import net.seilent.funekit.api.Listing
+import net.seilent.funekit.api.NoCard
+import net.seilent.funekit.api.Refused
 import net.seilent.funekit.api.Row
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.Chrome
@@ -100,6 +109,7 @@ import net.seilent.funekit.screens.music.artist.RING_ADD
 import net.seilent.funekit.screens.music.artist.artistAdd
 import net.seilent.funekit.screens.music.artist.artistPlay
 import net.seilent.funekit.screens.music.hub.HubModel
+import net.seilent.funekit.screens.music.hub.LibraryMark
 import net.seilent.funekit.screens.music.hub.hubPickAtDrop
 import net.seilent.funekit.screens.music.hub.hubPicked
 import net.seilent.funekit.screens.music.lists.ListViewModel
@@ -126,8 +136,10 @@ import net.seilent.funekit.screens.music.nowplaying.holding
 import net.seilent.funekit.screens.music.nowplaying.npFlat
 import net.seilent.funekit.screens.music.nowplaying.npNanosAt
 import net.seilent.funekit.screens.music.overlay.ADD_TO_PLAYLIST
+import net.seilent.funekit.screens.music.overlay.DELETE
 import net.seilent.funekit.screens.music.overlay.DELETE_ASK
 import net.seilent.funekit.screens.music.overlay.DELETE_PLAYLIST
+import net.seilent.funekit.screens.music.overlay.DeleteDone
 import net.seilent.funekit.screens.music.overlay.GO_TO_ALBUM
 import net.seilent.funekit.screens.music.overlay.GO_TO_ARTIST
 import net.seilent.funekit.screens.music.overlay.INFO
@@ -135,12 +147,16 @@ import net.seilent.funekit.screens.music.overlay.KEEP_PLAYLIST
 import net.seilent.funekit.screens.music.overlay.OPEN_PLAYLIST
 import net.seilent.funekit.screens.music.overlay.PLAY
 import net.seilent.funekit.screens.music.overlay.SHUFFLE
+import net.seilent.funekit.screens.music.overlay.SheetDelete
 import net.seilent.funekit.screens.music.overlay.SheetDone
+import net.seilent.funekit.screens.music.overlay.SheetExtra
 import net.seilent.funekit.screens.music.overlay.SheetFrom
 import net.seilent.funekit.screens.music.overlay.SheetKind
 import net.seilent.funekit.screens.music.overlay.SheetTarget
 import net.seilent.funekit.screens.music.overlay.artistRows
 import net.seilent.funekit.screens.music.overlay.confirmDelete
+import net.seilent.funekit.screens.music.overlay.deleteAsk
+import net.seilent.funekit.screens.music.overlay.deleteToast
 import net.seilent.funekit.screens.music.overlay.infoLines
 import net.seilent.funekit.screens.music.overlay.infoMax64
 import net.seilent.funekit.screens.music.overlay.infoOf
@@ -149,6 +165,7 @@ import net.seilent.funekit.screens.music.overlay.runEntry
 import net.seilent.funekit.screens.music.overlay.runPick
 import net.seilent.funekit.screens.music.overlay.runSheet
 import net.seilent.funekit.screens.music.overlay.sheetItems
+import net.seilent.funekit.screens.music.overlay.sheetWords
 import net.seilent.funekit.screens.music.pivotBy
 import net.seilent.funekit.screens.music.queue.QueueModel
 import net.seilent.funekit.screens.settings.RangeAdjust
@@ -203,6 +220,25 @@ private suspend fun <T> quiet(block: suspend () -> T): T? = try {
     null
 }
 
+private suspend fun deleteDone(act: suspend () -> DeleteDone): DeleteDone = try {
+    act()
+} catch (_: NoCard) {
+    DeleteDone.NoCard
+} catch (_: Refused) {
+    DeleteDone.Refused
+} catch (_: Expired) {
+    DeleteDone.Refused
+} catch (_: Busy) {
+    DeleteDone.Refused
+}
+
+private class OwedExit(val album: Long, val artist: Long?)
+
+private suspend fun exitRead(e: OwedExit, s: MusicSource): List<Long>? = s.viewed { v ->
+    val listed = if (s.library.caps.indexOf(Listing.Albums)) v.indexOf(Listing.Albums, ApiKind.Album, e.album) != null else v.page(Listing.AlbumTracks(e.album), 0, 0).total > 0
+    if (listed) null else listOfNotNull(e.artist?.takeIf { v.page(Listing.ArtistAlbums(it), 0, 0).total == 0 })
+}
+
 class MusicHost<S : Any> internal constructor(
     private val music: MusicModels,
     private val models: PageModels,
@@ -252,6 +288,9 @@ class MusicHost<S : Any> internal constructor(
     val hud = VolumeHud(env.np.board, env.np.w, env.np.h)
     private val volumeOverlay = Overlay(OverKind.Volume, hud) { if (hud.pendingSeek() != null) volSeek() }
     private val menuOvers = ArrayList<Pair<Overlay, Long>>()
+    private val libraryOvers = ArrayList<Overlay>()
+    private val exits = ArrayList<OwedExit>()
+    private var exitEpoch = 0
     private val backdrop = NpBackdrop()
     private var offset by mutableStateOf<OffsetSheet?>(null)
     private var offsetOver: Overlay? = null
@@ -311,6 +350,7 @@ class MusicHost<S : Any> internal constructor(
     ) {
         this.app = app
         this.env = env
+        if (src !== this.src) dropExits()
         this.src = src
         this.volume = volume
         this.types = types
@@ -831,7 +871,7 @@ class MusicHost<S : Any> internal constructor(
                 menuHost.act = { true }
             } else {
                 if (stack.phase != Phase.Rest || stack.overlay != null) return@launch
-                openMenu(MenuForm.Sheet, title, lines.lines, true, lines.pathRow, 0, false, { true })
+                libraryOver(openMenu(MenuForm.Sheet, title, lines.lines, true, lines.pathRow, 0, false, { true }))
             }
         }
     }
@@ -910,8 +950,18 @@ class MusicHost<S : Any> internal constructor(
         }
     }
 
-    private fun pickMusic(t: SheetTarget, words: List<String>, i: Int): Boolean {
+    private fun pickMusic(t: SheetTarget, words: List<String>, i: Int, sheetSrc: MusicSource, del: SheetDelete?, extras: List<SheetExtra>): Boolean {
         val word = words.getOrNull(i) ?: return true
+        val kit = words.size - extras.size
+        if (i >= kit) {
+            val sheet = extras[i - kit].act(now()) ?: return true
+            val over = stack.overlay
+            stack.swapMenu(over) { at ->
+                menuHost.menu.open(MenuForm.Sheet, sheet.title, sheet.items, at)
+                menuHost.act = sheet.pick
+            }
+            return false
+        }
         val s = src ?: return true
         if (word == ADD_TO_PLAYLIST) {
             openPicker(t, s)
@@ -940,6 +990,15 @@ class MusicHost<S : Any> internal constructor(
             goArtist(t, s)
             return false
         }
+        if (word == DELETE) {
+            val d = del ?: return true
+            val a = deleteAsk(t, d.songs)
+            libraryOver(openMenu(MenuForm.Dlg, a.title, a.items, false, 0, a.lead, true, { k ->
+                if (a.items[k] == a.yes) deleteYes(t, d, sheetSrc)
+                true
+            }) { menu -> menu.focus.set(a.focus, a.items.size, now(), false) })
+            return false
+        }
         if (t.kind == SheetKind.Entry && word != INFO) {
             val v = modelOf(stack.top) as? ListViewModel
             scope.launch(FailFast) { quiet { runEntry(word, t, v, s, now()) } }
@@ -952,10 +1011,10 @@ class MusicHost<S : Any> internal constructor(
         }
         if (word == DELETE_PLAYLIST) {
             val ask = listOf(DELETE_PLAYLIST, KEEP_PLAYLIST)
-            openMenu(MenuForm.Dlg, DELETE_ASK, ask, false, -1, 0, true, { k ->
+            libraryOver(openMenu(MenuForm.Dlg, DELETE_ASK, ask, false, -1, 0, true, { k ->
                 if (ask[k] == DELETE_PLAYLIST) scope.launch(FailFast) { quiet { confirmDelete(DELETE_PLAYLIST, t.id, s) } }
                 true
-            }) { menu -> menu.focus.set(ask.indexOf(KEEP_PLAYLIST), ask.size, now(), false) }
+            }) { menu -> menu.focus.set(ask.indexOf(KEEP_PLAYLIST), ask.size, now(), false) })
             return false
         }
         if (word == INFO) {
@@ -979,12 +1038,87 @@ class MusicHost<S : Any> internal constructor(
         return true
     }
 
+    private fun libraryOver(o: Overlay): Overlay {
+        libraryOvers.retainAll { m -> menuOvers.any { it.first === m } }
+        libraryOvers += o
+        return o
+    }
+
+    private fun deleteYes(t: SheetTarget, d: SheetDelete, s: MusicSource) {
+        if (src !== s || s.library.generation.value != t.generation) {
+            deleteToast(t, DeleteDone.Refused)?.let { toast.show(now(), it.line, it.title) }
+            return
+        }
+        scope.launch(FailFast) {
+            val done = deleteDone { d.delete(now()) }
+            deleteToast(t, done)?.let { toast.show(now(), it.line, it.title) }
+            if (done == DeleteDone.Done && t.kind == SheetKind.Album) owe(t.id, d.artist, s)
+        }
+    }
+
+    private fun owe(album: Long, artist: Long?, s: MusicSource) {
+        if (src !== s) return
+        exits += OwedExit(album, artist)
+        readExits(s)
+    }
+
+    private fun readExits(s: MusicSource) {
+        if (exits.isEmpty()) return
+        val epoch = exitEpoch
+        val owed = exits.toList()
+        scope.launch(FailFast) {
+            val due = ArrayList<Pair<OwedExit, List<Long>>>()
+            for (e in owed) {
+                val leaves = try {
+                    exitRead(e, s)
+                } catch (x: Busy) {
+                    app.log("album ${e.album} exit read: ${x.message}")
+                    continue
+                } catch (x: Disconnected) {
+                    app.log("album ${e.album} exit read: ${x.message}")
+                    continue
+                } ?: continue
+                due += e to leaves
+            }
+            if (exitEpoch != epoch) return@launch
+            val ready = due.filter { it.first in exits }
+            if (ready.isEmpty()) return@launch
+            exits.removeAll(ready.map { it.first }.toSet())
+            val pages = stack.pages.toList()
+            val leaving = deleteExits(pages.map { entryOf(it)?.page }, ready.map { it.first.album }.toSet(), ready.flatMap { it.second }.toSet()).map { pages[it] }
+            if (leaving.isNotEmpty()) stack.leave({ p -> exitEpoch == epoch && leaving.any { it === p } }, popKind)
+        }
+    }
+
+    private fun dropExits() {
+        exits.clear()
+        exitEpoch++
+    }
+
+    fun closeLibrarySheets(newCard: Boolean = false) {
+        check(Looper.myLooper() == Looper.getMainLooper()) { "MusicHost.closeLibrarySheets runs on the main thread only" }
+        warm()
+        val o = stack.overlay
+        if (o != null && (o === jump || libraryOvers.any { it === o })) stack.cutOverlay(o)
+        searchAt = null
+        val top = stack.top
+        val h = hubOf(top)
+        if (top != null && h != null && entryOf(top)?.page is MusicPage.Search && h.search?.open == true) {
+            val empty = h.closeField()
+            h.poke()
+            if (empty) stack.leave({ it === top }, popKind)
+        }
+        if (newCard) dropExits()
+    }
+
     fun openMusic(t: SheetTarget): Boolean {
         val s = src ?: return false
         if (stack.phase != Phase.Rest || stack.overlay != null || sheetItems(t, false).isEmpty()) return false
         fun open(pinned: Boolean) {
-            val words = sheetItems(t, pinned)
-            openMenu(MenuForm.Sheet, t.title, words, false, -1, 0, false, { i -> pickMusic(t, words, i) })
+            val del = if (t.kind == SheetKind.Song || t.kind == SheetKind.Album) app.sheetDelete(t) else null
+            val extras = app.sheetExtras(t)
+            val words = sheetWords(t, pinned, del != null, extras)
+            libraryOver(openMenu(MenuForm.Sheet, t.title, words, false, -1, 0, false, { i -> pickMusic(t, words, i, s, del, extras) }))
         }
         t.pinned?.let {
             open(it)
@@ -1129,6 +1263,12 @@ class MusicHost<S : Any> internal constructor(
                 seen = true
                 if (first || listOfNotNull(stack.top, stack.turn?.to).any(::isNp)) return@collect
                 toast.show(now(), if (np.variant) np.shown.from else np.shown.artist, np.shown.title, track = true)
+            }
+        }
+        LaunchedEffect(src) {
+            val s = src ?: return@LaunchedEffect
+            combine(s.library.generation, s.library.state, s.library.scan) { g, state, scan -> g to LibraryMark(state, scan) }.distinctUntilChanged().collect { (_, mark) ->
+                if (mark.state.card != Card.Present) dropExits() else readExits(s)
             }
         }
         LaunchedEffect(searchAt) {

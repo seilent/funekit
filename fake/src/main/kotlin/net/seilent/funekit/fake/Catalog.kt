@@ -39,10 +39,10 @@ internal class Rows(
     }
 }
 
-internal class Catalog(set: FakeSet, private val roots: List<FakeRoot>, private val trackRefs: Boolean = false) {
+internal class Catalog(set: FakeSet, private val roots: List<FakeRoot>, private val trackRefs: Boolean = false, dropped: Set<Long> = emptySet()) {
     private val shelf = Fixture.shelf(set)
     private val present = roots.mapNotNull { r -> r.fixture?.let { it to r } }.toMap()
-    private val albums = if (set == FakeSet.Empty) emptyList() else shelf.albums.filter { it.root in present }
+    private val albums = if (set == FakeSet.Empty) emptyList() else shelf.albums.filter { it.root in present && it.id !in dropped }
     private val albumById = albums.associateBy { it.id }
     private val tracks = albums.flatMap { it.tracks }
     private val trackById = tracks.associateBy { it.id }

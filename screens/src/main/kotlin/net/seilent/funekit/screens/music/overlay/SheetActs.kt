@@ -16,6 +16,11 @@ const val SONGS_ADDED = "songs added to now playing"
 const val NEW_PLAYLIST = "new playlist"
 const val ADDED_TO = "added to "
 const val NOT_READABLE = "playlist not readable"
+const val SONG_NOT_DELETED = "song not deleted"
+const val ALBUM_NOT_DELETED = "album not deleted"
+const val READ_ONLY = "card is read only"
+const val CUE_PART = "part of a cue image"
+const val CARD_GONE = "card not available"
 
 sealed interface SheetDone {
     data object Close : SheetDone
@@ -25,6 +30,52 @@ sealed interface SheetDone {
     data class Info(val track: Long, val live: Boolean, val generation: Long) : SheetDone
 
     data class Confirm(val playlist: Long) : SheetDone
+}
+
+class SheetDelete(val songs: Int, val artist: Long?, val delete: suspend (Long) -> DeleteDone)
+
+sealed interface DeleteDone {
+    data object Done : DeleteDone
+
+    data class Partly(val kept: Int) : DeleteDone
+
+    data object Refused : DeleteDone
+
+    data object ReadOnly : DeleteDone
+
+    data object Cue : DeleteDone
+
+    data object NoCard : DeleteDone
+
+    data class Words(val line: String, val title: String) : DeleteDone {
+        init {
+            require(line.isNotBlank()) { "a delete outcome shows a line" }
+        }
+    }
+}
+
+class DeleteAsk(val title: String, val items: List<String>, val lead: Int, val focus: Int, val yes: String)
+
+fun deleteAsk(t: SheetTarget, songs: Int): DeleteAsk {
+    val album = t.kind == SheetKind.Album
+    val yes = if (album) DELETE_ALBUM else DELETE_SONG
+    val lead = if (album) listOf(t.title, if (songs == 1) "1 song" else "$songs songs") else listOf(t.title)
+    val items = lead + listOf(yes, if (album) KEEP_ALBUM else KEEP_SONG)
+    return DeleteAsk(if (album) DELETE_ALBUM_ASK else DELETE_SONG_ASK, items, lead.size, items.lastIndex, yes)
+}
+
+fun deleteToast(t: SheetTarget, d: DeleteDone): SheetDone.Toast? {
+    val album = t.kind == SheetKind.Album
+    val what = if (album) ALBUM_NOT_DELETED else SONG_NOT_DELETED
+    return when (d) {
+        DeleteDone.Done -> null
+        is DeleteDone.Partly -> SheetDone.Toast(if (!album) what else if (d.kept == 1) "1 $SONG_NOT_DELETED" else "${d.kept} songs not deleted", t.title)
+        DeleteDone.Refused -> SheetDone.Toast(what, t.title)
+        DeleteDone.ReadOnly -> SheetDone.Toast(what, READ_ONLY)
+        DeleteDone.Cue -> SheetDone.Toast(what, CUE_PART)
+        DeleteDone.NoCard -> SheetDone.Toast(CARD_GONE, "")
+        is DeleteDone.Words -> SheetDone.Toast(d.line, d.title)
+    }
 }
 
 sealed interface PickTo {

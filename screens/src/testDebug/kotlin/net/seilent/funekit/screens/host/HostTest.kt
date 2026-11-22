@@ -439,6 +439,28 @@ class HostTest {
     }
 
     @Test
+    fun aBlankAppGivesTheTrackToastAndTheHudAnEmptyLead() {
+        val app = app(Level(START, null))
+        frames(OPEN_FRAMES)
+        val first = PhoneTrack("", "Song", "Artist", "Album", true, false, DURATION, 0L, 0L, 1f, false, PhoneRepeat.Off, 0, 0, null)
+        rule.runOnIdle { app.phone.value = PhoneSession(first, {}) {} }
+        frames(OPEN_FRAMES)
+        rule.runOnIdle { app.phone.value = PhoneSession(first.copy(title = "Next"), {}) {} }
+        frames(OPEN_FRAMES)
+        rule.runOnIdle {
+            assertTrue("premise: the session shows as the variant", app.music.np.variant)
+            assertEquals("premise: the new track toasts", "Next", app.toast.title)
+            assertEquals("the track toast leads with an empty line", "", app.toast.artist)
+        }
+        rule.runOnIdle { app.host.openVolume(rule.mainClock.currentTime) }
+        frames(OPEN_FRAMES)
+        rule.runOnIdle {
+            assertEquals("premise: the hud names the track", "Next", app.host.hud.title)
+            assertEquals("the hud's lead line is empty", "", app.host.hud.artist)
+        }
+    }
+
+    @Test
     fun aResetUnderNowPlayingRefusesUnderPagesThatHoldNowPlaying() {
         val app = app(Level(START, null))
         val kept = TestScreen.Music(MusicEntry(app.stack.entry(), MusicPage.NowPlaying))

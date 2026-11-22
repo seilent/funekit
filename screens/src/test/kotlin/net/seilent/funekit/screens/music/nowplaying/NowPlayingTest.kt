@@ -478,6 +478,14 @@ class NowPlayingTest {
     }
 
     @Test
+    fun aBlankAppDrawsNoSourceLine() {
+        val p = PhoneTrack("", "T", "A", "B", true, false, 0, 0, 0, 1f, false, PhoneRepeat.Off, 3, 12, null)
+        assertEquals("", NpShown.of(p).from)
+        assertEquals("", NpShown.of(p.copy(app = " ")).from)
+        assertEquals("T", NpShown.of(p).title)
+    }
+
+    @Test
     fun aHoldOnTheTitleIsTheInfoActAndARingHoldIsRefusedSoItsUpActs() {
         val m = NowPlayingModel()
         m.sync(shown(1), 0)

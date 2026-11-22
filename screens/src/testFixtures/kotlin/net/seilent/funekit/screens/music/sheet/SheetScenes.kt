@@ -171,9 +171,10 @@ fun MusicScenes.menuShot(
     confirm: Boolean = false,
     steps: Int = 0,
     stepAt: Long = at,
+    lead: Int = 0,
 ): MenuShot {
     val m = Menu()
-    m.open(form, title, items, at, readOnly, mixedRow, confirm = confirm)
+    m.open(form, title, items, at, readOnly, mixedRow, lead = lead, confirm = confirm)
     frameMenu(m, s, false) { null }
     val ink = menuInk(measurer, fonts, m, s, density, false, covers)
     m.settle(m.plan(ink))
