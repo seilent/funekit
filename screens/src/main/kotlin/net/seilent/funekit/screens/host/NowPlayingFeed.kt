@@ -10,6 +10,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.withContext
+import net.seilent.funekit.api.LibraryState
 import net.seilent.funekit.api.Listing
 import net.seilent.funekit.api.Lyrics
 import net.seilent.funekit.api.PlayerState
@@ -36,6 +37,7 @@ const val FAV_ADDED = "added to favorites"
 const val FAV_REMOVED = "removed from favorites"
 
 private val noState = MutableStateFlow(PlayerState())
+private val noLibrary = MutableStateFlow(LibraryState())
 private val noRevision = MutableStateFlow(0L)
 
 fun playOf(feed: NpFeed?): Play = when (feed) {
@@ -92,21 +94,15 @@ internal suspend fun npPhoneMark(np: NowPlayingModel, pl: PhoneLyrics, t: PhoneT
 @Composable
 fun NowPlayingFeed(np: NowPlayingModel, g: NpLayout, src: MusicSource?, phone: PhoneSession?, phoneLyrics: PhoneLyrics? = null, now: () -> Long): NpFeed? {
     val own by (src?.player?.state ?: noState).collectAsState()
+    val generation by (src?.library?.generation ?: noRevision).collectAsState()
+    val library by (src?.library?.state ?: noLibrary).collectAsState()
     val lyricsRevision by (src?.lyrics?.revision ?: noRevision).collectAsState()
     val favoritesRevision by (src?.favorites?.revision ?: noRevision).collectAsState()
     val phoneRevision by (phoneLyrics?.revision ?: noRevision).collectAsState()
     val feed = Variant.pick(if (src != null) own else null, phone?.track)
     LaunchedEffect(feed, src) {
         when (feed) {
-            is NpFeed.Own -> {
-                val s = feed.state
-                np.feed(s)
-                val source = src ?: return@LaunchedEffect
-                val (prev, rows) = quietly { queueRows(source, s, g.nextTracks) } ?: return@LaunchedEffect
-                np.prevId = prev
-                val n = NpShown.of(rows)
-                if (np.shown.track == null) np.sync(n, now()) else np.changed(n, now())
-            }
+            is NpFeed.Own -> np.feed(feed.state)
             is NpFeed.Phone -> {
                 np.feed(feed.track)
                 val n = NpShown.of(feed.track)
@@ -114,6 +110,15 @@ fun NowPlayingFeed(np: NowPlayingModel, g: NpLayout, src: MusicSource?, phone: P
             }
             null -> np.clear()
         }
+    }
+    val fed = (feed as? NpFeed.Own)?.state
+    LaunchedEffect(fed?.track, fed?.index, fed?.queueRevision, fed?.queueSize, fed?.repeat, src, g.nextTracks, generation, library) {
+        val s = fed ?: return@LaunchedEffect
+        val source = src ?: return@LaunchedEffect
+        val (prev, rows) = quietly { queueRows(source, s, g.nextTracks) } ?: return@LaunchedEffect
+        np.prevId = prev
+        val n = NpShown.of(rows)
+        if (np.shown.track == null) np.sync(n, now()) else np.changed(n, now())
     }
     val track = np.shown.track
     LaunchedEffect(track, src, np.variant, lyricsRevision, favoritesRevision, phoneLyrics, phoneRevision) {
