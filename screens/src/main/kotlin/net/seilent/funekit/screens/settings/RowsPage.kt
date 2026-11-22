@@ -115,7 +115,7 @@ abstract class RowsPage<R : Any>(entry: Long, page: PageId) : PivotPage(entry, p
 
     val names: List<String> get() = groups.map { it.name }
 
-    protected abstract fun keyOf(r: R): String
+    internal abstract fun keyOf(r: R): String
 
     protected open fun pressLook(r: R): Boolean = true
 

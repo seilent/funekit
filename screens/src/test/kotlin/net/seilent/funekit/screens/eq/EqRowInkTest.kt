@@ -1,5 +1,9 @@
 package net.seilent.funekit.screens.eq
 
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Canvas
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.font.createFontFamilyResolver
 import androidx.compose.ui.unit.Density
@@ -17,6 +21,7 @@ import net.seilent.funekit.kit.titleLines
 import net.seilent.funekit.kit.wideLine
 import net.seilent.funekit.px
 import net.seilent.funekit.scale
+import net.seilent.funekit.sheet.Regions
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -109,11 +114,28 @@ class EqRowInkTest {
         assertEquals("the band title is one line", 1, ink.title.words.size)
     }
 
+    @Test
+    fun anEqRowRecordsItsWordsUnderItsRowName() {
+        val s = scale(Window(W, H, SDK, none, none, none, none, none), Nav.None, Surface.Page, false)
+        val pane = EqRowsPane(EQ, StillRows(listOf(EqPivot(HP, HEADPHONES, listOf(EqRow(EqKind.On, ON))))))
+        val m = EqModel(1L, EqId(EQ))
+        val d = eqDraw(m, s, measurer, fonts, density, covers, Accent.color(Accent.defaultHue, false), false) { pane }
+        m.pivots = pane.pivots.value
+        val rec = Regions(BOARD, W, H, s)
+        CanvasDrawScope().draw(density, LayoutDirection.Ltr, Canvas(ImageBitmap(W, H)), Size(W.toFloat(), H.toFloat())) {
+            with(d) { content(0, 0, rec, EQ) { d.look(0, it, 0L) } }
+        }
+        val names = rec.regions.map { it.name }.filter { it.startsWith("$EQ.row0.") }
+        assertEquals("the row records its words under its name", listOf("$EQ.row0.title0", "$EQ.row0.value0"), names)
+    }
+
     private companion object {
         const val W = 720
         const val H = 1280
         const val SDK = 35
         const val EQ = "eq"
+        const val BOARD = "a105"
+        const val ON = "on"
         const val HP = "hp"
         const val HEADPHONES = "headphones"
         const val PEAK = "peak gain"

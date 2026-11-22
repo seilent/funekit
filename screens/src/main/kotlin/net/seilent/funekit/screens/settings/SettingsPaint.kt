@@ -24,6 +24,7 @@ import net.seilent.funekit.kit.settingSub
 import net.seilent.funekit.kit.settingSwatch
 import net.seilent.funekit.kit.settingTitle
 import net.seilent.funekit.kit.settingValue
+import net.seilent.funekit.kit.stack.DrawRecord
 import net.seilent.funekit.kit.thumbOf
 import net.seilent.funekit.px
 
@@ -49,7 +50,7 @@ class SettingsDraw(
 
     override fun look(p: Int, i: Int, now: Long): SettingLook = m.look(p, i, now)
 
-    override fun DrawScope.row(r: SettingRow, look: SettingLook) = row(ink(r), look, r.swatch)
+    override fun DrawScope.row(r: SettingRow, look: SettingLook, rec: DrawRecord?, name: String) = row(ink(r), look, r.swatch)
 
     fun DrawScope.row(ink: SettingInk, look: SettingLook, swatch: Color?) {
         settingValue(ink, look.value, if (look.edit) accent else Ink.white)
@@ -58,7 +59,7 @@ class SettingsDraw(
         settingTitle(ink, look.title, look.glow?.let { RowGlow(m.glow, it) })
     }
 
-    override fun DrawScope.content(p: Int, off: Int, look: (Int) -> SettingLook) {
+    override fun DrawScope.content(p: Int, off: Int, rec: DrawRecord?, name: String, look: (Int) -> SettingLook) {
         val rows = m.rows(p)
         val tops = m.tops(p)
         clipRect(0f, top.toFloat(), size.width, bottom.toFloat()) {

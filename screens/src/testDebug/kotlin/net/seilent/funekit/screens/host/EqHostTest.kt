@@ -277,6 +277,26 @@ class EqHostTest {
     }
 
     @Test
+    fun aBandAddedUnderASheetTakesItsOwnLook() {
+        val pane = TestPane(outputs())
+        val app = app(pane, root = true)
+        open(app, BT)
+        rule.runOnIdle { app.host.openSheet(sheet()) { true } }
+        frames(OPEN_FRAMES)
+        shot()
+        val bt = lines("bt", ROWS)
+        rule.runOnIdle {
+            pane.held = setOf(ADDED)
+            pane.pivots.value = listOf(outputs()[0], RowPivot(BT, bt.take(2) + TestLine(ADDED) + bt.drop(2)))
+        }
+        frames(RESIZE_FRAMES)
+        shot()
+        assertEquals("premise: the sheet is up", OverKind.Sheet, app.stack.overlay?.kind)
+        assertEquals("the new band enters held", 0f, pane.looks.getValue(ADDED).enter.alpha)
+        assertEquals("the shifted row takes its own look", 1f, pane.looks.getValue("bt:2").enter.alpha)
+    }
+
+    @Test
     fun aSameCountLandingWakesTheFrameLoop() {
         val pane = TestPane(outputs())
         val app = app(pane, root = true)
@@ -619,6 +639,7 @@ class EqHostTest {
         private const val HP_PREAMP = "hp:preamp"
         private const val BT_PREAMP = "bt:preamp"
         private const val BAND = "bt:band:2"
+        private const val ADDED = "bt:band:3"
         private const val ENTRY = 99L
         private const val ALBUM = 20L
         private const val ROWS = 4

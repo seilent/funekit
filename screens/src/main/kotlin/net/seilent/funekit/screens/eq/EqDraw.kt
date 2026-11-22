@@ -2,8 +2,6 @@ package net.seilent.funekit.screens.eq
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.clipRect
-import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.Density
@@ -12,6 +10,9 @@ import net.seilent.funekit.kit.Covers
 import net.seilent.funekit.kit.RowGlow
 import net.seilent.funekit.kit.ThumbRect
 import net.seilent.funekit.kit.settingMeasure
+import net.seilent.funekit.kit.stack.DrawRecord
+import net.seilent.funekit.kit.stack.clipped
+import net.seilent.funekit.kit.stack.shifted
 import net.seilent.funekit.kit.thumbOf
 import net.seilent.funekit.px
 import net.seilent.funekit.screens.settings.RowsDraw
@@ -50,20 +51,20 @@ class EqDraw(
         return EqLook(look, paneOf().enter(m.groups[p].name, line, now))
     }
 
-    override fun DrawScope.row(r: EqLine, look: EqLook) {
+    override fun DrawScope.row(r: EqLine, look: EqLook, rec: DrawRecord?, name: String) {
         val k = ink(r)
-        with(paneOf()) { line(r, k, look, look.look.glow?.let { RowGlow(m.glow, it) }) }
+        with(paneOf()) { line(r, k, look, look.look.glow?.let { RowGlow(m.glow, it) }, rec, name) }
     }
 
-    override fun DrawScope.content(p: Int, off: Int, look: (Int) -> EqLook) {
+    override fun DrawScope.content(p: Int, off: Int, rec: DrawRecord?, name: String, look: (Int) -> EqLook) {
         val rows = m.rows(p)
         val tops = m.tops(p)
-        clipRect(0f, top.toFloat(), size.width, bottom.toFloat()) {
+        clipped(rec, 0f, top.toFloat(), size.width, bottom.toFloat()) {
             for (i in rows.indices) {
                 val h = ink(rows[i]).height
                 val y = top + tops[i] - off
                 if (y + h <= top || y >= bottom) continue
-                translate(0f, y.toFloat()) { row(rows[i], look(i)) }
+                shifted(rec, 0f, y.toFloat()) { row(rows[i], look(i), rec, "$name.row$i") }
             }
         }
     }

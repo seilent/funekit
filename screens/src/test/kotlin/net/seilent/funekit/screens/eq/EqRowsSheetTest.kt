@@ -107,7 +107,7 @@ class EqRowsSheetTest {
         CanvasDrawScope().draw(density, LayoutDirection.Ltr, Canvas(img), Size(dev.w.toFloat(), dev.h.toFloat())) {
             drawRect(Ink.bg)
             pageGround(bands, accent)
-            with(d) { content(m.pivot, m.pane(m.pivot).px) { i -> d.look(m.pivot, i, NOW) } }
+            with(d) { content(m.pivot, m.pane(m.pivot).px, rec, EQ) { i -> d.look(m.pivot, i, NOW) } }
             chrome(c, NOW)
             rec.chrome("chrome", c, NOW, dev.w)
         }

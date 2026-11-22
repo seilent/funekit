@@ -3,6 +3,7 @@ package net.seilent.funekit.screens.host
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import net.seilent.funekit.kit.RowGlow
+import net.seilent.funekit.kit.stack.DrawRecord
 import net.seilent.funekit.screens.eq.EqActs
 import net.seilent.funekit.screens.eq.EqInk
 import net.seilent.funekit.screens.eq.EqLine
@@ -42,7 +43,7 @@ class TestPane(start: List<RowPivot<EqLine>>) : EqPane {
 
     override fun ink(line: EqLine, m: EqMeasure): EqInk = TestInk(m.rows.pitch)
 
-    override fun DrawScope.line(line: EqLine, ink: EqInk, look: EqLook, glow: RowGlow?) {
+    override fun DrawScope.line(line: EqLine, ink: EqInk, look: EqLook, glow: RowGlow?, rec: DrawRecord?, name: String) {
         drawn += line.key
         looks[line.key] = look
         glows[line.key] = glow

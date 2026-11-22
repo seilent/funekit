@@ -10,6 +10,7 @@ import net.seilent.funekit.Scale
 import net.seilent.funekit.kit.Covers
 import net.seilent.funekit.kit.RowGlow
 import net.seilent.funekit.kit.SettingMeasure
+import net.seilent.funekit.kit.stack.DrawRecord
 import net.seilent.funekit.screens.music.PageId
 import net.seilent.funekit.screens.music.nowplaying.AdjustHud
 import net.seilent.funekit.screens.settings.FieldSheet
@@ -54,7 +55,7 @@ interface EqPane {
 
     fun ink(line: EqLine, m: EqMeasure): EqInk
 
-    fun DrawScope.line(line: EqLine, ink: EqInk, look: EqLook, glow: RowGlow?)
+    fun DrawScope.line(line: EqLine, ink: EqInk, look: EqLook, glow: RowGlow?, rec: DrawRecord?, name: String)
 
     fun enter(pivot: String, line: EqLine, now: Long): RowEnter = RowEnter.Rest
 

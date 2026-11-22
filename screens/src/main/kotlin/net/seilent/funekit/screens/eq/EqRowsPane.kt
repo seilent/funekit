@@ -8,9 +8,9 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.clipRect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.takeWhile
 import net.seilent.funekit.Fonts
@@ -30,6 +30,9 @@ import net.seilent.funekit.kit.penFloor
 import net.seilent.funekit.kit.penPx
 import net.seilent.funekit.kit.pressGlow
 import net.seilent.funekit.kit.roleStyle
+import net.seilent.funekit.kit.stack.DrawRecord
+import net.seilent.funekit.kit.stack.Mark
+import net.seilent.funekit.kit.stack.clipped
 import net.seilent.funekit.kit.titleLines
 import net.seilent.funekit.kit.valueLines
 import net.seilent.funekit.kit.wideLine
@@ -222,7 +225,7 @@ class EqRowsPane(private val header: String, private val rows: EqRows) : EqPane 
         )
     }
 
-    override fun DrawScope.line(line: EqLine, ink: EqInk, look: EqLook, glow: RowGlow?) {
+    override fun DrawScope.line(line: EqLine, ink: EqInk, look: EqLook, glow: RowGlow?, rec: DrawRecord?, name: String) {
         val k = ink as EqRowInk
         val e = look.enter
         val l = look.look
@@ -230,15 +233,27 @@ class EqRowsPane(private val header: String, private val rows: EqRows) : EqPane 
         val t = if (l.edit) k.editTitle else k.title
         if (glow != null) {
             val texts = t.words.indices.map { GlowText(t.words[it], k.titleX64 + shift, t.base[it], k.titlePx) }
-            pressGlow(glow.glow, texts, Edges(0, 0, size.width.toInt(), k.height), k.ppu, glow.level)
+            val edges = Edges(0, 0, size.width.toInt(), k.height)
+            pressGlow(glow.glow, texts, edges, k.ppu, glow.level)
+            rec?.box("$name.glow", Mark.Glow, Rect(edges.x0.toFloat(), edges.y0.toFloat(), edges.x1.toFloat(), edges.y1.toFloat()), glow.level)
         }
-        for (i in t.words.indices) word(t.words[i], penPx(k.titleX64 + shift), t.base[i].toFloat(), Ink.white, l.title * e.alpha)
+        val tx = penPx(k.titleX64 + shift)
+        val ta = l.title * e.alpha
+        for (i in t.words.indices) {
+            word(t.words[i], tx, t.base[i].toFloat(), Ink.white, ta)
+            rec?.word("$name.title$i", t.words[i], tx, t.base[i].toFloat(), ta)
+        }
         if (k.value.isEmpty()) return
         val words = if (l.edit) k.edit else k.value
         val color = if (l.edit) k.accent else Ink.white
         val slot = penFloor(t.wide64 + shift) + k.gap
-        clipRect(slot.toFloat(), 0f, size.width, k.height.toFloat()) {
-            for (i in words.indices) word(words[i], penPx(k.right64 + shift - pen64(words[i].width)), k.valueBase[i].toFloat(), color, l.value * e.alpha)
+        val va = l.value * e.alpha
+        clipped(rec, slot.toFloat(), 0f, size.width, k.height.toFloat()) {
+            for (i in words.indices) {
+                val x = penPx(k.right64 + shift - pen64(words[i].width))
+                word(words[i], x, k.valueBase[i].toFloat(), color, va)
+                rec?.word("$name.value$i", words[i], x, k.valueBase[i].toFloat(), va, color)
+            }
         }
     }
 

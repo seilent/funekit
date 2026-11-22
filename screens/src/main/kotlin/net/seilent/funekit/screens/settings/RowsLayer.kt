@@ -33,6 +33,7 @@ import net.seilent.funekit.kit.motion.lerp
 import net.seilent.funekit.kit.pageGround
 import net.seilent.funekit.kit.pxSize
 import net.seilent.funekit.kit.rememberLook
+import net.seilent.funekit.kit.stack.DrawRecord
 import net.seilent.funekit.kit.stack.PageLayer
 import net.seilent.funekit.kit.thumbProps
 import net.seilent.funekit.kit.touch.Arbiter
@@ -57,9 +58,9 @@ interface RowsDraw<R : Any, L> {
 
     fun look(p: Int, i: Int, now: Long): L
 
-    fun DrawScope.row(r: R, look: L)
+    fun DrawScope.row(r: R, look: L, rec: DrawRecord?, name: String)
 
-    fun DrawScope.content(p: Int, off: Int, look: (Int) -> L)
+    fun DrawScope.content(p: Int, off: Int, rec: DrawRecord? = null, name: String = "", look: (Int) -> L)
 
     fun thumbAt(p: Int, off: Int): ThumbRect?
 
@@ -205,8 +206,8 @@ fun <R : Any, L> RowsLayer(
                     FuneList(a, t, Modifier.pxSize(s.widthPx, draw.view), layer) {
                         items(rows.size) { i ->
                             val row = rows[i]
-                            val look = rememberLook(p, i, m, covered = covered) { draw.look(p, i, frame) }
-                            Canvas(Modifier.pxSize(s.widthPx, m.heightOf(row)).tapTarget(a, rowTap(i), layer)) { with(draw) { row(row, look.value) } }
+                            val look = rememberLook(p, m.keyOf(row), m, covered = covered) { draw.look(p, i, frame) }
+                            Canvas(Modifier.pxSize(s.widthPx, m.heightOf(row)).tapTarget(a, rowTap(i), layer)) { with(draw) { row(row, look.value, null, "") } }
                         }
                         val pad = m.pad(p)
                         if (pad > 0) item { Box(Modifier.pxSize(s.widthPx, pad)) }
@@ -225,7 +226,7 @@ fun <R : Any, L> RowsLayer(
             ) {
                 key(side) {
                     val k = side
-                    Canvas(Modifier.pxSize(s.widthPx, s.heightPx)) { with(draw) { content(k, m.pane(k).px) { r -> draw.look(k, r, shownAt) } } }
+                    Canvas(Modifier.pxSize(s.widthPx, s.heightPx)) { with(draw) { content(k, m.pane(k).px, null, "") { r -> draw.look(k, r, shownAt) } } }
                 }
             }
         }

@@ -37,7 +37,7 @@ open class RowsPaint<R : Any, L>(
 
     override fun DrawScope.row(i: Int, y: Int, now: Long, rec: DrawRecord?, name: String) {
         val r = m.rows(p).getOrNull(i) ?: return
-        shifted(rec, 0f, y.toFloat()) { with(d) { row(r, look(p, i, now)) } }
+        shifted(rec, 0f, y.toFloat()) { with(d) { row(r, look(p, i, now), rec, "$name.row$i") } }
     }
 
     override fun thumbFade(at: Long): Float = m.fade.at(at)
