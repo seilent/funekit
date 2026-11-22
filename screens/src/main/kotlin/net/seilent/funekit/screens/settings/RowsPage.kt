@@ -125,6 +125,10 @@ abstract class RowsPage<R : Any>(entry: Long, page: PageId) : PivotPage(entry, p
 
     protected open fun landed() {}
 
+    protected open fun writable(r: R): Boolean = true
+
+    fun holds(key: String): Boolean = rows(pivot).any { keyOf(it) == key && writable(it) }
+
     fun rows(p: Int): List<R> = groups.getOrNull(p)?.rows ?: emptyList()
 
     fun pane(p: Int): RowsPane = panes.getOrPut(groups.getOrNull(p)?.name ?: "") { RowsPane() }

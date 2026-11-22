@@ -130,4 +130,6 @@ class SettingsModel(entry: Long, page: SettingsId) : RowsPage<SettingRow>(entry,
     override fun keyOf(r: SettingRow): String = r.key
 
     override fun pressLook(r: SettingRow): Boolean = r.pressLook
+
+    override fun writable(r: SettingRow): Boolean = SettingFlag.ReadOnly !in r.flags
 }

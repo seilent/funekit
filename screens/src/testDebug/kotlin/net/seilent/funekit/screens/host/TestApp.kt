@@ -62,6 +62,9 @@ import net.seilent.funekit.kit.touch.Gesture
 import net.seilent.funekit.kit.touch.Swipe
 import net.seilent.funekit.kit.touch.Swipes
 import net.seilent.funekit.kit.touch.arbiter
+import net.seilent.funekit.screens.eq.EqId
+import net.seilent.funekit.screens.eq.EqPage
+import net.seilent.funekit.screens.eq.EqScreen
 import net.seilent.funekit.screens.music.MusicPage
 import net.seilent.funekit.screens.music.MusicSource
 import net.seilent.funekit.screens.music.PageId
@@ -90,6 +93,8 @@ sealed interface TestScreen {
     }
 
     data class Settings(override val entry: Long, override val page: SettingsId, val pivot: String? = null) : TestScreen
+
+    data class Eq(override val entry: Long, override val page: EqId, val pivot: String? = null) : TestScreen
 }
 
 class TestApp(page: Scale, np: Scale, src: MusicSource?, private val level: VolumeLevel, private val now: () -> Long) : MusicApp<TestScreen> {
@@ -99,6 +104,8 @@ class TestApp(page: Scale, np: Scale, src: MusicSource?, private val level: Volu
     var split by mutableStateOf<NpSplit?>(null)
     var accentOff by mutableStateOf(true)
     var settingsList by mutableStateOf<List<SettingsPage>>(emptyList())
+    var eqList by mutableStateOf<List<EqPage>>(emptyList())
+    var hosted by mutableStateOf(true)
     var homeWords: Set<String> = emptySet()
     var beforeApplied: () -> Unit = {}
     val gate = InputGate()
@@ -127,6 +134,10 @@ class TestApp(page: Scale, np: Scale, src: MusicSource?, private val level: Volu
     override fun settings(s: TestScreen): SettingsScreen? = (s as? TestScreen.Settings)?.let { SettingsScreen(it.entry, it.page, it.pivot) }
 
     override val settingsPages: List<SettingsPage> get() = settingsList
+
+    override fun eq(s: TestScreen): EqScreen? = (s as? TestScreen.Eq)?.let { EqScreen(it.entry, it.page, it.pivot) }
+
+    override val eqPages: List<EqPage> get() = eqList
 
     override fun homeHas(word: String): Boolean = word in homeWords
 
@@ -180,7 +191,7 @@ class TestApp(page: Scale, np: Scale, src: MusicSource?, private val level: Volu
     fun compose(rule: ComposeContentTestRule, root: Boolean = false) {
         rule.setContent {
             FuneTheme(page) {
-                Pages(root)
+                if (hosted) Pages(root)
             }
         }
     }
@@ -327,6 +338,7 @@ class TestApp(page: Scale, np: Scale, src: MusicSource?, private val level: Volu
                 .arbiter(a, swipes),
         ) {
             h.SettingsPages(pages)
+            h.EqPages(pages)
             h.MusicPages(pages, status)
             h.MoveCanvas(!rest && turn != null, MoveStatus(statusInk, statusInk, accent, true))
             h.JumpHost({ null }) { _, _ -> }

@@ -3,6 +3,8 @@ package net.seilent.funekit.screens.host
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import net.seilent.funekit.screens.eq.EqPage
+import net.seilent.funekit.screens.eq.EqScreen
 import net.seilent.funekit.screens.music.nowplaying.NpPicture
 import net.seilent.funekit.screens.music.nowplaying.OffsetEdit
 import net.seilent.funekit.screens.music.nowplaying.PhoneLyrics
@@ -62,6 +64,10 @@ interface MusicApp<S : Any> {
     fun settings(s: S): SettingsScreen? = null
 
     val settingsPages: List<SettingsPage> get() = emptyList()
+
+    fun eq(s: S): EqScreen? = null
+
+    val eqPages: List<EqPage> get() = emptyList()
 }
 
 interface VolumeLevel {

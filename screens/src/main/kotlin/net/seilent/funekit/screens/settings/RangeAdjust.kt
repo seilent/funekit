@@ -6,22 +6,30 @@ import kotlinx.coroutines.launch
 import net.seilent.funekit.api.FailFast
 import net.seilent.funekit.screens.music.nowplaying.AdjustHit
 import net.seilent.funekit.screens.music.nowplaying.AdjustHud
-import net.seilent.funekit.screens.music.nowplaying.AdjustSource
 
 class RangeAdjust internal constructor(
     row: SettingRow,
     private val rows: SettingsRows,
+    private val m: SettingsModel,
     override val hud: AdjustHud,
     internal val from: Int,
     private val end: (Boolean) -> Unit,
     private val scope: CoroutineScope,
-) : AdjustSource {
+) : RowAdjust {
     internal var row = row
         private set
     internal var level = row.level
         private set
     private val pending = mutableListOf<Int>()
     private var done = false
+
+    override val key: String get() = row.key
+
+    override fun open(now: Long): Boolean {
+        val a = rows.adjust(row, row.level) ?: return false
+        hud.open(now, a.cols, a.line1, a.line2)
+        return true
+    }
 
     override fun tap(h: AdjustHit) {
         val d = when (h) {
@@ -53,7 +61,7 @@ class RangeAdjust internal constructor(
         end(false)
     }
 
-    internal fun revert() {
+    override fun revert() {
         scope.launch(FailFast, CoroutineStart.UNDISPATCHED) { rows.set(row.key, from.toString()) }
     }
 
@@ -64,13 +72,15 @@ class RangeAdjust internal constructor(
         return true
     }
 
-    internal fun landed(r: SettingRow) {
+    override fun landed() {
+        val r = m.groups.firstNotNullOfOrNull { p -> p.rows.firstOrNull { it.key == row.key } } ?: return
+        if (r == row) return
         row = r
         if (pending.isEmpty()) level = r.level
         show()
     }
 
-    internal fun finish() {
+    override fun finish() {
         done = true
     }
 
