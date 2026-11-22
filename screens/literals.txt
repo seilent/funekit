@@ -67,3 +67,21 @@ screens/src/main/kotlin/net/seilent/funekit/screens/host/MusicModels.kt PUSH_ROW
 screens/src/main/kotlin/net/seilent/funekit/screens/host/MusicModels.kt ANCHOR_INDEX 3 FB FB-stack-fields a saved anchor is the kind, the id, the offset and the clamped index
 screens/src/main/kotlin/net/seilent/funekit/screens/host/MusicModels.kt MUSIC_STATE 3 FB FB-stack-fields a saved music page is its tag, the entry fields, the pivot and anchor, then the model state
 screens/src/main/kotlin/net/seilent/funekit/screens/host/MusicModels.kt MUSIC_HEAD 4 FB FB-stack-fields the saved entry fields are the entry, the page, the push source, the tile flag and the album head row
+screens/src/main/kotlin/net/seilent/funekit/screens/eq/EqText.kt TEN 10L fos player/ui/eqstore.cpp:113 fixed point eq texts count digits by tens (funeOS ui/eqstore.cpp fixed_text, parse_fixed :95)
+screens/src/main/kotlin/net/seilent/funekit/screens/eq/EqText.kt Q_DIGITS 2 fos player/ui/eqstore.cpp:499 a q prints with two decimals (funeOS ui/eqstore.cpp eq_q_text, eq_parse :444)
+screens/src/main/kotlin/net/seilent/funekit/screens/eq/EqText.kt MILLI 1000L fos player/ui/eqstore.cpp:428 a frequency is held in milli hz (funeOS ui/eqstore.cpp eq_freq_text, eq_entry_text :438, eq_grid_milli_hz :173)
+screens/src/main/kotlin/net/seilent/funekit/screens/eq/EqText.kt HALF_MILLI 500L fos player/ui/eqstore.cpp:428 hz round half up from milli hz (funeOS ui/eqstore.cpp eq_freq_text, eq_entry_text :438)
+screens/src/main/kotlin/net/seilent/funekit/screens/eq/EqText.kt KHZ 1000L fos player/ui/eqstore.cpp:429 a frequency of 1000 hz and up prints in khz (funeOS ui/eqstore.cpp eq_freq_text)
+screens/src/main/kotlin/net/seilent/funekit/screens/eq/EqText.kt HZ_ROUND 100L fos player/ui/eqstore.cpp:429 an off grid frequency that is no whole 100 hz prints in hz (funeOS ui/eqstore.cpp eq_freq_text)
+screens/src/main/kotlin/net/seilent/funekit/screens/eq/EqText.kt TENTH_KHZ 100000L fos player/ui/eqstore.cpp:431 khz print to a tenth (funeOS ui/eqstore.cpp eq_freq_text)
+screens/src/main/kotlin/net/seilent/funekit/screens/eq/EqText.kt HALF_TENTH_KHZ 50000L fos player/ui/eqstore.cpp:431 the khz tenth rounds half up (funeOS ui/eqstore.cpp eq_freq_text)
+screens/src/main/kotlin/net/seilent/funekit/screens/eq/EqText.kt GAIN_SCALE 10f fos player/ui/eqstore.cpp:36 gain and preamp are held in tenths of a db (funeOS ui/eqstore.cpp kPreampMin, kGainMin :37)
+screens/src/main/kotlin/net/seilent/funekit/screens/eq/EqText.kt Q_SCALE 100f fos player/ui/eqstore.cpp:38 q is held in hundredths (funeOS ui/eqstore.cpp kQMin, kQMax)
+screens/src/main/kotlin/net/seilent/funekit/screens/eq/EqText.kt KHZ_POINT 34 fos player/ui/eqstore.cpp:171 1 khz is grid point 34, the fresh band's point (funeOS ui/eqstore.cpp eq_grid_milli_hz, eq_fresh :206)
+screens/src/main/kotlin/net/seilent/funekit/screens/eq/EqText.kt SIXTHS 6 fos player/ui/eqstore.cpp:166 the grid steps in sixths of an octave (funeOS ui/eqstore.cpp eq_grid_milli_hz kSixth)
+screens/src/main/kotlin/net/seilent/funekit/screens/eq/EqText.kt FX 65536.0 fos player/ui/eqstore.cpp:166 the sixth octave factors are 16.16 fixed point, kSixth[0] 65536 (funeOS ui/eqstore.cpp eq_grid_milli_hz)
+screens/src/main/kotlin/net/seilent/funekit/screens/eq/EqText.kt OCTAVE 2.0 fos player/ui/eqstore.cpp:166 kSixth[k] is 65536 x 2^(k/6) rounded, so 73562, 82570, 92682, 104032, 116772 (funeOS ui/eqstore.cpp eq_grid_milli_hz)
+screens/src/main/kotlin/net/seilent/funekit/screens/eq/EqText.kt FX_BITS 16 fos player/ui/eqstore.cpp:175 the grid frequency drops its 16.16 fraction rounded half up (funeOS ui/eqstore.cpp eq_grid_milli_hz)
+screens/src/main/kotlin/net/seilent/funekit/screens/eq/EqText.kt Q_STEP 10 fos player/ui/eqstore.cpp:2465 a q step is 0.10 (funeOS ui/eqstore.cpp step_band)
+screens/src/main/kotlin/net/seilent/funekit/screens/eq/EqText.kt FRESH_Q 140 fos player/ui/eqstore.cpp:198 a fresh band's q is 1.40 (funeOS ui/eqstore.cpp eq_flat, eq_fresh :203-210)
+screens/src/main/kotlin/net/seilent/funekit/screens/eq/EqText.kt PARSE_CAP 40 fos player/ui/eqstore.cpp:99 a typed number past 2^40 is refused (funeOS ui/eqstore.cpp parse_fixed)
