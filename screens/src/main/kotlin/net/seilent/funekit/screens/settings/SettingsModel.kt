@@ -57,6 +57,7 @@ data class SettingRow(
     val live: String? = null,
     val swatch: Color? = null,
     val swatches: List<Color> = emptyList(),
+    val pressLook: Boolean = true,
 ) {
     val editable: Boolean
         get() = SettingFlag.ReadOnly !in flags && when (kind) {
@@ -314,6 +315,10 @@ class SettingsModel(entry: Long, page: SettingsId) : PivotPage(entry, page) {
         lit.up()
         glow.clear()
         setFocus(pane, rows, r, now, true)
+        if (!rows[r].pressLook) {
+            lit.drop()
+            return
+        }
         lit.down(r, focusEnd)
         glow.down(r, now)
     }

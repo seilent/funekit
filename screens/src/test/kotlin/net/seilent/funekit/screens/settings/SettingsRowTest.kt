@@ -15,6 +15,8 @@ import net.seilent.funekit.px
 import net.seilent.funekit.scale
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -174,6 +176,26 @@ class SettingsRowTest {
         assertEquals(1f, m.look(0, 0, 0L).swatch, 1e-4f)
     }
 
+    @Test
+    fun aDownOnARowWithNoPressLookMovesTheFocusWithNoLitTitleAndNoGlow() {
+        val m = model()
+        m.pivots = listOf(SettingPivot(SYSTEM, listOf(SettingRow("b", "b", ""), SettingRow("a", "a", "", pressLook = false))))
+        m.down(1, 0L)
+        val unlit = m.look(0, 1, FRAME)
+        assertEquals("the down moves the focus", 1, m.focusRow(0))
+        assertTrue("the title takes the focus mix, below full alpha", unlit.title < Tok.alpha_full)
+        assertFalse("no lit title", m.lit.on(1, FRAME))
+        assertNull("no glow", unlit.glow)
+        m.down(0, LATER)
+        val pressed = m.look(0, 0, LATER + FRAME)
+        assertEquals("a row with the press look lights", Tok.alpha_full, pressed.title, 0f)
+        assertNotNull("and glows", pressed.glow)
+        assertNull("the row with no press look has none", m.look(0, 1, LATER + FRAME).glow)
+        assertTrue("premise: the pressed row is lit", m.lit.on(0, LATER + 2 * FRAME))
+        m.down(1, LATER + 2 * FRAME)
+        assertFalse("the down on the row with no press look ends the last press at once", m.lit.on(0, LATER + 3 * FRAME))
+    }
+
     private companion object {
         const val A105_W = 720
         const val A105_H = 1280
@@ -181,5 +203,7 @@ class SettingsRowTest {
         const val EFFECTS = "effects"
         const val SYSTEM = "system"
         const val HUE = "350"
+        const val FRAME = 16L
+        const val LATER = 1000L
     }
 }
