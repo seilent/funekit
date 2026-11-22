@@ -544,8 +544,8 @@ fun Modifier.arbiter(a: Arbiter, swipes: Swipes): Modifier {
                         if (p != null) {
                             panned = null
                             p.drag(a.gesture.liftX)
-                            p.end(s)
-                        } else if (s != Swipe.None && page.acts(s)) {
+                            p.end(if (a.modal == 0) s else Swipe.None)
+                        } else if (s != Swipe.None && (if (open) a.modal == 0 else a.modal != 0 && a.gesture.backs(s)) && page.acts(s)) {
                             page.onSwipe(s, a.gesture.edge)
                         }
                         break

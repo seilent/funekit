@@ -306,7 +306,7 @@ class TestApp(page: Scale, np: Scale, src: MusicSource?, private val level: Volu
             },
             onSwipe = { s, e ->
                 if ((e == Gesture.Edge.Left && s == Swipe.Right) || (e == Gesture.Edge.Right && s == Swipe.Left)) {
-                    stack.back(popKind)
+                    stack.edgeBack(popKind)
                 } else if (pivotTop != null && rest && pivotBy(s) != 0 && pivotTop.first.canSwitch(pivotBy(s))) {
                     pivotSwitch(pivotTop.first, pivotTop.second, pivotTop.first.pivot + pivotBy(s), now())
                 } else if (npOn && rest) {

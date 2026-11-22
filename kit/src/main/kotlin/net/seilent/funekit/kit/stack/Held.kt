@@ -9,7 +9,6 @@ import net.seilent.funekit.kit.motion.MoveKind
 import net.seilent.funekit.kit.touch.Axis
 import net.seilent.funekit.kit.touch.Gesture
 import net.seilent.funekit.kit.touch.Slop
-import net.seilent.funekit.kit.touch.Swipe
 import net.seilent.funekit.kit.touch.axisOf
 
 class Held(val at: Long, val target: Boolean, val band: Gesture.Edge, val seq: Int, val dev: Boolean = false)
@@ -31,10 +30,7 @@ class HoldWatch(private val slop: Slop, private val x0: Float, private val y0: F
         return swipedBack(x, y, t, bare)
     }
 
-    fun swipedBack(x: Float, y: Float, t: Long, bare: Boolean): Boolean {
-        if (band == Gesture.Edge.None) return false
-        return g.up(x, y, t, bare) == if (band == Gesture.Edge.Left) Swipe.Right else Swipe.Left
-    }
+    fun swipedBack(x: Float, y: Float, t: Long, bare: Boolean): Boolean = g.backs(g.up(x, y, t, bare))
 }
 
 suspend fun <P : Any> AwaitPointerEventScope.watchHeld(

@@ -7,6 +7,8 @@ import net.seilent.funekit.kit.motion.OverKind
 import net.seilent.funekit.kit.motion.Overlay
 import net.seilent.funekit.kit.touch.Gesture
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -196,6 +198,25 @@ class LeaveTest {
         l.rest()
         assertEquals("the held back still pops the pushed page", listOf("hub", "a"), l.names())
         assertEquals(listOf(MoveKind.T3, MoveKind.T4), l.starts.map { it.kind })
+    }
+
+    @Test
+    fun anEdgeBackQueuedBehindACutInItsFrameBacksNothing() {
+        val l = Leaving("hub", "album")
+        val o = Overlay(OverKind.Sheet)
+        l.stack.open(o)
+        l.stack.frame(l.t)
+        l.t += o.dur().toLong()
+        l.stack.frame(l.t)
+        assertSame(o, l.stack.overlay)
+        assertFalse("premise: the sheet is settled", o.closing || o.moving(l.t))
+        l.stack.cutOverlay(o)
+        l.stack.edgeBack(l.kind)
+        l.t += STEP
+        l.rest()
+        assertNull(l.stack.overlay)
+        assertEquals(listOf("hub", "album"), l.names())
+        assertTrue("no turn starts", l.starts.isEmpty())
     }
 
     private companion object {

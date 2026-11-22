@@ -265,12 +265,20 @@ class PageStack<P : Any>(
 
     fun back(popKind: (Turn<P>) -> MoveKind) = back(false, popKind)
 
-    fun back(device: Boolean, popKind: (Turn<P>) -> MoveKind) = ask { now ->
+    fun back(device: Boolean, popKind: (Turn<P>) -> MoveKind) = ask { now -> back(now, device, popKind) }
+
+    fun edgeBack(popKind: (Turn<P>) -> MoveKind) {
+        onMain("PageStack.edgeBack")
+        val o = overlay
+        ask { now -> if (overlay === o && o?.closing != true) back(now, false, popKind) }
+    }
+
+    private fun back(now: Long, device: Boolean, popKind: (Turn<P>) -> MoveKind) {
         if (opened != null) {
             gate?.drop()
             refuse(now)
             devicePop = device
-            return@ask
+            return
         }
         val o = overlay
         when {

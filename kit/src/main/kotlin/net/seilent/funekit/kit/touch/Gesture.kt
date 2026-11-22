@@ -160,6 +160,8 @@ class Gesture(private val s: Slop) {
     fun commitAt(x: Float, y: Float): Swipe =
         if (state == State.Horizontal) s.swipeOf(x - originX, y - y0) else Swipe.None
 
+    fun backs(s: Swipe): Boolean = (edge == Edge.Left && s == Swipe.Right) || (edge == Edge.Right && s == Swipe.Left)
+
     private fun liftPoint(ms: Long, bare: Boolean): Sample? {
         if (!bare || samples <= 1 || (state != State.Vertical && state != State.Horizontal)) return null
         val step = last.ms - prev.ms

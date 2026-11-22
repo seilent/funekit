@@ -18,6 +18,7 @@ import androidx.compose.ui.platform.LocalFontFamilyResolver
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipe
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -40,6 +41,7 @@ import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.Chrome
 import net.seilent.funekit.kit.Edges
 import net.seilent.funekit.kit.Ink
+import net.seilent.funekit.kit.MenuForm
 import net.seilent.funekit.kit.RowKind
 import net.seilent.funekit.kit.art.Art
 import net.seilent.funekit.kit.groundBands
@@ -75,6 +77,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -341,6 +344,50 @@ class HubTouchTest {
         rule.waitForIdle()
         assertEquals(HUB_ALBUMS, m.pivot)
         assertEquals(screen, stack.top)
+    }
+
+    @Test
+    fun aFlingUnderAnOpenSheetStepsNoPivotAndOnlyItsFirstEdgeBackActs() {
+        val app = TestApp(s, s, music, StillLevel) { SystemClock.uptimeMillis() }
+        app.compose(rule, root = true)
+        rule.waitForIdle()
+        val stack = app.stack
+        val screen = TestScreen.Music(MusicEntry(stack.entry(), MusicPage.Hub))
+        rule.runOnUiThread { stack.push(screen, MoveKind.T2) }
+        rule.mainClock.advanceTimeBy(SETTLE)
+        rule.waitForIdle()
+        val m = app.models[screen.entry] as HubModel
+        assertEquals(HUB_ALBUMS, m.pivot)
+        rule.runOnIdle { app.host.openMenu(MenuForm.Sheet, "settings", listOf("one", "two"), false, -1, 0, false, { true }) }
+        rule.mainClock.advanceTimeBy(SETTLE)
+        rule.waitForIdle()
+        val sheet = requireNotNull(rule.runOnIdle { stack.overlay })
+        rule.onRoot().performTouchInput { swipe(Offset(width * FROM, height / 4f), Offset(width * TO, height / 4f), SWIPE_MS) }
+        rule.mainClock.advanceTimeBy(SETTLE)
+        rule.waitForIdle()
+        assertEquals(HUB_ALBUMS, m.pivot)
+        assertSame(sheet, rule.runOnIdle { stack.overlay })
+        assertFalse(sheet.closing)
+        rule.mainClock.autoAdvance = false
+        rule.onRoot().performTouchInput { swipeRight(1f, width * FROM, SWIPE_MS) }
+        var n = 0
+        while (!rule.runOnUiThread { sheet.closing }) {
+            frames()
+            assertTrue("the first edge back closes the sheet", ++n < MAX_FRAMES)
+        }
+        rule.onRoot().performTouchInput { swipeRight(1f, width * FROM, SWIPE_MS) }
+        assertTrue("premise: the sheet still closes at the up", rule.runOnUiThread { stack.overlay === sheet && sheet.closing })
+        frames()
+        rule.runOnUiThread {
+            assertEquals(screen, stack.top)
+            assertNull(stack.turn)
+        }
+        settle()
+        rule.runOnUiThread {
+            assertNull(stack.overlay)
+            assertEquals(HUB_ALBUMS, m.pivot)
+            assertEquals(screen, stack.top)
+        }
     }
 
     private fun launched(pivot: Int): HubModel {
@@ -906,6 +953,7 @@ class HubTouchTest {
         private const val FROM = 0.7f
         private const val TO = 0.25f
         private const val WAIT_MS = 5_000L
+        private const val MAX_FRAMES = 60
         private const val FAR = 30
         private const val SHOWN = 4
         private const val SWITCH_END = 250L

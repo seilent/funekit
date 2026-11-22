@@ -24,6 +24,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import net.seilent.funekit.Dpi
 import net.seilent.funekit.FuneTheme
@@ -623,6 +624,115 @@ class ArbiterTest {
         assertTrue(begins.isEmpty())
         assertTrue(drags.isEmpty())
         assertTrue(ends.isEmpty())
+    }
+
+    private var blocked by mutableStateOf(false)
+
+    private fun modal(pan: Pan? = null, start: Dp = 0.dp) {
+        rule.setContent {
+            val a = remember { Arbiter(v1) }
+            arb = a
+            Box(Modifier.fillMaxSize().padding(start = start)) {
+                Box(Modifier.fillMaxSize().arbiter(a, page(pan = pan)))
+                if (blocked) BlockBelow(a, 1)
+            }
+        }
+    }
+
+    @Test
+    fun aFlingUnderAModalBlockReachesNoSwipe() {
+        blocked = true
+        modal()
+        rule.onRoot().performTouchInput {
+            down(center)
+            moveBy(Offset(-40f, 0f))
+            moveBy(Offset(-40f, 0f))
+            up()
+        }
+        rule.onRoot().performTouchInput {
+            down(center)
+            moveBy(Offset(40f, 0f))
+            moveBy(Offset(40f, 0f))
+            up()
+        }
+        rule.waitForIdle()
+        assertEquals(emptyList<Swipe>(), swipes)
+    }
+
+    @Test
+    fun anEdgeBackUnderAModalBlockReachesTheSwipe() {
+        blocked = true
+        modal()
+        rule.onRoot().performTouchInput {
+            down(Offset(2f, centerY))
+            moveBy(Offset(40f, 0f))
+            moveBy(Offset(40f, 0f))
+            up()
+        }
+        rule.waitForIdle()
+        assertEquals(listOf(Swipe.Right), swipes)
+    }
+
+    @Test
+    fun anOutwardSwipeFromABandUnderAModalBlockReachesNoSwipe() {
+        blocked = true
+        modal(start = 80.dp)
+        val d = with(rule.density) { 80.dp.toPx() }
+        val far = d - Arbiter(v1).slop.swipe - 10f
+        rule.onRoot().performTouchInput {
+            down(Offset(d + 4f, centerY))
+            moveTo(Offset((d + 4f + far) / 2, centerY))
+            moveTo(Offset(far, centerY))
+            up()
+        }
+        rule.waitForIdle()
+        assertEquals("premise: the down was in the left band", Gesture.Edge.Left, arb.gesture.edge)
+        assertEquals(emptyList<Swipe>(), swipes)
+    }
+
+    @Test
+    fun aSwipeWhoseModalBlockCameOrWentBeforeTheUpReachesNoSwipe() {
+        modal()
+        rule.onRoot().performTouchInput {
+            down(center)
+            moveBy(Offset(-40f, 0f))
+            moveBy(Offset(-40f, 0f))
+        }
+        rule.waitForIdle()
+        blocked = true
+        rule.waitForIdle()
+        rule.onRoot().performTouchInput { up() }
+        rule.waitForIdle()
+        assertEquals("a block that came before the up", emptyList<Swipe>(), swipes)
+        rule.onRoot().performTouchInput {
+            down(Offset(2f, centerY))
+            moveBy(Offset(40f, 0f))
+            moveBy(Offset(40f, 0f))
+        }
+        rule.waitForIdle()
+        blocked = false
+        rule.waitForIdle()
+        rule.onRoot().performTouchInput { up() }
+        rule.waitForIdle()
+        assertEquals("a block that went before the up", emptyList<Swipe>(), swipes)
+    }
+
+    @Test
+    fun aPanAModalBlockCameUnderEndsWithNoSwipe() {
+        modal(pan { x, origin -> x > origin })
+        rule.onRoot().performTouchInput {
+            down(center)
+            moveBy(Offset(40f, 0f))
+            moveBy(Offset(40f, 0f))
+        }
+        rule.waitForIdle()
+        assertEquals(1, begins.size)
+        blocked = true
+        rule.waitForIdle()
+        rule.onRoot().performTouchInput { up() }
+        rule.waitForIdle()
+        assertEquals(listOf(Swipe.None), ends)
+        assertTrue(swipes.isEmpty())
     }
 
     @Test
