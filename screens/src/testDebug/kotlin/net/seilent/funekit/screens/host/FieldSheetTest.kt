@@ -134,6 +134,11 @@ class FieldSheetTest {
         frames(OPEN_FRAMES)
     }
 
+    private fun edge(app: TestApp) {
+        rule.runOnIdle { app.stack.edgeBack(app.host.popKind) }
+        frames(OPEN_FRAMES)
+    }
+
     private fun hudUp(app: TestApp, f: TestFields, i: Int) {
         open(app, f, 2)
         pick(app, i)
@@ -300,6 +305,55 @@ class FieldSheetTest {
         assertEquals("the sheet stays up", OverKind.Sheet, app.stack.overlay?.kind)
         assertEquals("drop 0", f.calls.last())
         assertEquals("the band's items return", BAND_ITEMS, app.menu.items)
+    }
+
+    @Test
+    fun anEdgeBackUnderAFieldAdjustDoesNothing() {
+        val (app, _) = app()
+        val f = BandFields()
+        hudUp(app, f, GAIN)
+        settle(app)
+        edge(app)
+        assertEquals("the sheet stays up", OverKind.Sheet, app.stack.overlay?.kind)
+        assertTrue("the hud stays", f.hud.shown)
+        assertEquals("the edge reaches no field", listOf("press $GAIN"), f.calls)
+    }
+
+    @Test
+    fun anEdgeBackOnAChoiceReturnsToTheFieldSheet() {
+        val (app, _) = app()
+        val f = BandFields()
+        open(app, f)
+        pick(app, 0)
+        settle(app)
+        edge(app)
+        assertEquals("the sheet stays up", OverKind.Sheet, app.stack.overlay?.kind)
+        assertEquals("the band's items return", BAND_ITEMS, app.menu.items)
+    }
+
+    @Test
+    fun anEdgeBackWithAFieldLiveDropsItAndKeepsTheSheet() {
+        val (app, _) = app()
+        val f = BandFields().also { it.noHud = true }
+        open(app, f)
+        pick(app, GAIN)
+        settle(app)
+        assertFalse("premise: the live field shows no hud", f.hud.shown)
+        edge(app)
+        assertEquals("the sheet stays up", OverKind.Sheet, app.stack.overlay?.kind)
+        assertEquals("drop $GAIN", f.calls.last())
+    }
+
+    @Test
+    fun anEdgeBackDuringTheFieldSheetsRiseDoesNothing() {
+        val (app, _) = app()
+        val f = BandFields()
+        open(app, f, CUT_FRAMES)
+        val o = app.stack.overlay
+        assertTrue("premise: the sheet rises", o != null && o.moving(rule.mainClock.currentTime))
+        edge(app)
+        assertTrue("an edge back during the sheet's rise does nothing", app.stack.overlay === o && o?.closing == false)
+        assertEquals("the edge reaches no field", emptyList<String>(), f.calls)
     }
 
     @Test

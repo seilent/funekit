@@ -712,6 +712,7 @@ class MusicHost<S : Any> internal constructor(
         require(src.hud === rangeHud) { "a row adjust shows on the host's hud" }
         if (!src.open(now())) return false
         val o = Overlay(OverKind.Adjust, src.hud)
+        o.back = { true }
         stack.open(o)
         m.edit(src.key, false)
         edit = o to m
@@ -793,18 +794,23 @@ class MusicHost<S : Any> internal constructor(
         }
         val o = stack.overlay
         if (o != null && o !== volumeOverlay) return
+        fun show(at: Long) {
+            val artist = if (np.variant) np.shown.from else np.shown.artist
+            hud.show(at, volume.percent(), playOf(feed) == Play.Playing, artist, np.shown.title)
+        }
         if (o == null) {
             val top = stack.top
             val e = pageEntry(top)
             if (e != null) models[e]?.lists?.forEach { it.cancel() } else app.cancel(top)
             toast.cancel(t)
-            stack.open(volumeOverlay, hides = false, covers = false)
+            stack.open(volumeOverlay, hides = false, covers = false, onOpen = ::show)
+            return
         }
-        val artist = if (np.variant) np.shown.from else np.shown.artist
-        hud.show(t, volume.percent(), playOf(feed) == Play.Playing, artist, np.shown.title)
+        show(t)
     }
 
     fun volPress(d: Int) {
+        openVolume(now())
         scope.launch(FailFast) {
             if (quiet { volume.step(d) } != null) openVolume(now())
         }
@@ -1485,6 +1491,11 @@ class MusicHost<S : Any> internal constructor(
             if (o != null && o === stack.overlay) stack.close()
         }
 
+        override fun handOff() {
+            val o = run?.takeIf { it === fieldRun }?.over ?: own
+            if (o != null && o === stack.overlay) stack.cutOverlay(o, closes = false)
+        }
+
         override fun launch(block: suspend () -> Unit) {
             scope.launch(FailFast, CoroutineStart.UNDISPATCHED) { block() }
         }
@@ -1768,7 +1779,7 @@ class MusicHost<S : Any> internal constructor(
             },
             hold = { i -> fieldHold(r, i) },
             scrim = { sheet.scrim().also { fieldSync(r) } },
-        )
+        ).also { it.back = { fieldEdge(r) } }
     }
 
     private fun fieldPick(r: FieldRun, i: Int): Boolean {
@@ -1843,6 +1854,16 @@ class MusicHost<S : Any> internal constructor(
 
     private fun fieldBack(r: FieldRun) {
         if (r.sheet.back()) fieldRaise(r) else fieldSync(r)
+    }
+
+    private fun fieldEdge(r: FieldRun): Boolean = when {
+        r.sheet.hud.shown -> true
+        r.choice != null -> {
+            choiceBack(r)
+            true
+        }
+        r.live -> r.sheet.back().also { fieldSync(r) }
+        else -> false
     }
 
     private fun fieldDrop(r: FieldRun) {

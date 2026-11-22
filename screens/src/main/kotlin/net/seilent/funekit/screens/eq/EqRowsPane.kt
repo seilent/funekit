@@ -370,7 +370,7 @@ class EqRowsPane(private val header: String, private val rows: EqRows) : EqPane 
             acts,
             SettingSheet(MenuForm.Sheet, l.title, listOf(TYPE_VALUE), lift = true),
             {
-                acts.close()
+                acts.handOff()
                 if (gen(p.name) == g && pivotOf(p.slot)?.target == p.target) valueEntry(p.name, p.slot, l, acts)?.let(rows::entry)
                 false
             },

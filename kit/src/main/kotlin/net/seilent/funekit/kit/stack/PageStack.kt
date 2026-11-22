@@ -174,7 +174,12 @@ class PageStack<P : Any>(
 
     fun entry(): Long = entries++
 
-    fun open(o: Overlay, hides: Boolean = o.kind == OverKind.Dlg, covers: Boolean = o.kind == OverKind.Sheet || o.kind == OverKind.Dlg) = ask { now ->
+    fun open(
+        o: Overlay,
+        hides: Boolean = o.kind == OverKind.Dlg,
+        covers: Boolean = o.kind == OverKind.Sheet || o.kind == OverKind.Dlg,
+        onOpen: (Long) -> Unit = {},
+    ) = ask { now ->
         armedLand(now)
         if (phase != Phase.Rest) land(now)
         landOverlay(now, show = false)
@@ -183,6 +188,7 @@ class PageStack<P : Any>(
         overlay = o
         openSeq = ++seq
         snapshot(hides, covers)
+        onOpen(now)
     }
 
     fun close() = ask { now -> overlay?.let { closeOverlay(it, now) } }
@@ -203,13 +209,13 @@ class PageStack<P : Any>(
         }
     }
 
-    fun cutOverlay(only: Overlay) {
+    fun cutOverlay(only: Overlay, closes: Boolean = true) {
         onMain("PageStack.cutOverlay")
         ask { now ->
             if (overlay !== only) return@ask
-            if (!only.closing) closing(only, now)
+            if (closes && !only.closing) closing(only, now)
             only.drop()
-            dropOverlay()
+            dropOverlay(show = closes)
         }
     }
 
@@ -270,7 +276,12 @@ class PageStack<P : Any>(
     fun edgeBack(popKind: (Turn<P>) -> MoveKind) {
         onMain("PageStack.edgeBack")
         val o = overlay
-        ask { now -> if (overlay === o && o?.closing != true) back(now, false, popKind) }
+        ask { now ->
+            if (overlay !== o || o?.closing == true) return@ask
+            val b = o?.back
+            if (o != null && b != null && (o.moving(now) || b())) return@ask
+            back(now, false, popKind)
+        }
     }
 
     private fun back(now: Long, device: Boolean, popKind: (Turn<P>) -> MoveKind) {
@@ -780,7 +791,10 @@ class PageStack<P : Any>(
         }
         val o = overlay
         o?.rise(now)
-        if (o != null && o.done(now)) dropOverlay()
+        if (o != null && o.done(now)) {
+            o.hud?.dismiss()
+            dropOverlay()
+        }
         jumpSettled = overlay?.let { it.kind == OverKind.Jump && !it.closing && !it.moving(now) } == true
         val l = leaveOwed
         if (l != null && phase == Phase.Rest && overlay == null && opened == null && pending == 0 && asks.isEmpty() && !replayDue) leaveNow(l.first, l.second, now)

@@ -288,7 +288,7 @@ class EqPaneHostTest {
     }
 
     @Test
-    fun aTypeValuePickClosesItsSheetThenOpensTheEntry() {
+    fun aTypeValuePickHandsItsLiftToTheEntry() {
         val rows = TestEqRows(listOf(graphic(HP_SLOT, HP, List(LONG) { 0 })))
         val app = app(rows)
         val m = open(app)
@@ -311,23 +311,23 @@ class EqPaneHostTest {
         val lifted = m.pane.px
         assertTrue("premise: the sheet lifts the row", lifted > before)
         rule.runOnIdle { if (app.menuHost.act(0)) app.stack.accept() }
-        var low = lifted
+        val px = mutableListOf<Int>()
         var n = 0
         while (app.stack.overlay !== entry && n < OPEN_FRAMES) {
             frames(1)
-            low = minOf(low, m.pane.px)
+            px += m.pane.px
             n++
         }
         assertSame("the entry opens", entry, app.stack.overlay)
         val swap = now()
         repeat(OPEN_FRAMES) {
             frames(1)
-            low = minOf(low, m.pane.px)
+            px += m.pane.px
         }
         assertEquals("one entry", 1, rows.entries.size)
-        assertTrue("the row dips no lower than its place before the lift", low > before)
-        assertEquals("the row is lifted again under the entry", lifted, m.pane.px)
-        assertTrue("the entry rises one motion.scroll after the sheet leaves", abs(entry.start - swap - Tok.motion_scroll.toLong()) <= FRAME)
+        assertTrue("the entry rises at the swap", abs(entry.start - swap) <= FRAME)
+        assertTrue("the row stays lifted through the swap, $px against $lifted", px.all { it == lifted })
+        assertEquals("the row is lifted under the entry", lifted, m.pane.px)
     }
 
     @Test

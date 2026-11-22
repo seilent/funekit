@@ -111,6 +111,7 @@ class Overlay(val kind: OverKind, val hud: OverHud? = null, private val commit: 
     private var sheetFrom = SheetLook(1f, 1f, 1f)
     private var jumpFrom = JumpLook(0f, 1f, 0f)
     var lead = 0L
+    var back: (() -> Boolean)? = null
 
     fun open(now: Long) {
         start = now

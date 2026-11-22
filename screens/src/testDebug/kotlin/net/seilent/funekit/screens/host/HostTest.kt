@@ -118,6 +118,29 @@ class HostTest {
         override fun maxPct(): Int? = cap
     }
 
+    private class StepLevel(var pct: Int) : VolumeLevel {
+        val waits = mutableListOf<CompletableDeferred<Unit>>()
+
+        override fun percent(): Int = pct
+
+        override fun stepPct(): Int = STEP
+
+        override suspend fun step(detents: Int) {
+            val d = CompletableDeferred<Unit>()
+            waits += d
+            d.await()
+            pct = (pct + detents * STEP).coerceIn(0, PCT)
+        }
+
+        override suspend fun set(pct: Int) {
+            this.pct = pct
+        }
+
+        fun land() {
+            waits.removeAt(0).complete(Unit)
+        }
+    }
+
     private class FifoLevel(var pct: Int) : VolumeLevel {
         val sets = mutableListOf<Int>()
         val waits = ArrayDeque<Pair<Int, CompletableDeferred<Unit>>>()
@@ -346,6 +369,63 @@ class HostTest {
         assertTrue("premise: the drag set the level", level.sets.isNotEmpty())
         assertTrue("no set passes the cap: ${level.sets}", level.sets.all { it <= CAP })
         assertEquals(CAP, level.pct)
+    }
+
+    @Test
+    fun aVolumeOpenRefusedUnderAnotherOverlayShowsNoPlate() {
+        val app = app(Level(START, null))
+        rule.runOnIdle {
+            app.stack.open(Overlay(OverKind.Sheet))
+            app.host.openVolume(rule.mainClock.currentTime)
+        }
+        frames(OPEN_FRAMES)
+        assertEquals("the volume open is refused", OverKind.Sheet, app.stack.overlay?.kind)
+        assertEquals("no plate without its overlay", false, app.host.hud.shown)
+        rule.runOnIdle { app.stack.close() }
+        frames(OPEN_FRAMES)
+        rule.runOnIdle { app.host.openVolume(rule.mainClock.currentTime) }
+        frames(OPEN_FRAMES)
+        assertEquals("premise: the volume open lands", OverKind.Volume, app.stack.overlay?.kind)
+        assertTrue("the plate shows with its overlay", app.host.hud.visible(rule.mainClock.currentTime))
+    }
+
+    @Test
+    fun aPlateThatFadesOutOnItsOwnClearsItsShownState() {
+        val app = app(Level(START, null))
+        rule.runOnIdle { app.host.openVolume(rule.mainClock.currentTime) }
+        frames(OPEN_FRAMES)
+        var n = 0
+        while (app.stack.overlay != null && n < PLATE_FRAMES) {
+            frames(1)
+            n++
+        }
+        assertNull("premise: the plate fades out on its own", app.stack.overlay)
+        assertEquals("the plate's shown state ends with its overlay", false, app.host.hud.shown)
+        rule.runOnIdle { app.host.openVolume(rule.mainClock.currentTime) }
+        frames(CUT_FRAMES)
+        assertEquals(OverKind.Volume, app.stack.overlay?.kind)
+        assertTrue("the next open starts the plate again", app.host.hud.opening(rule.mainClock.currentTime))
+    }
+
+    @Test
+    fun aPressDuringThePlatesFadeRevivesItAtOnceAndShowsTheStepWhenItAnswers() {
+        val level = StepLevel(START)
+        val app = app(level)
+        rule.runOnIdle { app.host.openVolume(rule.mainClock.currentTime) }
+        frames(OPEN_FRAMES)
+        var n = 0
+        while (!app.host.hud.closing(rule.mainClock.currentTime) && n < PLATE_FRAMES) {
+            frames(1)
+            n++
+        }
+        assertTrue("premise: the plate fades with its overlay up", app.host.hud.closing(rule.mainClock.currentTime) && app.stack.overlay?.kind == OverKind.Volume)
+        rule.runOnIdle { app.host.volPress(1) }
+        frames(1)
+        assertTrue("the press revives the plate in its frame", !app.host.hud.closing(rule.mainClock.currentTime) && app.stack.overlay?.kind == OverKind.Volume)
+        assertEquals("the plate keeps its level while the step waits", START, app.host.hud.percent)
+        rule.runOnIdle { level.land() }
+        frames(1)
+        assertEquals("the plate shows the step once it answers", START + STEP, app.host.hud.percent)
     }
 
     private fun shot(): Bitmap {
@@ -645,6 +725,20 @@ class HostTest {
         assertTrue(sheet.hud.shown)
         assertTrue(rule.runOnIdle { app.host.fieldKey(1) })
         assertEquals(listOf("begin", "coarse 1"), e.calls)
+    }
+
+    @Test
+    fun anEdgeBackOnTheLyricsSheetWithAnEditLiveKeepsTheSheetAndRestoresTheEdit() {
+        val e = Edit().also { it.editing = true }
+        val app = lyricsApp(e)
+        rule.runOnIdle { app.host.openOffset() }
+        frames(OPEN_FRAMES)
+        assertFalse("premise: the live edit shows no hud", app.host.fieldSheet!!.hud.shown)
+        rule.runOnIdle { app.stack.edgeBack(app.host.popKind) }
+        frames(OPEN_FRAMES)
+        assertEquals("the sheet stays up", OverKind.Sheet, app.stack.overlay?.kind)
+        assertEquals("the edge restores the edit", listOf("restore"), e.calls)
+        assertFalse("the edit ends", e.editing)
     }
 
     @Test
@@ -1498,6 +1592,7 @@ class HostTest {
         private const val STALE = 7L
         private const val TOP_Y = 40f
         private const val FADE_FRAMES = 60
+        private const val PLATE_FRAMES = 400
         private const val POSITION = 5000L
         private const val RING_ONE_X = 120f
         private const val RING_Y = 398f

@@ -15,9 +15,11 @@ import net.seilent.funekit.Insets
 import net.seilent.funekit.Nav
 import net.seilent.funekit.Surface
 import net.seilent.funekit.Window
+import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.MenuForm
 import net.seilent.funekit.kit.motion.MoveKind
 import net.seilent.funekit.kit.motion.OverKind
+import net.seilent.funekit.kit.motion.Overlay
 import net.seilent.funekit.kit.stack.Phase
 import net.seilent.funekit.kit.stack.Turn
 import net.seilent.funekit.scale
@@ -337,6 +339,52 @@ class EqHostTest {
     }
 
     @Test
+    fun aHandOffDuringTheSheetsRiseKeepsTheLiftAndOpensTheEntryAtOnce() {
+        val pane = TestPane(outputs(LONG))
+        val app = app(pane, root = true)
+        val (_, m) = open(app, BT)
+        rule.runOnIdle { m.aimTo(m.base(1), AimKind.Into) }
+        frames(OPEN_FRAMES)
+        rule.runOnIdle {
+            m.down(LONG - 1, now())
+            m.cancel(now())
+        }
+        frames(OPEN_FRAMES)
+        frames(((Tok.scrollbar_hold + Tok.scrollbar_fade).toLong() / FRAME_MS).toInt() + 1)
+        val before = m.pane.px
+        assertEquals("premise: the list rests at its end", m.base(1), before)
+        assertEquals("premise: the page thumb is out", 0f, m.fade.at(now()))
+        val acts = rule.runOnIdle { app.host.actsOf(m) }
+        assertTrue(rule.runOnIdle { acts.sheet(SettingSheet(MenuForm.Sheet, TITLE, FOUR, lift = true, edit = "bt:${LONG - 1}", focus = 0), { true }) })
+        frames(CUT_FRAMES)
+        val sheet = app.stack.overlay
+        assertTrue("premise: the sheet rises", sheet != null && sheet.moving(now()))
+        assertEquals("premise: the sheet lifts the row", AimKind.Lift, m.aimKind)
+        val at = m.pane.px
+        val entry = Overlay(OverKind.Sheet)
+        rule.runOnIdle {
+            acts.handOff()
+            app.stack.open(entry)
+        }
+        frames(1)
+        val shown = app.stack.overlay
+        val swap = app.stack.clock
+        val thumb = m.fade.at(swap)
+        val px = mutableListOf(m.pane.px)
+        repeat(OPEN_FRAMES) {
+            frames(1)
+            px += m.pane.px
+        }
+        assertSame("the entry opens at the hand off", entry, shown)
+        assertEquals("the entry starts at the hand off", swap, entry.start)
+        assertEquals("the hand off shows no page thumb", 0f, thumb)
+        assertTrue("the row never falls below its place at the hand off, $px against $at", px.all { it >= at })
+        rule.runOnIdle { app.stack.close() }
+        frames(2 * OPEN_FRAMES)
+        assertEquals("the entry's close drops the lift", before, m.pane.px)
+    }
+
+    @Test
     fun aSheetTellsThePaneWhenItClosesWithNoPickOnly() {
         val app = app()
         val (_, m) = open(app)
@@ -649,6 +697,7 @@ class EqHostTest {
         private const val OPEN_FRAMES = 30
         private const val HOLD_FRAMES = 40
         private const val CUT_FRAMES = 2
+        private const val FRAME_MS = 16L
         private const val RESIZE_FRAMES = 2
         private const val RAMP_FRAMES = 3
         private val ID = EqId(EQ)

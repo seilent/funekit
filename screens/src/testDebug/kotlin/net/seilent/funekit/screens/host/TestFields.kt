@@ -29,6 +29,7 @@ open class TestFields(override val title: String, override val items: List<Strin
     var gone by mutableStateOf(false)
     var untyped: Set<Int> = emptySet()
     var refuses = false
+    var noHud = false
 
     override fun values(): List<String> = shown
 
@@ -46,7 +47,7 @@ open class TestFields(override val title: String, override val items: List<Strin
     }
 
     override fun adjust(now: Long): Boolean {
-        if (live < 0 || hud.shown) return false
+        if (live < 0 || hud.shown || noHud) return false
         hud.open(now, listOf(AdjustCol(shown[live], items[live])), title, shown[live])
         return true
     }

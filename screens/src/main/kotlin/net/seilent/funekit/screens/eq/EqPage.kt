@@ -87,6 +87,8 @@ interface EqActs {
 
     fun close()
 
+    fun handOff()
+
     fun launch(block: suspend () -> Unit)
 }
 

@@ -662,6 +662,20 @@ class SettingsHostTest {
     }
 
     @Test
+    fun anEdgeBackUnderARangeAdjustDoesNothing() {
+        val rows = hudRows()
+        val app = app(SettingsPage(ID, rows, HeaderLook.Settings))
+        val (_, m) = open(app)
+        tap(app, m, 0)
+        upRight()
+        rule.runOnIdle { app.stack.edgeBack(app.host.popKind) }
+        frames(OPEN_FRAMES)
+        assertEquals("the hud stays", OverKind.Adjust, app.stack.overlay?.kind)
+        assertEquals("no revert", listOf(mapOf(BAL to "1")), rows.sets)
+        assertEquals("the edit stays", BAL, m.editing)
+    }
+
+    @Test
     fun aBackTheStackDrivesSendsTheLevelAtOpenAsTheHudCloses() {
         val rows = hudRows()
         val app = app(SettingsPage(ID, rows, HeaderLook.Settings))
