@@ -316,6 +316,10 @@ class PageStack<P : Any>(
     private fun heldBack(h: Held?, now: Long, popKind: (Turn<P>) -> MoveKind) {
         val o = overlay
         when {
+            opened != null -> {
+                gate?.drop()
+                refuse(now)
+            }
             h != null && h.seq <= cutSeq -> touch(now)
             h != null && h.seq == seq && holdReversible(now) && o != null -> closeOverlay(o, now)
             h != null && h.seq == seq && holdReversible(now) -> reverse(now)
