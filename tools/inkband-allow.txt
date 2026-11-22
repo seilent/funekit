@@ -378,3 +378,13 @@ r1/press-0-volexit-down no funeOS reference in the set
 r1/press-0-volexit-held no funeOS reference in the set
 r1/press-0-volexit-up no funeOS reference in the set
 r1/track-toast-500 no funeOS reference in the set
+v1/eq-parametric the kit EQ pane rows: the reference set lacks the v0.4.2 eq: and eqrows: captures
+v1/eq-graphic the kit EQ pane rows: the reference set lacks the v0.4.2 eq: and eqrows: captures
+v1/eq-preamp-edit the kit EQ pane rows: the reference set lacks the v0.4.2 eq: and eqrows: captures
+r1/eq-parametric the kit EQ pane rows: the reference set lacks the v0.4.2 eq: and eqrows: captures
+r1/eq-graphic the kit EQ pane rows: the reference set lacks the v0.4.2 eq: and eqrows: captures
+r1/eq-preamp-edit the kit EQ pane rows: the reference set lacks the v0.4.2 eq: and eqrows: captures
+a105/eq-parametric the kit EQ pane rows: the reference set lacks the v0.4.2 eq: and eqrows: captures
+a105/eq-graphic the kit EQ pane rows: the reference set lacks the v0.4.2 eq: and eqrows: captures
+a105/eq-preamp-edit the kit EQ pane rows: the reference set lacks the v0.4.2 eq: and eqrows: captures
+a105/eq-parametric-large the kit EQ pane rows: the reference set lacks the v0.4.2 eq: and eqrows: captures
