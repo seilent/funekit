@@ -23,6 +23,12 @@ import net.seilent.funekit.kit.motion.NpForm
 import net.seilent.funekit.kit.rememberChrome
 import net.seilent.funekit.kit.stack.PagePaint
 import net.seilent.funekit.kit.touch.Arbiter
+import net.seilent.funekit.screens.eq.EqDraw
+import net.seilent.funekit.screens.eq.EqId
+import net.seilent.funekit.screens.eq.EqModel
+import net.seilent.funekit.screens.eq.EqPaint
+import net.seilent.funekit.screens.eq.EqPane
+import net.seilent.funekit.screens.eq.eqDraw
 import net.seilent.funekit.screens.music.MusicPage
 import net.seilent.funekit.screens.music.MusicSource
 import net.seilent.funekit.screens.music.PageModel
@@ -461,6 +467,21 @@ class SettingsType(types: MusicTypes) : PageType<SettingsModel, SettingsDraw>(ty
     override fun thumb(m: SettingsModel): PageThumb = PageThumb(m.fade, drawOf(m).thumbAt(m.pivot, m.pane.px) != null, m::poke)
 }
 
+class EqType(types: MusicTypes) : PageType<EqModel, EqDraw>(types) {
+    var chromes: Map<EqId, Chrome> by mutableStateOf(emptyMap())
+    var panes: Map<EqId, EqPane> by mutableStateOf(emptyMap())
+
+    override fun of(pm: PageModel?): EqModel? = pm as? EqModel
+
+    override fun chrome(m: EqModel): Chrome = chromes.getValue(m.id)
+
+    override fun draw(m: EqModel): EqDraw = env.let { eqDraw(m, it.page, it.measurer, it.fonts, it.density, it.covers, it.accent, it.accentOff) { panes.getValue(m.id) } }
+
+    override fun side(m: EqModel): PagePaint = EqPaint(drawOf(m), chrome(m), types.homeItem(m.id.header), env.bands, env.accent)
+
+    override fun thumb(m: EqModel): PageThumb = PageThumb(m.fade, drawOf(m).thumbAt(m.pivot, m.pane.px) != null, m::poke)
+}
+
 class MusicTypes(var env: MusicEnv, var homeItem: (String) -> Int, val chromes: MusicChromes, context: Context) {
     val music: List<MusicPageType<*, *>> = listOf(
         HubType(this, chromes.hub, chromes.search),
@@ -473,7 +494,8 @@ class MusicTypes(var env: MusicEnv, var homeItem: (String) -> Int, val chromes: 
         HistoryType(this, chromes.history),
     )
     val settings = SettingsType(this)
-    val all: List<PageType<*, *>> = music + settings
+    val eq = EqType(this)
+    val all: List<PageType<*, *>> = music + settings + eq
 
     fun of(pm: PageModel?): PageType<*, *>? = all.firstOrNull { it.owns(pm) }
 

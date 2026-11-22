@@ -4,6 +4,8 @@ import net.seilent.funekit.api.ArtRef
 import net.seilent.funekit.api.Kind
 import net.seilent.funekit.api.Listing
 import net.seilent.funekit.api.Row
+import net.seilent.funekit.screens.eq.EqId
+import net.seilent.funekit.screens.eq.EqModel
 import net.seilent.funekit.screens.music.Anchor
 import net.seilent.funekit.screens.music.MusicPage
 import net.seilent.funekit.screens.music.PageId
@@ -27,7 +29,13 @@ class MusicModels {
     var searchQuery = ""
 }
 
-fun pageModels(make: (Long, PageId) -> PageModel): PageModels = PageModels { e, p -> if (p is SettingsId) SettingsModel(e, p) else make(e, p) }
+fun pageModels(make: (Long, PageId) -> PageModel): PageModels = PageModels { e, p ->
+    when (p) {
+        is SettingsId -> SettingsModel(e, p)
+        is EqId -> EqModel(e, p)
+        else -> make(e, p)
+    }
+}
 
 class SavedMusic(val entry: MusicEntry, val pivot: Int, val anchor: Anchor?, val state: List<Any>?)
 
