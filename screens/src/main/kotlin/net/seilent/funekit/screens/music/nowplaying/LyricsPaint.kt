@@ -59,6 +59,7 @@ import java.text.Bidi
 import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
 
 private const val PEN = 64f
 private const val A256 = 256f
@@ -143,8 +144,11 @@ class LyricsInk(
 fun lyricAt(np: NowPlayingModel, now: Long, nanos: Long = npNanosAt(now)): LyricAt {
     val p = np.phone
     val pos = np.position(now, nanos)
-    if (p != null) return LyricAt(np.shownAt(now).track, np.shown.track, pos, true, p.playing && !np.seeking)
-    return LyricAt(np.shownAt(now).track, np.state.track, pos, false, np.state.playing && !np.seeking)
+    if (p != null) {
+        val pct = p.speed * SPEED_PCT
+        return LyricAt(np.shownAt(now).track, np.shown.track, pos, true, p.playing && !np.seeking, if (pct.isFinite()) pct.roundToInt().coerceAtLeast(1) else SPEED_PCT)
+    }
+    return LyricAt(np.shownAt(now).track, np.state.track, pos, false, np.state.playing && !np.seeking, np.state.anchor.speedPct)
 }
 
 class LyricRowDraw(val word: Word, val x64: Int, val base: Int, val alpha: Float, val x0: Int, val y0: Int, val x1: Int, val y1: Int)

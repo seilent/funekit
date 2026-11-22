@@ -28,6 +28,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -562,6 +563,52 @@ class NowPlayingTest {
         assertEquals(0L, m.lyrics.dim(1000))
         m.clear()
         assertEquals("a clear lands it on the own mode", one, m.lyrics.dim(1000))
+    }
+
+    private val lrc = "[00:01.00]one\n[00:02.00]two\n[00:03.00]three"
+
+    @Test
+    fun aLineWakeAtSpeedTwoComesAtHalfTheGap() {
+        val p = radio.copy(durationMs = DURATION, positionMs = 1400, speed = 2f)
+        val m = phoneShown(p)
+        m.lyrics.phoneLyrics = true
+        val id = requireNotNull(m.shown.track)
+        m.lyrics.begin(id)
+        m.lyrics.load(id, lrc, 0)
+        m.lyrics.toggle(0, variant = true)
+        val at = lyricAt(m, 0, 0)
+        assertEquals(200, at.speedPct)
+        assertEquals("a gap of 600 ms at speed 2 wakes 300 ms on", 300L, m.lyrics.due(at, 0, 0))
+    }
+
+    @Test
+    fun aPhoneSpeedThatIsNoNumberWakesAtTheNormalGap() {
+        val p = radio.copy(durationMs = DURATION, positionMs = 1400, speed = Float.NaN)
+        val m = phoneShown(p)
+        m.lyrics.phoneLyrics = true
+        val id = requireNotNull(m.shown.track)
+        m.lyrics.begin(id)
+        m.lyrics.load(id, lrc, 0)
+        m.lyrics.toggle(0, variant = true)
+        val at = lyricAt(m, 0, 0)
+        assertEquals("a speed that is no number reads as the normal rate", 100, at.speedPct)
+        assertEquals(600L, m.lyrics.due(at, 0, 0))
+        assertEquals("the position runs at the normal rate too", 2400L, p.position(1000))
+        assertThrows(IllegalArgumentException::class.java) { LyricAt(id, id, 1400, true, true, 0) }
+    }
+
+    @Test
+    fun anOwnAnchorAtSpeedTwoWakesAtHalfTheGap() {
+        val m = NowPlayingModel()
+        m.feed(PlayerState(track = 1, playing = true, anchor = Anchor(1400L * RATE / 1000, RATE, 0, true, DURATION, 200)))
+        m.sync(shown(1), 0)
+        m.lyrics.begin(1)
+        m.lyrics.load(1, lrc, 0)
+        m.lyrics.toggle(0)
+        val at = lyricAt(m, 0, 0)
+        assertEquals(1400L, at.pos)
+        assertEquals(200, at.speedPct)
+        assertEquals("a gap of 600 ms at speed 200 wakes 300 ms on", 300L, m.lyrics.due(at, 0, 0))
     }
 
     @Test

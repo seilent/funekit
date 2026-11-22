@@ -21,7 +21,8 @@ data class PhoneTrack(
 ) {
     fun position(elapsedMs: Long): Long {
         if (!playing) return positionMs
-        val p = positionMs + ((elapsedMs - positionAt) * speed).toLong()
+        val rate = if (speed.isFinite()) speed else 1f
+        val p = positionMs + ((elapsedMs - positionAt) * rate).toLong()
         return if (durationMs > 0) p.coerceIn(0L, durationMs) else maxOf(0L, p)
     }
 }

@@ -20,11 +20,16 @@ import kotlin.coroutines.CoroutineContext
 
 private const val MIRROR = 2L
 private const val WAKE_SLACK_MS = 25L
+internal const val SPEED_PCT = 100
 private val ONE = fxInt(1)
 
 private fun progress(e: Long, d: Long): Float = if (d > 0) (e.toFloat() / d).coerceIn(0f, 1f) else 1f
 
-class LyricAt(val shown: Long?, val playing: Long?, val pos: Long, val variant: Boolean, val running: Boolean)
+class LyricAt(val shown: Long?, val playing: Long?, val pos: Long, val variant: Boolean, val running: Boolean, val speedPct: Int = SPEED_PCT) {
+    init {
+        require(speedPct >= 1) { "speed $speedPct" }
+    }
+}
 
 sealed interface LyricView {
     data object Blank : LyricView
@@ -203,7 +208,7 @@ class LyricsModel {
         if (!shown(at.variant) || !at.running || index(at) == LYRIC_NONE) return -1
         val i = lineAt(at.pos)
         if (i + 1 >= lines.size) return -1
-        val due = seenAt + maxOf(1L, lines[i + 1].ms - at.pos)
+        val due = seenAt + maxOf(1L, (lines[i + 1].ms - at.pos) * SPEED_PCT / at.speedPct)
         if (due > now) return due
         return if (due + WAKE_SLACK_MS > now) due + WAKE_SLACK_MS else -1
     }
