@@ -964,6 +964,31 @@ class SettingsHostTest {
     }
 
     @Test
+    fun aValueSheetLiftLandsWithTheCloseAndStaysWhenTheSheetLeaves() {
+        val rows = Rows(pivot(*(0 until LIFT_ROWS).map { choice("r$it", FOUR) }.toTypedArray()))
+        val app = app(SettingsPage(ID, rows, HeaderLook.Settings), root = true)
+        val (_, m) = open(app)
+        rule.runOnIdle {
+            app.host.types.settings.drawOf(m)
+            m.down(LIFT_ROW, rule.mainClock.currentTime)
+            m.cancel(rule.mainClock.currentTime)
+        }
+        val before = m.pane.px
+        tap(app, m, LIFT_ROW)
+        assertTrue("premise: the lift moved the pane, ${m.pane.px} against $before", m.pane.px > before)
+        assertEquals("premise: the lift has landed", AimKind.None, m.aimKind)
+        rule.runOnIdle { app.stack.close() }
+        frames((Tok.motion_scroll * 3 / 2 / FRAME_MS).toInt() + 1)
+        assertTrue("premise: the sheet is still up", app.stack.overlay != null)
+        assertEquals("the row is back where it was one and a half scroll times after the close", before, m.pane.px)
+        assertEquals(AimKind.None, m.aimKind)
+        frames(OPEN_FRAMES)
+        assertNull("premise: the sheet is gone", app.stack.overlay)
+        assertEquals("and stays there once the sheet leaves", before, m.pane.px)
+        assertEquals(AimKind.None, m.aimKind)
+    }
+
+    @Test
     fun aHeldDownOnTheSettingsHeaderDuringItsExitHoldsTheBack() {
         val app = app(SettingsPage(ID, Rows(pivot(choice("a"))), HeaderLook.Settings), root = true)
         open(app)
