@@ -85,3 +85,6 @@ screens/src/main/kotlin/net/seilent/funekit/screens/eq/EqText.kt FX_BITS 16 fos 
 screens/src/main/kotlin/net/seilent/funekit/screens/eq/EqText.kt Q_STEP 10 fos player/ui/eqstore.cpp:2465 a q step is 0.10 (funeOS ui/eqstore.cpp step_band)
 screens/src/main/kotlin/net/seilent/funekit/screens/eq/EqText.kt FRESH_Q 140 fos player/ui/eqstore.cpp:198 a fresh band's q is 1.40 (funeOS ui/eqstore.cpp eq_flat, eq_fresh :203-210)
 screens/src/main/kotlin/net/seilent/funekit/screens/eq/EqText.kt PARSE_CAP 40 fos player/ui/eqstore.cpp:99 a typed number past 2^40 is refused (funeOS ui/eqstore.cpp parse_fixed)
+screens/src/main/kotlin/net/seilent/funekit/screens/eq/EqRowsPane.kt HALF 2 fos player/ui/eqpane.cpp:616 a row's baselines center its lines in the row, (h - asc - desc) / 2, and two title or value lines are the split form (funeOS ui/eqpane.cpp draw_row :634, :661)
+screens/src/main/kotlin/net/seilent/funekit/screens/eq/EqRowsPane.kt ENTRY_MAX 8 fos player/ui/app.cpp:8185 a typed eq value holds 1 to 8 characters (funeOS ui/app.cpp open_eq_value)
+screens/src/main/kotlin/net/seilent/funekit/screens/eq/EqRowsPane.kt NAME_MAX 64 fos player/ui/keyboard.h:23 a preset rename takes the keyboard's default max of 64 characters (funeOS ui/keyboard.h KbRequest, ui/app.cpp open_eq_rename :8160-8166)
