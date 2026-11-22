@@ -622,6 +622,21 @@ class SettingsHostTest {
     }
 
     @Test
+    fun aRangeEditWhoseRowLeavesTheShownPivotEndsKeepingItsLevel() {
+        val rows = hudRows().also { it.pivots.value = listOf(SettingPivot(OUT, listOf(balance(), choice("a"))), SettingPivot(SYS, listOf(choice("b")))) }
+        val app = app(SettingsPage(ID, rows, HeaderLook.Settings))
+        val (_, m) = open(app)
+        tap(app, m, 0)
+        upRight()
+        rule.runOnIdle { rows.pivots.value = listOf(SettingPivot(OUT, listOf(choice("a"))), SettingPivot(SYS, listOf(choice("b"), balance(1)))) }
+        frames(CLOSE_FRAMES)
+        assertEquals("premise: the page stays on output", 0, m.pivot)
+        assertNull("the hud drops at once", app.stack.overlay)
+        assertNull(m.editing)
+        assertEquals(listOf(mapOf(BAL to "1")), rows.sets)
+    }
+
+    @Test
     fun aStepStopsAtTheRowsMax() {
         val rows = hudRows(balance(LIMIT - 1))
         val app = app(SettingsPage(ID, rows, HeaderLook.Settings))

@@ -596,7 +596,7 @@ class MusicHost<S : Any> internal constructor(
         }
     }
 
-    private fun writable(m: SettingsModel, k: String): Boolean = m.groups.any { p -> p.rows.any { it.key == k && SettingFlag.ReadOnly !in it.flags } }
+    private fun writable(m: SettingsModel, k: String): Boolean = m.rows(m.pivot).any { it.key == k && SettingFlag.ReadOnly !in it.flags }
 
     private fun editEnd() {
         val (o, m) = edit ?: return
