@@ -30,6 +30,7 @@ import net.seilent.funekit.kit.motion.MoveKind
 import net.seilent.funekit.kit.motion.OverKind
 import net.seilent.funekit.kit.stack.Phase
 import net.seilent.funekit.kit.stack.Turn
+import net.seilent.funekit.kit.touch.Arbiter
 import net.seilent.funekit.px
 import net.seilent.funekit.scale
 import net.seilent.funekit.screens.music.ALBUMS
@@ -305,6 +306,63 @@ class DeleteHostTest {
         tapRow(1)
         frames(OPEN_FRAMES)
         assertEquals("a press after the rise runs the delete", listOf(s.id), asked)
+    }
+
+    private fun confirm(t: SheetTarget): Int {
+        sheet(t)
+        pick(DELETE)
+        val yes = rule.runOnIdle { app.menu.items.indexOf(DELETE_SONG) }
+        rule.runOnIdle { app.menu.focus.set(yes, app.menu.items.size, rule.mainClock.currentTime, false) }
+        frames(CUT_FRAMES)
+        assertTrue("premise: the confirm rests", rule.runOnIdle { stack.overlay.let { it != null && it.kind == OverKind.Dlg && !it.closing && !it.moving(rule.mainClock.currentTime) } })
+        assertEquals("premise: the focus is on the yes", yes, rule.runOnIdle { app.menu.focus.row })
+        return yes
+    }
+
+    private fun gone() = until("the confirm goes") { stack.overlay == null }
+
+    @Test
+    fun aDeleteRunsOnlyOnTheConfirmsYesAndOnce() {
+        launch()
+        val s = song()
+        on(screen(MusicPage.Hub))
+        val t = songTarget(s)
+        val yes = confirm(t)
+        assertTrue("the open runs no delete", asked.isEmpty())
+        val slop = Arbiter(page).slop.slop
+        rule.onRoot().performTouchInput {
+            down(Offset(page.widthPx / 2f, rowY(yes)))
+            moveBy(Offset(slop, 0f))
+            moveBy(Offset(slop, 0f))
+            up()
+        }
+        frames(OPEN_FRAMES)
+        assertTrue("a focus and a sliding press run no delete", asked.isEmpty())
+        assertTrue("premise: the confirm stays up", rule.runOnIdle { stack.overlay.let { it != null && it.kind == OverKind.Dlg && !it.closing } })
+        rule.runOnIdle { stack.back(app.host.popKind) }
+        gone()
+        assertTrue("a back runs no delete", asked.isEmpty())
+        confirm(t)
+        val scrim = page.heightPx - SCRIM_UP
+        assertTrue("premise: the tap is below the dialog", rule.runOnIdle { !app.menu.kept && scrim > app.menu.dialogEnd(page) })
+        rule.onRoot().performTouchInput {
+            down(Offset(page.widthPx / 2f, scrim))
+            up()
+        }
+        gone()
+        assertTrue("the scrim runs no delete", asked.isEmpty())
+        confirm(t)
+        rule.runOnIdle { app.host.closeLibrarySheets() }
+        gone()
+        assertTrue("the library close runs no delete", asked.isEmpty())
+        confirm(t)
+        tapRow(yes)
+        frames(CUT_FRAMES)
+        assertEquals("the yes runs the delete", listOf(s.id), asked)
+        assertTrue("premise: the confirm closes", rule.runOnIdle { stack.overlay?.closing == true })
+        tapRow(yes)
+        gone()
+        assertEquals("a second yes in the close fade runs none", listOf(s.id), asked)
     }
 
     @Test
@@ -719,6 +777,7 @@ class DeleteHostTest {
         private const val MAX_FRAMES = 400
         private const val LETTERS = 40
         private const val HALF = 0.5f
+        private const val SCRIM_UP = 40f
         private const val PICK_IMAGE = "pick image"
         private const val QUERY = "rain"
     }
