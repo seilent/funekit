@@ -25,8 +25,11 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Density
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import net.seilent.funekit.Case
+import net.seilent.funekit.Role
 import net.seilent.funekit.Roles
 import net.seilent.funekit.Scale
+import net.seilent.funekit.Weight
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.motion.Curves
 import net.seilent.funekit.kit.motion.lerp
@@ -223,25 +226,44 @@ fun DrawScope.chrome(c: Chrome, now: Long) {
     }
 }
 
-fun chromeOf(m: TextMeasurer, fonts: FontFamily.Resolver, s: Scale, density: Density, header: String, pivots: List<String>, covers: Covers?): Chrome {
+fun chromeOf(
+    m: TextMeasurer,
+    fonts: FontFamily.Resolver,
+    s: Scale,
+    density: Density,
+    header: String,
+    pivots: List<String>,
+    covers: Covers?,
+    headerCase: Case = Roles.pageHeader.case,
+    headerWeight: Weight = Roles.pageHeader.weight,
+): Chrome {
     fun ink(n: String, std: Boolean, bold: Boolean): Word {
         val role = if (bold) Roles.pivotActive else Roles.pivotInactive
         return m.word(n, role, roleStyle(role, s, density, Ink.white, ppu = if (std) s.stdPpu else s.ppu), fonts, density, covers)
     }
+    val h = Role(Roles.pageHeader.size, headerWeight, headerCase, Roles.pageHeader.alpha, Roles.pageHeader.tracking)
     return Chrome(
         s,
-        m.word(header, Roles.pageHeader, roleStyle(Roles.pageHeader, s, density, Ink.header, ppu = s.stdPpu), fonts, density, covers),
+        m.word(header, h, roleStyle(h, s, density, Ink.header, ppu = s.stdPpu), fonts, density, covers),
         pivots.map { PivotInk(ink(it, false, false), ink(it, false, true), ink(it, true, false), ink(it, true, true)) },
     )
 }
 
 @Composable
-fun rememberChrome(s: Scale, header: String, pivots: List<String>): Chrome {
+fun rememberChrome(
+    s: Scale,
+    header: String,
+    pivots: List<String>,
+    headerCase: Case = Roles.pageHeader.case,
+    headerWeight: Weight = Roles.pageHeader.weight,
+): Chrome {
     val m = rememberTextMeasurer()
     val fonts = LocalFontFamilyResolver.current
     val density = LocalDensity.current
     val covers = rememberCovers()
-    return remember(s, header, pivots, density, fonts, covers) { chromeOf(m, fonts, s, density, header, pivots, covers) }
+    return remember(s, header, pivots, headerCase, headerWeight, density, fonts, covers) {
+        chromeOf(m, fonts, s, density, header, pivots, covers, headerCase, headerWeight)
+    }
 }
 
 @Composable

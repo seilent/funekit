@@ -11,6 +11,7 @@ import androidx.compose.ui.text.font.createFontFamilyResolver
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import net.seilent.funekit.Nav
+import net.seilent.funekit.Roles
 import net.seilent.funekit.Scale
 import net.seilent.funekit.Surface
 import net.seilent.funekit.kit.Accent
@@ -99,7 +100,7 @@ class EqRowsSheetTest {
             m.cancel(0L)
             m.edit(m.rows(shown)[i].key, false)
         }
-        val c = settingsChrome(chromeOf(measurer, fonts, s, density, EQ, m.names, covers), HeaderLook.Page).also { it.select(shown) }
+        val c = settingsChrome(chromeOf(measurer, fonts, s, density, EQ, m.names, covers, Roles.settingsItem.case, Roles.settingsItem.weight), HeaderLook.Page).also { it.select(shown) }
         val rec = Regions(board, dev.w, dev.h, s)
         val bands = groundBands(dev.h, false)
         val img = ImageBitmap(dev.w, dev.h)

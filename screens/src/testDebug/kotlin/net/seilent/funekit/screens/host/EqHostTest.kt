@@ -9,6 +9,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.text.font.FontWeight
 import kotlinx.coroutines.awaitCancellation
 import net.seilent.funekit.Insets
 import net.seilent.funekit.Nav
@@ -120,6 +121,15 @@ class EqHostTest {
         val (_, m) = open(app, BT)
         assertEquals("the page opens at its pivot", 1, m.pivot)
         assertEquals("the chrome shows the pivot", 1, app.host.eqChromes.getValue(ID).active)
+    }
+
+    @Test
+    fun anEqPageHeaderTakesTheSettingsRowCaseAndWeight() {
+        val app = app()
+        open(app)
+        val h = app.host.eqChromes.getValue(ID).header
+        assertEquals("the eq header takes the row case", "EQ", h.text)
+        assertEquals("the eq header takes the row weight", FontWeight.Bold, h.runs[0].layout.layoutInput.style.fontWeight)
     }
 
     @Test

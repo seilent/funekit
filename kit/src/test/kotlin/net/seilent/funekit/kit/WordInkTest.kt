@@ -20,10 +20,12 @@ import androidx.compose.ui.text.style.TextMotion
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.TextUnit
+import net.seilent.funekit.Case
 import net.seilent.funekit.Insets
 import net.seilent.funekit.Nav
 import net.seilent.funekit.Roles
 import net.seilent.funekit.Surface
+import net.seilent.funekit.Weight
 import net.seilent.funekit.Window
 import net.seilent.funekit.scale
 import org.junit.Assert.assertEquals
@@ -184,6 +186,16 @@ class WordInkTest {
         val end1 = rightEdge(s, x - gap, y0, y1, inactive)
         val start2 = leftEdge(s, x, y0, y1, inactive)
         assertEquals(6.6f * 3, start2 - end1, 0.6f)
+    }
+
+    @Test
+    fun aChromeMeasuresItsHeaderInTheCaseAndWeightItIsGiven() {
+        val eq = chromeOf(measurer, fonts, a105, unitDensity, "eq", emptyList(), null, Case.Upper, Weight.Bold)
+        assertEquals("the header takes its case", "EQ", eq.header.text)
+        assertEquals("the header takes its weight", FontWeight.Bold, eq.header.runs[0].layout.layoutInput.style.fontWeight)
+        val page = chromeOf(measurer, fonts, a105, unitDensity, "eq", emptyList(), null)
+        assertEquals("the default header is the page header's case", "eq", page.header.text)
+        assertEquals("the default header is the page header's weight", FontWeight.Light, page.header.runs[0].layout.layoutInput.style.fontWeight)
     }
 
     @Test

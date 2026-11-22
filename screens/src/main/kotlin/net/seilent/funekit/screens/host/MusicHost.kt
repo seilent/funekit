@@ -2035,7 +2035,7 @@ fun <S : Any> rememberMusicHost(
         key(page.id) {
             val pivots = page.pane.pivots.value
             val names = remember(pivots) { pivots.map { it.name } }
-            val c = rememberChrome(env.page, page.id.header, names)
+            val c = rememberChrome(env.page, page.id.header, names, Roles.settingsItem.case, Roles.settingsItem.weight)
             page.id to (pivots to remember(c) { settingsChrome(c, HeaderLook.Page) })
         }
     }
