@@ -1,5 +1,8 @@
 package net.seilent.funekit.screens.music.nowplaying
 
+import net.seilent.funekit.screens.settings.FieldPress
+import net.seilent.funekit.screens.settings.FieldSheet
+
 interface OffsetEdit {
     val shownMs: Int
     val editing: Boolean
@@ -21,14 +24,20 @@ interface OffsetEdit {
 
 private const val MAX_MS = 60000
 
-class OffsetSheet(val edit: OffsetEdit) {
-    val hud = AdjustHud()
+class OffsetSheet(val edit: OffsetEdit) : FieldSheet {
+    override val hud = AdjustHud()
 
-    val items: List<String> get() = listOf(ITEM)
+    override val title: String get() = TITLE
+
+    override val items: List<String> get() = listOf(ITEM)
 
     fun value(): String = text(edit.shownMs)
 
-    fun mark(): Int = if (edit.editing) 0 else -1
+    override fun values(): List<String> = listOf(value())
+
+    override fun mixed(): List<Boolean> = listOf(false)
+
+    override fun field(): Int = if (edit.editing) 0 else -1
 
     private fun cols(): List<AdjustCol> {
         val v = edit.shownMs
@@ -39,18 +48,22 @@ class OffsetSheet(val edit: OffsetEdit) {
         if (hud.shown) hud.set(cols(), value())
     }
 
-    fun press(i: Int) {
-        if (i != 0 || edit.editing) return
-        edit.begin()
+    override fun press(i: Int): FieldPress {
+        if (i == 0 && !edit.editing) edit.begin()
+        return if (edit.editing) FieldPress.Field else FieldPress.None
     }
 
-    fun adjust(now: Long): Boolean {
+    override fun pickLive(i: Int) {}
+
+    override fun typed(i: Int): Boolean = i == 0
+
+    override fun adjust(now: Long): Boolean {
         if (!edit.editing || hud.shown) return false
         hud.open(now, cols(), TITLE, value())
         return true
     }
 
-    fun tap(h: AdjustHit) {
+    override fun tap(h: AdjustHit) {
         when (h) {
             AdjustHit.Exit -> {
                 edit.keep()
@@ -63,14 +76,14 @@ class OffsetSheet(val edit: OffsetEdit) {
         refresh()
     }
 
-    fun hold(i: Int): Boolean {
+    override fun hold(i: Int): Boolean {
         if (i != 0) return false
         if (edit.editing) edit.restore()
         edit.entry(false)
         return true
     }
 
-    fun holdNumber(): Boolean {
+    override fun holdNumber(): Boolean {
         if (!hud.shown) return false
         edit.keep()
         hud.dismiss()
@@ -78,13 +91,13 @@ class OffsetSheet(val edit: OffsetEdit) {
         return true
     }
 
-    fun scrim(): Boolean {
+    override fun scrim(): Boolean {
         if (!edit.editing) return false
         edit.restore()
         return true
     }
 
-    fun back(): Boolean {
+    override fun back(): Boolean {
         if (hud.shown) {
             edit.restore()
             hud.dismiss()
@@ -95,14 +108,14 @@ class OffsetSheet(val edit: OffsetEdit) {
         return true
     }
 
-    fun key(d: Int): Boolean {
+    override fun key(d: Int): Boolean {
         if (!hud.shown) return false
         edit.coarse(d)
         refresh()
         return true
     }
 
-    fun dismiss() {
+    override fun dismiss() {
         hud.dismiss()
         if (edit.editing) edit.restore()
         edit.end()

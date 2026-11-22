@@ -168,6 +168,8 @@ import net.seilent.funekit.screens.music.overlay.sheetItems
 import net.seilent.funekit.screens.music.overlay.sheetWords
 import net.seilent.funekit.screens.music.pivotBy
 import net.seilent.funekit.screens.music.queue.QueueModel
+import net.seilent.funekit.screens.settings.FieldPress
+import net.seilent.funekit.screens.settings.FieldSheet
 import net.seilent.funekit.screens.settings.RangeAdjust
 import net.seilent.funekit.screens.settings.SettingFlag
 import net.seilent.funekit.screens.settings.SettingKind
@@ -292,11 +294,7 @@ class MusicHost<S : Any> internal constructor(
     private val exits = ArrayList<OwedExit>()
     private var exitEpoch = 0
     private val backdrop = NpBackdrop()
-    private var offset by mutableStateOf<OffsetSheet?>(null)
-    private var offsetOver: Overlay? = null
-    private var offsetTrack: Long? = null
-    private var offsetEntry = false
-    private var offsetWant by mutableStateOf(false)
+    private var fieldRun by mutableStateOf<FieldRun?>(null)
     private val volSets = mutableListOf<Int>()
     private var settingsRead: Map<SettingsId, List<SettingPivot>> = emptyMap()
     private var menuOpens = 0
@@ -461,6 +459,7 @@ class MusicHost<S : Any> internal constructor(
     }
 
     fun drop(s: S) {
+        if (fieldRun?.owner == s) fieldEnd()
         pageEntry(s)?.let { models.drop(it) }
     }
 
@@ -1241,16 +1240,27 @@ class MusicHost<S : Any> internal constructor(
         }
         LaunchedEffect(stack) {
             snapshotFlow { stack.overlay }.collect { o ->
-                val sheet = offset ?: return@collect
-                if (o === offsetOver || offsetEntry) return@collect
-                offset = null
-                offsetTrack = null
-                offsetOver = null
-                sheet.dismiss()
+                val r = fieldRun ?: return@collect
+                if (o === r.over || r.entry) return@collect
+                fieldRun = null
+                r.sheet.dismiss()
             }
         }
         LaunchedEffect(stack) {
-            snapshotFlow { np.lyrics.revision to offsetGone() }.collect { (_, gone) -> if (gone) offsetEnd() }
+            snapshotFlow { np.lyrics.revision to (fieldRun?.ends?.invoke() == true) }.collect { (_, gone) -> if (gone) fieldEnd() }
+        }
+        LaunchedEffect(stack) {
+            var seen: FieldRun? = null
+            snapshotFlow { fieldRun?.let { Triple(it, it.sheet.values(), it.sheet.field()) } }.collect { t ->
+                val r = t?.first
+                if (r !== seen) {
+                    seen = r
+                    return@collect
+                }
+                if (r == null || stack.overlay !== r.over) return@collect
+                if (r.sheet.field() < 0 && r.sheet.hud.shown) r.sheet.hud.dismiss()
+                fieldSync(r)
+            }
         }
         LaunchedEffect(volDue, stack.phase) {
             if (!volDue || stack.phase != Phase.Rest) return@LaunchedEffect
@@ -1418,31 +1428,33 @@ class MusicHost<S : Any> internal constructor(
             return
         }
         if (over == null || menuOvers.none { it.first === over }) return
-        val sheet = offset?.takeIf { offsetOver === over }
-        if (sheet != null) {
-            val src = remember(sheet) {
+        val f = fieldRun?.takeIf { it.over === over }
+        if (f != null) {
+            val src = remember(f) {
                 object : AdjustSource {
-                    override val hud = sheet.hud
+                    override val hud = f.sheet.hud
 
-                    override fun tap(h: AdjustHit) = offsetTap(sheet, h)
+                    override fun tap(h: AdjustHit) = fieldTap(f, h)
 
-                    override fun back() = offsetBack(sheet)
+                    override fun back() = fieldBack(f)
 
-                    override fun number(side: Int): Boolean = offsetNumber(sheet)
+                    override fun number(side: Int): Boolean = fieldNumber(f)
                 }
             }
-            if (sheet.hud.shown) {
+            if (f.sheet.hud.shown) {
                 AdjustOverlayHost(src)
                 return
             }
-            val want = offsetWant
-            LaunchedEffect(over, sheet, want) {
+            val want = f.want
+            LaunchedEffect(over, f, want) {
                 if (!want) return@LaunchedEffect
                 while (!over.closing && over.moving(now())) withFrameMillis { }
-                if (over.closing || offset !== sheet) return@LaunchedEffect
-                offsetWant = false
-                sheet.adjust(now())
+                if (over.closing || fieldRun !== f) return@LaunchedEffect
+                f.want = false
+                f.sheet.adjust(now())
             }
+            BackHandler(f.live && f.choice == null) { fieldDrop(f) }
+            BackHandler(f.choice != null) { choiceBack(f) }
         }
         MenuOverlay(
             menuHost.menu, over, env.page, env.a, env.now,
@@ -1542,7 +1554,7 @@ class MusicHost<S : Any> internal constructor(
         if (np.variant && l.phoneLyrics) l.turn(on, false) else lyricsToggle()
     }
 
-    val offsetSheet: OffsetSheet? get() = offset
+    val fieldSheet: FieldSheet? get() = fieldRun?.sheet
 
     internal val npBackdrop: NpBackdrop get() = backdrop
 
@@ -1560,19 +1572,26 @@ class MusicHost<S : Any> internal constructor(
 
     fun openOffset() {
         val track = offsetOpen() ?: return
-        offsetEnd()
+        fieldEnd()
         val p = phone?.track
         val edit = (if (np.variant && p != null) app.phoneLyrics?.offset(p) else app.offset(track)) ?: return
-        val sheet = OffsetSheet(edit)
-        offset = sheet
-        offsetTrack = track
-        offsetEntry = false
-        offsetMenu(sheet)
+        fieldOpen(FieldRun(OffsetSheet(edit), null, { offsetOpen() == track }) { offsetGone(track) })
     }
+
+    internal fun openFields(sheet: FieldSheet): Boolean {
+        if (stack.phase != Phase.Rest || stack.overlay != null || fieldRun?.entry == false) return false
+        fieldEnd()
+        val top = stack.top
+        val pivot = shownPivot(top)
+        fieldOpen(FieldRun(sheet, top, { stack.top == top && !sheet.gone() }) { sheet.gone() || shownPivot(top) != pivot })
+        return true
+    }
+
+    private fun shownPivot(s: S?): String? = settingsOf(s)?.let { it.names.getOrNull(it.pivot) }
 
     private fun offsetOpen(): Long? {
         if (!np.lyricsView || stack.top?.let(::isNp) != true || stack.overlay != null || stack.phase != Phase.Rest) return null
-        if (offset != null && !offsetEntry) return null
+        if (fieldRun?.entry == false) return null
         val l = np.lyrics
         val t = now()
         if (l.fading(t)) l.land(np.variant)
@@ -1580,93 +1599,185 @@ class MusicHost<S : Any> internal constructor(
         return if (!l.shown(np.variant) || l.track != track || l.lines.isEmpty()) null else track
     }
 
-    private fun offsetGone(): Boolean {
-        if (offset == null) return false
+    private fun offsetGone(track: Long): Boolean {
         val l = np.lyrics
-        val track = offsetTrack
         return !np.lyricsView || !l.shown(np.variant) || np.shown.track != track || l.track != track || !(l.pending || l.lines.isNotEmpty())
     }
 
-    private fun offsetCells(sheet: OffsetSheet, m: Menu = menuHost.menu) {
-        m.cells(listOf(sheet.value()), listOf(false), sheet.mark())
+    private fun fieldOpen(r: FieldRun) {
+        fieldRun = r
+        fieldMenu(r, -1)
     }
 
-    private fun offsetMenu(sheet: OffsetSheet) {
-        offsetOver = openMenu(
-            MenuForm.Sheet, OffsetSheet.TITLE, sheet.items, readOnly = false, mixedRow = -1, lead = 0, confirm = false,
-            act = { i ->
-                sheet.press(i)
-                offsetCells(sheet)
-                offsetWant = sheet.edit.editing
-                false
+    private fun fieldCells(r: FieldRun, m: Menu = menuHost.menu) {
+        m.cells(r.sheet.values(), r.sheet.mixed(), r.sheet.field())
+    }
+
+    private fun fieldSync(r: FieldRun) {
+        r.live = r.sheet.field() >= 0
+        if (!r.live) r.want = false
+        if (r.choice == null && !r.entry) fieldCells(r)
+    }
+
+    private fun fieldMenu(r: FieldRun, at: Int) {
+        val sheet = r.sheet
+        r.over = openMenu(
+            MenuForm.Sheet, sheet.title, sheet.items, readOnly = false, mixedRow = -1, lead = 0, confirm = false,
+            act = { i -> fieldPick(r, i) },
+            setup = { m ->
+                fieldCells(r, m)
+                r.live = sheet.field() >= 0
+                if (at >= 0) m.focus.set(at, sheet.items.size, now(), false)
             },
-            setup = { m -> offsetCells(sheet, m) },
-            hold = { i -> offsetHold(sheet, i) },
-            scrim = { sheet.scrim().also { offsetCells(sheet) } },
+            hold = { i -> fieldHold(r, i) },
+            scrim = { sheet.scrim().also { fieldSync(r) } },
         )
     }
 
-    private fun offsetRaise(sheet: OffsetSheet) {
-        offsetCells(sheet)
-        stack.swapMenu(offsetOver) { _ -> offsetCells(sheet) }
-    }
-
-    private fun offsetTap(sheet: OffsetSheet, h: AdjustHit) {
-        sheet.tap(h)
-        if (h == AdjustHit.Exit) offsetRaise(sheet)
-    }
-
-    private fun offsetBack(sheet: OffsetSheet) {
-        if (sheet.back()) offsetRaise(sheet)
-    }
-
-    private fun offsetNumber(sheet: OffsetSheet): Boolean {
-        offsetEntry = true
-        stack.cut()
-        return sheet.holdNumber()
-    }
-
-    private fun offsetHold(sheet: OffsetSheet, i: Int): Boolean {
-        if (i != 0) return false
-        offsetEntry = true
-        stack.cut()
-        return sheet.hold(i)
-    }
-
-    fun offsetReturn(adjust: Boolean) {
-        val sheet = offset ?: return
-        scope.launch(FailFast) {
-            while (stack.overlay != null || stack.moving) withFrameMillis { }
-            if (offset !== sheet) return@launch
-            if (offsetOpen() != offsetTrack) {
-                offsetEnd()
-                return@launch
+    private fun fieldPick(r: FieldRun, i: Int): Boolean {
+        menuHost.menu.focus.set(i, r.sheet.items.size, now(), false)
+        if (r.live) {
+            r.sheet.pickLive(i)
+        } else {
+            when (val p = r.sheet.press(i)) {
+                FieldPress.Field -> r.want = true
+                is FieldPress.Choice -> fieldChoice(r, p.sheet, i)
+                FieldPress.None -> Unit
             }
-            offsetEntry = false
-            offsetMenu(sheet)
-            if (adjust) {
-                sheet.press(0)
-                offsetCells(sheet)
-                sheet.adjust(now())
+        }
+        fieldSync(r)
+        return false
+    }
+
+    private fun fieldChoice(r: FieldRun, c: SettingSheet, i: Int) {
+        require(c.form == MenuForm.Sheet) { "a field sheet's choice is a sheet" }
+        r.choice = c
+        r.at = i
+        r.act = menuHost.act
+        r.hold = menuHost.hold
+        r.scrim = menuHost.scrim
+        stack.swapMenu(r.over) { t ->
+            val menu = menuHost.menu
+            menu.open(MenuForm.Sheet, c.title, c.items, t)
+            frameMenu(menu, env.page, false) { liftRow(stack.top) }
+            if (c.focus >= 0) menu.value(c.focus, c.mark, c.wrap, t)
+            menuHost.act = { k ->
+                r.sheet.choose(k)
+                choiceEnd(r)
+                false
+            }
+            menuHost.hold = null
+            menuHost.scrim = {
+                choiceBack(r)
+                true
             }
         }
     }
 
-    fun offsetKey(d: Int): Boolean {
-        val sheet = offset ?: return false
-        if (!sheet.key(d)) return false
-        offsetCells(sheet)
+    private fun choiceBack(r: FieldRun) {
+        r.sheet.back()
+        choiceEnd(r)
+    }
+
+    private fun choiceEnd(r: FieldRun) {
+        fieldSync(r)
+        stack.swapMenu(r.over) { t ->
+            val menu = menuHost.menu
+            r.choice = null
+            menu.open(MenuForm.Sheet, r.sheet.title, r.sheet.items, t)
+            frameMenu(menu, env.page, false) { liftRow(stack.top) }
+            fieldCells(r, menu)
+            menu.focus.set(r.at, r.sheet.items.size, t, false)
+            menuHost.act = r.act
+            menuHost.hold = r.hold
+            menuHost.scrim = r.scrim
+        }
+    }
+
+    private fun fieldRaise(r: FieldRun) {
+        fieldSync(r)
+        stack.swapMenu(r.over) { _ -> fieldCells(r) }
+    }
+
+    private fun fieldTap(r: FieldRun, h: AdjustHit) {
+        r.sheet.tap(h)
+        if (h == AdjustHit.Exit) fieldRaise(r) else fieldSync(r)
+    }
+
+    private fun fieldBack(r: FieldRun) {
+        if (r.sheet.back()) fieldRaise(r) else fieldSync(r)
+    }
+
+    private fun fieldDrop(r: FieldRun) {
+        val kept = r.sheet.back()
+        fieldSync(r)
+        if (!kept) stack.back(true, popKind)
+    }
+
+    private fun fieldEntry(r: FieldRun, i: Int) {
+        r.held = i
+        r.entry = true
+        r.gen++
+    }
+
+    private fun fieldNumber(r: FieldRun): Boolean {
+        val i = r.sheet.field()
+        if (!r.sheet.typed(i)) return false
+        fieldEntry(r, i)
+        stack.cut()
+        return fieldHeld(r, r.sheet.holdNumber())
+    }
+
+    private fun fieldHold(r: FieldRun, i: Int): Boolean {
+        if (!r.sheet.typed(i)) return false
+        fieldEntry(r, i)
+        stack.cut()
+        return fieldHeld(r, r.sheet.hold(i))
+    }
+
+    private fun fieldHeld(r: FieldRun, held: Boolean): Boolean {
+        fieldSync(r)
+        if (!held) fieldEnd()
+        return held
+    }
+
+    fun fieldReturn(adjust: Boolean) {
+        val r = fieldRun ?: return
+        if (!r.entry) return
+        if (stack.overlay === r.over) {
+            r.entry = false
+            return
+        }
+        val gen = r.gen
+        scope.launch(FailFast) {
+            while (stack.overlay != null || stack.moving) withFrameMillis { }
+            if (fieldRun !== r || r.gen != gen) return@launch
+            if (!r.reopens()) {
+                fieldEnd()
+                return@launch
+            }
+            r.entry = false
+            fieldMenu(r, r.held)
+            if (adjust) {
+                r.sheet.press(r.held)
+                fieldSync(r)
+                r.sheet.adjust(now())
+            }
+        }
+    }
+
+    fun fieldKey(d: Int): Boolean {
+        val r = fieldRun ?: return false
+        if (!r.sheet.key(d)) return false
+        fieldSync(r)
         return true
     }
 
-    fun offsetEnd() {
-        val sheet = offset ?: return
-        offset = null
-        offsetTrack = null
-        offsetEntry = false
-        val over = offsetOver
-        offsetOver = null
-        sheet.dismiss()
+    fun fieldEnd() {
+        val r = fieldRun ?: return
+        fieldRun = null
+        val over = r.over
+        r.sheet.dismiss()
         if (over != null && stack.overlay === over) stack.close()
     }
 
@@ -1789,6 +1900,20 @@ fun <S : Any> rememberMusicHost(
 
 private class Blurred(val art: ImageBitmap, val scale: Scale, val picture: NpPicture?) {
     fun of(a: ImageBitmap?, s: Scale): Boolean = art === a && scale == s
+}
+
+private class FieldRun(val sheet: FieldSheet, val owner: Any?, val reopens: () -> Boolean, val ends: () -> Boolean) {
+    var over: Overlay? = null
+    var entry = false
+    var gen = 0
+    var held = 0
+    var at = 0
+    var want by mutableStateOf(false)
+    var live by mutableStateOf(false)
+    var choice by mutableStateOf<SettingSheet?>(null)
+    var act: (Int) -> Boolean = { false }
+    var hold: ((Int) -> Boolean)? = null
+    var scrim: () -> Boolean = { false }
 }
 
 private class AdjustDown {

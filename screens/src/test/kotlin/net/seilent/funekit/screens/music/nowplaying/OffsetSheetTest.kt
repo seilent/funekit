@@ -175,8 +175,8 @@ class OffsetSheetTest {
         assertEquals("+300 MS", s.value())
         e.shownMs = -1200
         assertEquals("-1200 MS", s.value())
-        assertEquals(-1, s.mark())
+        assertEquals(-1, s.field())
         e.editing = true
-        assertEquals(0, s.mark())
+        assertEquals(0, s.field())
     }
 }

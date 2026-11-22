@@ -636,14 +636,14 @@ class HostTest {
         rule.runOnIdle { app.host.openOffset() }
         frames(2)
         assertEquals(OverKind.Sheet, app.stack.overlay?.kind)
-        val sheet = app.host.offsetSheet!!
+        val sheet = app.host.fieldSheet!!
         rule.runOnIdle { app.menuHost.act(0) }
         frames(1)
         assertTrue(e.editing)
         assertFalse(sheet.hud.shown)
         frames(OPEN_FRAMES)
         assertTrue(sheet.hud.shown)
-        assertTrue(rule.runOnIdle { app.host.offsetKey(1) })
+        assertTrue(rule.runOnIdle { app.host.fieldKey(1) })
         assertEquals(listOf("begin", "coarse 1"), e.calls)
     }
 
@@ -656,11 +656,11 @@ class HostTest {
         assertTrue(rule.runOnIdle { app.menuHost.hold!!(0) })
         frames(CUT_FRAMES)
         assertNull(app.stack.overlay)
-        assertNotNull(app.host.offsetSheet)
-        rule.runOnIdle { app.host.offsetReturn(true) }
+        assertNotNull(app.host.fieldSheet)
+        rule.runOnIdle { app.host.fieldReturn(true) }
         frames(3)
         assertEquals(OverKind.Sheet, app.stack.overlay?.kind)
-        assertTrue(app.host.offsetSheet!!.hud.shown)
+        assertTrue(app.host.fieldSheet!!.hud.shown)
         assertEquals(listOf("entry false", "begin"), e.calls)
     }
 
@@ -672,23 +672,23 @@ class HostTest {
         frames(OPEN_FRAMES)
         rule.runOnIdle { app.menuHost.act(0) }
         frames(OPEN_FRAMES)
-        assertTrue(app.host.offsetSheet!!.hud.shown)
+        assertTrue(app.host.fieldSheet!!.hud.shown)
         shot()
         val x = px(Tok.edge, page.stdPpu) + 2f
         val y = px(page.board.overlayRingY, page.stdPpu) - 2f
         rule.onRoot().performTouchInput { down(Offset(x, y)) }
         var n = 0
-        while (app.host.offsetSheet!!.hud.shown && n < OPEN_FRAMES) {
+        while (app.host.fieldSheet!!.hud.shown && n < OPEN_FRAMES) {
             frames(1)
             n++
         }
-        assertFalse(app.host.offsetSheet!!.hud.shown)
+        assertFalse(app.host.fieldSheet!!.hud.shown)
         frames(CUT_FRAMES)
         assertNull(app.stack.overlay)
         rule.onRoot().performTouchInput { up() }
         frames(OPEN_FRAMES)
         assertNull(app.stack.overlay)
-        assertNotNull(app.host.offsetSheet)
+        assertNotNull(app.host.fieldSheet)
         assertEquals(listOf("begin", "keep", "entry true"), e.calls)
     }
 
@@ -705,7 +705,7 @@ class HostTest {
         frames(OPEN_FRAMES)
         rule.onRoot().performTouchInput { up() }
         frames(CUT_FRAMES)
-        assertTrue(app.host.offsetSheet!!.hud.shown)
+        assertTrue(app.host.fieldSheet!!.hud.shown)
         assertEquals(OverKind.Sheet, app.stack.overlay?.kind)
         assertEquals(listOf("begin"), e.calls)
     }
@@ -720,10 +720,10 @@ class HostTest {
         frames(CUT_FRAMES)
         rule.runOnIdle { app.stack.push(TestScreen.Music(MusicEntry(app.stack.entry(), MusicPage.Album(ALBUM))), MoveKind.T2) }
         frames(OPEN_FRAMES)
-        rule.runOnIdle { app.host.offsetReturn(false) }
+        rule.runOnIdle { app.host.fieldReturn(false) }
         frames(CUT_FRAMES)
         assertNull(app.stack.overlay)
-        assertNull(app.host.offsetSheet)
+        assertNull(app.host.fieldSheet)
         assertEquals(listOf("entry false", "end"), e.calls)
     }
 
@@ -733,12 +733,12 @@ class HostTest {
         val app = lyricsApp(e)
         rule.runOnIdle { app.host.openOffset() }
         frames(OPEN_FRAMES)
-        val held = app.host.offsetSheet
+        val held = app.host.fieldSheet
         assertTrue(rule.runOnIdle { app.menuHost.hold!!(0) })
         frames(CUT_FRAMES)
         rule.runOnIdle { app.host.openOffset() }
         frames(OPEN_FRAMES)
-        assertNotSame(held, app.host.offsetSheet)
+        assertNotSame(held, app.host.fieldSheet)
         assertEquals(OverKind.Sheet, app.stack.overlay?.kind)
         assertEquals(listOf("entry false", "end"), e.calls)
     }
@@ -752,19 +752,19 @@ class HostTest {
         assertTrue(rule.runOnIdle { app.menuHost.hold!!(0) })
         frames(CUT_FRAMES)
         rule.runOnIdle {
-            app.host.offsetReturn(false)
+            app.host.fieldReturn(false)
             app.host.openOffset()
         }
-        val next = app.host.offsetSheet
+        val next = app.host.fieldSheet
         frames(OPEN_FRAMES)
         assertNotNull(next)
-        assertSame(next, app.host.offsetSheet)
+        assertSame(next, app.host.fieldSheet)
         assertEquals(OverKind.Sheet, app.stack.overlay?.kind)
         assertEquals(listOf("entry false", "end"), e.calls)
         assertTrue(rule.runOnIdle { app.menuHost.hold!!(0) })
         frames(OPEN_FRAMES)
         assertNull(app.stack.overlay)
-        assertSame(next, app.host.offsetSheet)
+        assertSame(next, app.host.fieldSheet)
         assertEquals(listOf("entry false", "end", "entry false"), e.calls)
     }
 
@@ -774,10 +774,10 @@ class HostTest {
         val app = lyricsApp(e)
         rule.runOnIdle { app.host.openOffset() }
         frames(OPEN_FRAMES)
-        assertNotNull(app.host.offsetSheet)
+        assertNotNull(app.host.fieldSheet)
         rule.runOnIdle { app.lyricsOn = false }
         frames(OPEN_FRAMES)
-        assertNull(app.host.offsetSheet)
+        assertNull(app.host.fieldSheet)
         assertNull(app.stack.overlay)
         assertEquals(listOf("end"), e.calls)
     }
@@ -794,12 +794,12 @@ class HostTest {
         frames(OPEN_FRAMES)
         rule.runOnIdle {
             app.stack.back(app.host.popKind)
-            app.host.offsetReturn(false)
+            app.host.fieldReturn(false)
         }
         frames(2 * OPEN_FRAMES)
         assertTrue(app.host.isNp(app.stack.top!!))
         assertEquals(OverKind.Sheet, app.stack.overlay?.kind)
-        assertNotNull(app.host.offsetSheet)
+        assertNotNull(app.host.fieldSheet)
         assertEquals(listOf("entry false"), e.calls)
     }
 
@@ -811,10 +811,10 @@ class HostTest {
             app.host.openOffset()
             app.host.openOffset()
         }
-        val sheet = app.host.offsetSheet
+        val sheet = app.host.fieldSheet
         frames(OPEN_FRAMES)
         assertNotNull(sheet)
-        assertSame(sheet, app.host.offsetSheet)
+        assertSame(sheet, app.host.fieldSheet)
         assertEquals(OverKind.Sheet, app.stack.overlay?.kind)
         assertEquals(emptyList<String>(), e.calls)
     }
@@ -843,7 +843,7 @@ class HostTest {
         frames(2)
         rule.runOnIdle { app.music.np.sync(NpShown.of(listOf(song(2))), rule.mainClock.currentTime) }
         frames(OPEN_FRAMES)
-        assertNull(app.host.offsetSheet)
+        assertNull(app.host.fieldSheet)
         assertNull(app.stack.overlay)
         assertEquals(listOf("begin", "restore", "end"), e.calls)
     }
@@ -856,7 +856,7 @@ class HostTest {
         frames(OPEN_FRAMES)
         rule.runOnIdle { app.music.np.lyrics.begin(2) }
         frames(OPEN_FRAMES)
-        assertNull(app.host.offsetSheet)
+        assertNull(app.host.fieldSheet)
         assertEquals(listOf("end"), e.calls)
     }
 
@@ -868,7 +868,7 @@ class HostTest {
         frames(OPEN_FRAMES)
         rule.runOnIdle { app.host.showLyrics(false) }
         frames(OPEN_FRAMES)
-        assertNull(app.host.offsetSheet)
+        assertNull(app.host.fieldSheet)
         assertEquals(listOf("end"), e.calls)
     }
 
@@ -883,7 +883,7 @@ class HostTest {
             app.music.np.lyrics.load(1, "one\ntwo", 0)
         }
         frames(OPEN_FRAMES)
-        assertNull(app.host.offsetSheet)
+        assertNull(app.host.fieldSheet)
         assertEquals(listOf("end"), e.calls)
     }
 
@@ -892,10 +892,10 @@ class HostTest {
         val app = lyricsApp(Edit())
         rule.runOnIdle { app.host.openOffset() }
         frames(OPEN_FRAMES)
-        val sheet = app.host.offsetSheet
+        val sheet = app.host.fieldSheet
         rule.runOnIdle { app.music.np.lyrics.begin(1) }
         frames(OPEN_FRAMES)
-        assertSame(sheet, app.host.offsetSheet)
+        assertSame(sheet, app.host.fieldSheet)
         assertEquals(OverKind.Sheet, app.stack.overlay?.kind)
     }
 
@@ -913,7 +913,7 @@ class HostTest {
         assertEquals(Phase.Enter, app.stack.phase)
         assertTrue(app.host.isNp(app.stack.top!!))
         rule.runOnIdle { app.host.openOffset() }
-        assertNull(app.host.offsetSheet)
+        assertNull(app.host.fieldSheet)
     }
 
     private class Copy(private val off: OffsetEdit? = null) : PhoneLyrics {
@@ -1112,7 +1112,7 @@ class HostTest {
             app.music.np.feed(track)
             app.host.openOffset()
         }
-        assertNull(app.host.offsetSheet)
+        assertNull(app.host.fieldSheet)
     }
 
     @Test
@@ -1123,7 +1123,7 @@ class HostTest {
             app.music.np.lyrics.load(1, "one\ntwo", 0)
             app.host.openOffset()
         }
-        assertNull(app.host.offsetSheet)
+        assertNull(app.host.fieldSheet)
     }
 
     @Test
@@ -1133,7 +1133,7 @@ class HostTest {
         rule.runOnIdle { app.host.openOffset() }
         frames(CUT_FRAMES)
         assertNull(app.stack.overlay)
-        assertNull(app.host.offsetSheet)
+        assertNull(app.host.fieldSheet)
     }
 
     @Test
@@ -1203,7 +1203,7 @@ class HostTest {
         rule.runOnIdle { app.host.openOffset() }
         frames(2)
         assertNull(app.stack.overlay)
-        assertNull(app.host.offsetSheet)
+        assertNull(app.host.fieldSheet)
     }
 
     @Test
@@ -1224,14 +1224,51 @@ class HostTest {
         frames(OPEN_FRAMES)
         rule.runOnIdle { app.menuHost.act(0) }
         frames(OPEN_FRAMES)
-        val sheet = app.host.offsetSheet!!
+        val sheet = app.host.fieldSheet!!
         assertTrue(sheet.hud.shown)
         rule.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
         frames(OPEN_FRAMES)
         assertFalse(sheet.hud.shown)
-        assertSame(sheet, app.host.offsetSheet)
+        assertSame(sheet, app.host.fieldSheet)
         assertEquals(OverKind.Sheet, app.stack.overlay?.kind)
         assertEquals(listOf("begin", "restore"), e.calls)
+    }
+
+    @Test
+    fun backOnTheLyricsSheetWithItsEditOpenDropsItAndASecondBackClosesIt() {
+        val e = Edit()
+        val app = lyricsApp(e)
+        rule.runOnIdle { app.host.openOffset() }
+        frames(2)
+        val sheet = app.host.fieldSheet!!
+        rule.runOnIdle { app.menuHost.act(0) }
+        frames(1)
+        assertTrue("premise: the edit is open", e.editing)
+        rule.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
+        frames(OPEN_FRAMES)
+        assertEquals("the sheet stays up", OverKind.Sheet, app.stack.overlay?.kind)
+        assertFalse("the hud stays shut", sheet.hud.shown)
+        assertEquals(listOf("begin", "restore"), e.calls)
+        rule.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
+        frames(OPEN_FRAMES)
+        assertEquals("a second back closes the sheet", null, app.stack.overlay?.kind)
+        assertEquals(listOf("begin", "restore", "end"), e.calls)
+    }
+
+    @Test
+    fun aBackAfterTheEditEndedOutsideTheHostClosesTheSheet() {
+        val e = Edit()
+        val app = lyricsApp(e)
+        rule.runOnIdle { app.host.openOffset() }
+        frames(2)
+        rule.runOnIdle { app.menuHost.act(0) }
+        frames(1)
+        assertTrue("premise: the edit is open", e.editing)
+        e.editing = false
+        rule.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
+        frames(OPEN_FRAMES)
+        assertEquals("the back closes the sheet", null, app.stack.overlay?.kind)
+        assertEquals(listOf("begin", "end"), e.calls)
     }
 
     @Test
@@ -1242,12 +1279,12 @@ class HostTest {
         frames(OPEN_FRAMES)
         rule.runOnIdle { app.menuHost.act(0) }
         frames(OPEN_FRAMES)
-        val sheet = app.host.offsetSheet!!
+        val sheet = app.host.fieldSheet!!
         assertTrue(sheet.hud.shown)
         tap(2f, 2f)
         frames(2)
         assertFalse(sheet.hud.shown)
-        assertSame(sheet, app.host.offsetSheet)
+        assertSame(sheet, app.host.fieldSheet)
         assertTrue(app.stack.overlay!!.moving(rule.mainClock.currentTime))
         assertEquals(listOf("begin", "keep"), e.calls)
     }
@@ -1260,7 +1297,7 @@ class HostTest {
         frames(OPEN_FRAMES)
         rule.runOnIdle { app.stack.close() }
         frames(OPEN_FRAMES)
-        assertNull(app.host.offsetSheet)
+        assertNull(app.host.fieldSheet)
         assertEquals(listOf("end"), e.calls)
     }
 
@@ -1271,7 +1308,7 @@ class HostTest {
         rule.runOnIdle { app.host.openOffset() }
         frames(2)
         assertNull(app.stack.overlay)
-        assertNull(app.host.offsetSheet)
+        assertNull(app.host.fieldSheet)
     }
 
     @Test
