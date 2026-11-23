@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import net.seilent.funekit.FuneTheme
 import net.seilent.funekit.Insets
 import net.seilent.funekit.Nav
+import net.seilent.funekit.Scale
 import net.seilent.funekit.Surface
 import net.seilent.funekit.Window
 import net.seilent.funekit.kit.Ink
@@ -269,11 +270,84 @@ class QuickplayFrontTest {
         assertEquals(BG, left(0))
     }
 
+    private class Pane(val s: Scale) {
+        val unit = Density(1f)
+        val fonts = createFontFamilyResolver(RuntimeEnvironment.getApplication())
+        val m = TextMeasurer(fonts, unit, LayoutDirection.Ltr)
+
+        fun ink(status: String = ""): QpInk = qpInk(m, fonts, s, unit, status)
+
+        fun draw(l: QpLayout, ink: QpInk, status: String, waiting: Boolean = false): IntArray {
+            val q = QuickplayState().also {
+                it.waiting = waiting
+                it.status = status
+            }
+            val img = ImageBitmap(s.widthPx, s.heightPx)
+            CanvasDrawScope().draw(unit, LayoutDirection.Ltr, Canvas(img), Size(s.widthPx.toFloat(), s.heightPx.toFloat())) {
+                drawRect(Ink.bg)
+                quickplay(l, ink, q, qpBoxes(m, fonts, l, unit, null), 0L, q.look(l, 0L), true)
+            }
+            return IntArray(s.widthPx * s.heightPx).also { img.readPixels(it) }
+        }
+
+        fun band(px: IntArray, base: Int, above: Int): List<Int> = (base - above until base + 2).flatMap { y -> (0 until s.widthPx).map { px[y * s.widthPx + it] and RGB } }
+    }
+
+    private fun statusShows(status: String) {
+        val p = Pane(s)
+        val ink = p.ink(status)
+        assertEquals(listOf(status), ink.hint.map { it.text.lowercase() })
+        val l = QpLayout(s, qpTiles(QpData.EMPTY), ink.hint.size)
+        val px = p.draw(l, ink, status)
+        assertTrue("the status is drawn where the hint goes", p.band(px, l.pxOf(l.hintTop(0)), HINT).any { it != BG })
+        val hint = QpLayout(s, qpTiles(QpData.EMPTY), p.ink().hint.size)
+        assertTrue("no second hint line is drawn", p.band(px, hint.pxOf(hint.hintTop(1)), HINT).all { it == BG })
+    }
+
+    @Test
+    fun aCardOutShowsNoCardWhereTheHintGoes() = statusShows("no card")
+
+    @Test
+    fun aCardErrorShowsCardError() = statusShows("card error")
+
+    @Test
+    fun pinsHideTheStatusAsTheyHideTheHint() {
+        val p = Pane(s)
+        val pinned = QpLayout(s, qpTiles(QpData(null, items(3, QpKind.Album), emptyList(), emptyList())), p.ink().hint.size)
+        val status = "no card"
+        assertTrue(p.draw(pinned, p.ink(), "").contentEquals(p.draw(pinned, p.ink(status), status)))
+    }
+
+    @Test
+    fun aWaitingPaneDrawsNoStatus() {
+        val p = Pane(s)
+        val status = "no card"
+        val ink = p.ink(status)
+        val l = QpLayout(s, qpTiles(QpData.EMPTY), ink.hint.size)
+        val px = p.draw(l, ink, status, waiting = true)
+        assertTrue(p.band(px, l.pxOf(l.hintTop(0)), HINT).all { it == BG })
+    }
+
+    @Test
+    fun aTwoLineStatusMovesTheHistoryTop() {
+        val p = Pane(s)
+        val one = p.ink("no card")
+        val two = p.ink(LONG_STATUS)
+        assertTrue("premise: the status wraps, ${two.hint.map { it.text }}", two.hint.size > 1)
+        val l1 = QpLayout(s, qpTiles(QpData.EMPTY), one.hint.size)
+        val l2 = QpLayout(s, qpTiles(QpData.EMPTY), two.hint.size)
+        val step = l2.hintTop(1) - l2.hintTop(0)
+        assertEquals(l1.sectionTop(1) + step * (two.hint.size - 1), l2.sectionTop(1))
+        val px = p.draw(l2, two, LONG_STATUS)
+        assertTrue("the history header is drawn at its moved top", p.band(px, l2.pxOf(l2.sectionTop(1)), HEAD).any { it != BG })
+    }
+
     private companion object {
         const val RGB = 0xFFFFFF
         const val BG = 0x111111
         const val HEAD = 8
         const val HINT = 6
         const val COVER = "cover.jpg"
+        const val LONG_STATUS = "no card in the player slot"
     }
 }

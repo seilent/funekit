@@ -29,11 +29,13 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.Density
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import net.seilent.funekit.Scale
 import net.seilent.funekit.api.ArtRef
 import net.seilent.funekit.api.Busy
+import net.seilent.funekit.api.Card
 import net.seilent.funekit.api.Disconnected
 import net.seilent.funekit.api.FailFast
 import net.seilent.funekit.api.Listing
@@ -118,6 +120,15 @@ private const val CUT_GROW = 2
 private const val PEEK = 1
 
 private val cutPaint by lazy { Paint().apply { colorFilter = ColorFilter.tint(Ink.bg) } }
+
+internal const val CARD_OUT = "no card"
+internal const val CARD_ERROR = "card error"
+
+internal fun cardStatus(card: Card): String = when (card) {
+    Card.Out -> CARD_OUT
+    Card.Error -> CARD_ERROR
+    Card.Present, Card.Held -> ""
+}
 
 fun playlistsSub(lists: Int, none: HomeEntry): String = if (lists > 0) playlistsCount(lists) else none.sub
 
@@ -557,7 +568,7 @@ fun rememberHomeState(
     val menu = rememberHomeMenu(words, now)
     val homeTouch = rememberListTouch(Kind.List, scale, edge = Edge.Lead)
     val qpSet = remember(qp.data) { qpTiles(qp.data) }
-    val qpWords = remember(scale, density, fonts) { qpInk(measurer, fonts, scale, density) }
+    val qpWords = remember(scale, density, fonts, qp.status) { qpInk(measurer, fonts, scale, density, qp.status) }
     val qpLayout = remember(qpSet, scale, qpWords) { QpLayout(scale, qpSet, qpWords.hint.size) }
     val qpBox = remember(qpLayout, density, fonts, covers) { qpBoxes(measurer, fonts, qpLayout, density, covers) }
     val qpTouch = rememberListTouch(Kind.Quickplay, scale, qp::forget)
@@ -572,9 +583,16 @@ fun rememberHomeState(
     LaunchedEffect(source) {
         val src = source ?: return@LaunchedEffect
         qp.waiting = qp.data.generation == 0L
-        src.ready.collect {
-            if (it) return@collect
-            qp.waiting = true
+        var out = false
+        combine(src.ready, snapshotFlow { qp.status.isNotEmpty() }) { ready, card -> ready to card }.collect { (ready, card) ->
+            val was = out
+            out = card
+            when {
+                card -> qp.waiting = false
+                !ready -> qp.waiting = true
+                was -> qp.waiting = qp.data.generation == 0L
+                else -> return@collect
+            }
             poke()
         }
     }
@@ -656,6 +674,14 @@ fun <S : Any> HomeLayer(
     val homeLive = atHome && rest && !pan.front
     val frontLive = atHome && rest && pan.front
     LaunchedEffect(stack.turn) { if (stack.turn == null) state.landed() }
+    LaunchedEffect(music, qp) {
+        val lib = music?.library
+        if (lib == null) {
+            qp.status = ""
+            return@LaunchedEffect
+        }
+        lib.state.collect { qp.status = cardStatus(it.card) }
+    }
     fun qpHold(tile: QpTile): Boolean {
         if (tile.section == QP_PLAYING) return false
         val q = tile.item

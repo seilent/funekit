@@ -6,10 +6,16 @@ import android.view.MotionEvent
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Canvas
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -30,13 +36,17 @@ import net.seilent.funekit.Surface
 import net.seilent.funekit.Window
 import net.seilent.funekit.api.ArtRef
 import net.seilent.funekit.api.Busy
+import net.seilent.funekit.api.Card
 import net.seilent.funekit.api.Kind
 import net.seilent.funekit.api.Library
+import net.seilent.funekit.api.LibraryState
 import net.seilent.funekit.api.Listing
+import net.seilent.funekit.api.NoCard
 import net.seilent.funekit.api.Player
 import net.seilent.funekit.api.pins
 import net.seilent.funekit.fake.FakeSet
 import net.seilent.funekit.gen.Tok
+import net.seilent.funekit.kit.Ink
 import net.seilent.funekit.kit.MenuForm
 import net.seilent.funekit.kit.home.HomeEntry
 import net.seilent.funekit.kit.home.HomeGeo
@@ -51,6 +61,7 @@ import net.seilent.funekit.kit.quickplay.QpLayout
 import net.seilent.funekit.kit.quickplay.QuickplayState
 import net.seilent.funekit.kit.quickplay.peekHit
 import net.seilent.funekit.kit.quickplay.qpTiles
+import net.seilent.funekit.kit.quickplay.quickplay
 import net.seilent.funekit.kit.stack.Phase
 import net.seilent.funekit.kit.touch.Swipe
 import net.seilent.funekit.scale
@@ -679,6 +690,93 @@ class HomeHostTest {
         assertFalse(qp.pan.shown)
     }
 
+    private fun drawn(s: HomeState): IntArray {
+        val l = s.qpLayout
+        val img = ImageBitmap(l.s.widthPx, l.s.heightPx)
+        rule.runOnUiThread {
+            CanvasDrawScope().draw(Density(1f), LayoutDirection.Ltr, Canvas(img), Size(l.s.widthPx.toFloat(), l.s.heightPx.toFloat())) {
+                drawRect(Ink.bg)
+                quickplay(l, s.qpWords, s.quickplay, s.qpBox, 0L, s.quickplay.look(l, 0L), true)
+            }
+        }
+        return IntArray(l.s.widthPx * l.s.heightPx).also { img.readPixels(it) }
+    }
+
+    @Test
+    fun aCardOutDrawsNoCardWhereTheHintGoesOverALoadedPane() {
+        val card = MutableStateFlow(LibraryState(Card.Out))
+        val lib = object : Library by fake.library {
+            override val state: StateFlow<LibraryState> get() = card
+        }
+        val loaded = QpData(null, emptyList(), items(TILES, QpKind.Song), items(TILES, QpKind.Album))
+        val waits = object : QpSource {
+            override val changes: Flow<Any> = flowOf(Unit)
+
+            override val ready: Flow<Boolean> = flowOf(false)
+
+            override suspend fun load(tiles: Int): QpData = loaded
+
+            override suspend fun art(ref: ArtRef, maxSide: Int): ByteArray? = null
+
+            override suspend fun play(item: QpItem) = true
+        }
+        launcher(waits, MusicSource(lib, player, fake.quickplay, fake.favorites, fake.playlists, fake.lyrics))
+        val s = state
+        assertEquals("premise: the pane holds its data", loaded, s.quickplay.data)
+        assertEquals(CARD_OUT, s.quickplay.status)
+        val px = drawn(s)
+        val w = s.qpLayout.s.widthPx
+        val base = s.qpLayout.pxOf(s.qpLayout.hintTop(0))
+        val bg = Ink.bg.toArgb() and RGB
+        assertTrue("no card draws where the hint goes", (base - HINT_PX until base + 2).any { y -> (0 until w).any { px[y * w + it] and RGB != bg } })
+    }
+
+    @Test
+    fun aColdStartWithTheCardOutShowsNoCardInPlaceOfTheWaitingForm() {
+        val card = MutableStateFlow(LibraryState(Card.Out))
+        val lib = object : Library by fake.library {
+            override val state: StateFlow<LibraryState> get() = card
+        }
+        val cold = object : QpSource {
+            override val changes: Flow<Any> = flowOf(Unit)
+
+            override val ready: Flow<Boolean> = flowOf(false)
+
+            override suspend fun load(tiles: Int): QpData = throw NoCard()
+
+            override suspend fun art(ref: ArtRef, maxSide: Int): ByteArray? = null
+
+            override suspend fun play(item: QpItem) = true
+        }
+        launcher(cold, MusicSource(lib, player, fake.quickplay, fake.favorites, fake.playlists, fake.lyrics))
+        assertEquals(CARD_OUT, state.quickplay.status)
+        assertFalse("the card status leaves the waiting form", state.quickplay.waiting)
+        assertEquals(QpData.EMPTY, state.quickplay.data)
+        card.value = LibraryState(Card.Present)
+        settle()
+        assertTrue("a mounted card with no library waits again", state.quickplay.waiting)
+    }
+
+    @Test
+    fun theHostFeedsTheCardStateFromTheLibrary() {
+        val card = MutableStateFlow(LibraryState(Card.Out))
+        val lib = object : Library by fake.library {
+            override val state: StateFlow<LibraryState> get() = card
+        }
+        launcher(qpSource(QpData.EMPTY), MusicSource(lib, player, fake.quickplay, fake.favorites, fake.playlists, fake.lyrics))
+        assertEquals(CARD_OUT, state.quickplay.status)
+        assertEquals("the pane lays out the status line", QpLayout(home, qpTiles(QpData.EMPTY), 1).sectionTop(1), state.qpLayout.sectionTop(1))
+        assertEquals(listOf(CARD_OUT), state.qpWords.hint.map { it.text.lowercase() })
+        card.value = LibraryState(Card.Error)
+        settle()
+        assertEquals(CARD_ERROR, state.quickplay.status)
+        assertEquals(listOf(CARD_ERROR), state.qpWords.hint.map { it.text.lowercase() })
+        card.value = LibraryState(Card.Held)
+        settle()
+        assertEquals("a held card shows the hint", "", state.quickplay.status)
+        assertTrue(state.qpWords.hint.size > 1)
+    }
+
     private fun blank() = Offset(a105Page.widthPx - BLANK, a105Page.heightPx - BLANK)
 
     companion object {
@@ -688,6 +786,8 @@ class HomeHostTest {
         private const val TAP_MS = 50L
         private const val TILES = 3
         private const val LOAD_TILES = 8
+        private const val RGB = 0xFFFFFF
+        private const val HINT_PX = 6
         private const val FRAME = 16L
         private const val BLANK = 10f
         private const val UNFOLD_W = 1080

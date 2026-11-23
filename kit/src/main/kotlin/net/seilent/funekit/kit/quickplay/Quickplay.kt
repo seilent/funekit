@@ -127,13 +127,13 @@ fun qpHintLines(text: String, max64: Int, width64: (String) -> Int): List<String
     return out
 }
 
-fun qpInk(m: TextMeasurer, fonts: FontFamily.Resolver, s: Scale, density: Density): QpInk {
+fun qpInk(m: TextMeasurer, fonts: FontFamily.Resolver, s: Scale, density: Density, status: String = ""): QpInk {
     val sp = s.stdPpu
     val hs = roleStyle(Roles.quickplayHeader, s, density, Ink.white, ppu = sp)
     val hint = keptText(Roles.qpHint, s)
     val ts = roleStyle(hint, s, density, Ink.white, ppu = sp)
     val w = textWidth(hint, ts, fonts, density, null)
-    val lines = qpHintLines(QP_HINT, pen64(Tok.qpHintW, sp)) { pen64(w(it)) }
+    val lines = qpHintLines(status.ifEmpty { QP_HINT }, pen64(Tok.qpHintW, sp)) { pen64(w(it)) }
     return QpInk(
         QP_HEADERS.map { m.word(it, Roles.quickplayHeader, hs, fonts, density, null) },
         m.word(QP_NOW, Roles.quickplayHeader, hs, fonts, density, null),
@@ -405,6 +405,14 @@ class QuickplayState {
         set(v) {
             if (waits == v) return
             waits = v
+            revision++
+        }
+    private var said by mutableStateOf("")
+    var status: String
+        get() = said
+        set(v) {
+            if (said == v) return
+            said = v
             revision++
         }
 
