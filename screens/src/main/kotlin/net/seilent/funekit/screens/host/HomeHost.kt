@@ -446,9 +446,10 @@ class HomeState internal constructor(
         }
     }
 
-    fun shown(atHome: Boolean, rest: Boolean, modal: Boolean): HomeShown {
+    fun shown(atHome: Boolean, rest: Boolean, over: OverKind?): HomeShown {
         val p = qp.pan
         val home = atHome && rest && !p.shown
+        val modal = over == OverKind.Sheet || over == OverKind.Dlg
         return HomeShown(home, atHome && p.shown, atHome && p.front && p.still, atHome && p.front && modal, home && gate)
     }
 
@@ -655,7 +656,7 @@ fun <S : Any> HomeLayer(
     val atHome = stack.top == null
     val rest = stack.phase == Phase.Rest
     val over = stack.overlay
-    val shown = state.shown(atHome, rest, over?.kind == OverKind.Sheet || over?.kind == OverKind.Dlg)
+    val shown = state.shown(atHome, rest, over?.kind)
     val ringLit = host.feed != null
     val scale = state.scale
     val ink = state.inks

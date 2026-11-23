@@ -658,7 +658,7 @@ class HomeHostTest {
     @Test
     fun aGateOffDrawsNoPeekAndTakesNoSwipe() {
         gated(songData(songs(TILES)))
-        assertFalse("no peek is drawn", state.shown(true, true, false).peek)
+        assertFalse("no peek is drawn", state.shown(true, true, null).peek)
         assertFalse("no swipe is taken toward the pane", state.acts(Swipe.Right))
         val from = Offset(a105Page.widthPx * DRAG_FROM, a105Page.heightPx - DRAG_Y)
         rule.onRoot().performTouchInput {
@@ -724,10 +724,7 @@ class HomeHostTest {
         assertFalse(qp.pan.shown)
     }
 
-    private fun shown(): HomeShown {
-        val o = stack.overlay?.kind
-        return state.shown(stack.top == null, stack.phase == Phase.Rest, o == OverKind.Sheet || o == OverKind.Dlg)
-    }
+    private fun shown(): HomeShown = state.shown(stack.top == null, stack.phase == Phase.Rest, stack.overlay?.kind)
 
     @Test
     fun aPanShowsThePanCanvasAndTheFrontAddsTheFront() {
@@ -772,6 +769,17 @@ class HomeHostTest {
         val closed = shown()
         assertTrue(closed.front)
         assertFalse("the closed sheet leaves the front live", closed.frontFrozen)
+    }
+
+    @Test
+    fun aDialogOverTheQuickplayFrontFreezesTheFront() {
+        front(songData(songs(TILES)))
+        val dialog = Overlay(OverKind.Dlg)
+        rule.runOnUiThread { stack.open(dialog) }
+        until("premise: the dialog opens") { stack.overlay === dialog }
+        val open = shown()
+        assertTrue(open.front)
+        assertTrue("a dialog over the front freezes it", open.frontFrozen)
     }
 
     @Test
