@@ -1274,23 +1274,26 @@ class PageMove {
         finish()
     }
 
-    fun release(p: Part, at: Long): Int {
-        if (!held(p)) return 0
-        held -= p
+    fun release(p: Part, at: Long): Int = release(setOf(p), at)
+
+    fun release(group: Set<Part>, at: Long): Int {
+        val rel = group.intersect(held)
+        if (rel.isEmpty()) return 0
+        held -= rel
         val tail = Moves.kTail.toLong()
         val shown = at - t0
         val r = max(shown - tail, 0L)
         var first = Long.MAX_VALUE
         var firstA = Long.MAX_VALUE
         for (l in list) {
-            if (l.part != p || l.pin != 0) continue
+            if (l.part !in rel || l.pin != 0) continue
             first = min(first, l.delay.toLong())
             if (l.prop == Prop.A) firstA = min(firstA, l.delay.toLong())
         }
         if (cut && firstA != Long.MAX_VALUE) first = firstA
         val d = if (first == Long.MAX_VALUE) 0 else max(0L, r - first).toInt()
         for (l in list) {
-            if (l.part != p) continue
+            if (l.part !in rel) continue
             if (l.pin != 0) {
                 val e = l.end.toLong()
                 val s = max(l.delay.toLong(), r)
@@ -1300,7 +1303,7 @@ class PageMove {
                 l.delay += d
             }
         }
-        if (p == Part.Content && !cut) {
+        if (Part.Content in rel && !cut) {
             for (q in Prop.entries) {
                 val z = last(Part.Leave, q) ?: continue
                 if (z.end >= shown + tail) continue
@@ -1308,12 +1311,6 @@ class PageMove {
             }
         }
         finish()
-        return d
-    }
-
-    fun release(group: Set<Part>, at: Long): Int {
-        var d = 0
-        for (p in Part.entries) if (p in group) d = max(d, release(p, at))
         return d
     }
 

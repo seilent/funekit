@@ -1043,6 +1043,50 @@ class PageMoveTest {
         near(0.5, f.at(Part.Content, Prop.A, 300), "content A at 300")
     }
 
+    private fun firstDelay(m: PageMove, p: Part): Int = Prop.entries.mapNotNull { m.leg(p, it)?.delay }.minOrNull() ?: -1
+
+    @Test
+    fun aGroupReleaseShiftsEveryHeldPartByTheFirstDelay() {
+        val rows = MoveEnds(grounds = true, rows = true, rowsDx = 20f)
+        val group = arriveGroup + Part.Ground
+        val t2 = started(MoveKind.T2, rows.copy(word = true))
+        val header = firstDelay(t2, Part.Header)
+        val pivots = firstDelay(t2, Part.Pivots)
+        assertTrue(t2.held(Part.Content) && t2.held(Part.Ground))
+        assertFalse(t2.held(Part.Header) || t2.held(Part.Pivots))
+        assertEquals(31, t2.release(group, 48))
+        assertEquals(48, t2.leg(Part.Content, Prop.A)?.delay)
+        assertEquals(48, t2.leg(Part.Ground, Prop.A)?.delay)
+        assertEquals(31, t2.leg(Part.Content, Prop.S)?.delay)
+        assertEquals(header, firstDelay(t2, Part.Header))
+        assertEquals(pivots, firstDelay(t2, Part.Pivots))
+        assertFalse(t2.held(Part.Content) || t2.held(Part.Ground))
+        val plug = started(MoveKind.T2n, rows.copy(plug = true))
+        assertTrue(plug.held(Part.Content) && plug.held(Part.Ground))
+        plug.release(group, 48)
+        assertEquals(181, plug.leg(Part.Content, Prop.A)?.delay)
+        assertEquals(181, plug.leg(Part.Ground, Prop.A)?.delay)
+        assertEquals(31, plug.leg(Part.Content, Prop.S)?.delay)
+        val z = started(MoveKind.T3z, MoveEnds(grounds = true))
+        assertTrue(z.held(Part.Content) && z.held(Part.Header) && z.held(Part.Pivots))
+        assertEquals(50, z.release(group, 100))
+        assertEquals(83, z.leg(Part.Content, Prop.A)?.delay)
+        assertEquals(467, z.leg(Part.Header, Prop.A)?.delay)
+        assertEquals(467, z.leg(Part.Pivots, Prop.A)?.delay)
+    }
+
+    @Test
+    fun aOnePartReleaseIsTheGroupOfOne() {
+        val rows = MoveEnds(grounds = true, rows = true, rowsDx = 20f)
+        val one = started(MoveKind.T3, rows)
+        assertEquals(0, one.leg(Part.Content, Prop.S)?.delay)
+        assertEquals(83, one.release(Part.Content, 100))
+        assertEquals(83, one.leg(Part.Content, Prop.S)?.delay)
+        val set = started(MoveKind.T3, rows)
+        assertEquals(83, set.release(setOf(Part.Content), 100))
+        for (q in Prop.entries) assertEquals("$q", one.leg(Part.Content, q)?.delay, set.leg(Part.Content, q)?.delay)
+    }
+
     @Test
     fun aPivotMovesThePartAboutANewPointKeepingItsPlace() {
         val m = started(MoveKind.T3, MoveEnds())
