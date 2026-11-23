@@ -124,6 +124,12 @@ class NpBackdrop {
         revision++
     }
 
+    fun swap(p: NpPicture?) {
+        if (p == shown) return
+        shown = p
+        revision++
+    }
+
     fun stepTo(now: Long) {
         if (!fade || fading(now)) return
         fade = false

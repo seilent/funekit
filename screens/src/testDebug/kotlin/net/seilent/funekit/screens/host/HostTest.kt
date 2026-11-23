@@ -18,6 +18,7 @@ import androidx.compose.ui.test.performTouchInput
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.StandardTestDispatcher
 import net.seilent.funekit.Insets
 import net.seilent.funekit.Nav
@@ -25,7 +26,11 @@ import net.seilent.funekit.Scale
 import net.seilent.funekit.Surface
 import net.seilent.funekit.Window
 import net.seilent.funekit.fxInt
+import net.seilent.funekit.api.ArtRef
 import net.seilent.funekit.api.Kind
+import net.seilent.funekit.api.Library
+import net.seilent.funekit.api.LibraryView
+import net.seilent.funekit.api.Listing
 import net.seilent.funekit.api.Row
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.MenuForm
@@ -36,7 +41,10 @@ import net.seilent.funekit.kit.motion.Overlay
 import net.seilent.funekit.kit.stack.Phase
 import net.seilent.funekit.px
 import net.seilent.funekit.scale
+import net.seilent.funekit.fake.Fake
+import net.seilent.funekit.fake.FakeSet
 import net.seilent.funekit.screens.music.MusicPage
+import net.seilent.funekit.screens.music.MusicSource
 import net.seilent.funekit.screens.music.album.AlbumModel
 import net.seilent.funekit.screens.music.nowplaying.AdjustHit
 import net.seilent.funekit.screens.music.nowplaying.NowPlayingModel
@@ -47,6 +55,7 @@ import net.seilent.funekit.screens.music.nowplaying.OffsetEdit
 import net.seilent.funekit.screens.music.nowplaying.PhoneLyrics
 import net.seilent.funekit.screens.music.nowplaying.PhoneRepeat
 import net.seilent.funekit.screens.music.nowplaying.PhoneTrack
+import net.seilent.funekit.screens.music.testFake
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -60,6 +69,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import java.io.ByteArrayOutputStream
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -1760,6 +1770,121 @@ class HostTest {
         assertNotSame(first, next)
     }
 
+    private class Painted(var png: ByteArray)
+
+    private fun png(color: Int): ByteArray {
+        val b = Bitmap.createBitmap(COVER, COVER, Bitmap.Config.ARGB_8888)
+        b.eraseColor(color)
+        return ByteArrayOutputStream().also { b.compress(Bitmap.CompressFormat.PNG, 100, it) }.toByteArray()
+    }
+
+    private fun coverApp(art: Painted = Painted(png(Color.BLUE))): Pair<TestApp, Fake> {
+        val f = testFake(FakeSet.Demo)
+        fun painted(v: LibraryView): LibraryView = object : LibraryView by v {
+            override suspend fun art(ref: ArtRef, maxSide: Int): ByteArray = art.png
+        }
+        val lib = object : Library by f.library {
+            override fun view(): LibraryView = painted(f.library.view())
+
+            override fun view(generation: Long): LibraryView = painted(f.library.view(generation))
+        }
+        val ts = runBlocking { f.library.view().page(Listing.Songs, 0, ART_SONGS).rows.filter { it.art != null }.map { it.id }.take(2) }
+        runBlocking { f.player.play(ts, 0, 0) }
+        val src = MusicSource(lib, f.player, f.quickplay, f.favorites, f.playlists, f.lyrics)
+        return TestApp(page, np, src, Level(START, null)) { rule.mainClock.currentTime }.also {
+            it.lyricsOn = true
+            it.modeAtStart = true
+            it.music.np.workContext = Dispatchers.Unconfined
+            it.backdropFlow.value = NpPicture(ImageBitmap(4, 4))
+            it.compose(rule)
+            rule.waitForIdle()
+            rule.mainClock.autoAdvance = false
+            rule.runOnIdle { it.host.resetNp(listOf(TestScreen.Music(MusicEntry(it.stack.entry(), MusicPage.Hub)))) }
+            frames(OPEN_FRAMES)
+        } to f
+    }
+
+    private fun artAfter(app: TestApp, old: ImageBitmap?): ImageBitmap {
+        rule.waitUntil(WAIT_MS) {
+            rule.waitForIdle()
+            app.music.np.art.let { it != null && it !== old }
+        }
+        return checkNotNull(app.music.np.art)
+    }
+
+    private fun settledCover(app: TestApp): ImageBitmap {
+        val art = artAfter(app, null)
+        frames(BLUR_FRAMES)
+        assertTrue("premise: the cover shows", app.host.npBackdrop.shown!!.whole)
+        frames((Tok.motion_backdropFade / FRAME_MS).toInt() + 2)
+        aloneAtOne(app, "premise: the first cover has settled")
+        return art
+    }
+
+    private fun nextCover(app: TestApp, f: Fake, art: Painted, old: ImageBitmap) {
+        art.png = png(Color.RED)
+        runBlocking { f.player.next() }
+        frames(OPEN_FRAMES)
+        artAfter(app, old)
+        frames(BLUR_FRAMES)
+    }
+
+    private fun aloneAtOne(app: TestApp, what: String) {
+        val b = app.host.npBackdrop
+        val t = rule.mainClock.currentTime
+        assertEquals(what, listOf(1f), rule.runOnIdle { b.layers(t) }.map { it.alpha })
+        assertFalse(what, rule.runOnIdle { b.fading(t) })
+    }
+
+    @Test
+    fun aCoverBlurredAgainAtANewSizeShowsWithNoFade() {
+        val shorter = scale(Window(W, H_SHORT, SDK, none, none, none, none, none), Nav.None, Surface.NowPlaying, false)
+        val (app, _) = coverApp()
+        val art = settledCover(app)
+        val first = app.host.npBackdrop.shown
+        rule.runOnIdle { app.np = shorter }
+        frames(BLUR_FRAMES)
+        assertNotSame("premise: the cover is blurred again", first, app.host.npBackdrop.shown)
+        aloneAtOne(app, "the blur at the new scale cuts in")
+        artAfter(app, art)
+        frames(BLUR_FRAMES)
+        aloneAtOne(app, "the new side's blur cuts in")
+    }
+
+    @Test
+    fun aNewPictureFadesInOverTheShownCover() {
+        val painted = Painted(png(Color.BLUE))
+        val (app, f) = coverApp(painted)
+        val art = settledCover(app)
+        nextCover(app, f, painted, art)
+        val t = rule.mainClock.currentTime
+        val ls = rule.runOnIdle { app.host.npBackdrop.layers(t) }
+        assertEquals("the shown cover and the new one", 2, ls.size)
+        assertTrue("the new picture fades in", ls[1].alpha < 1f)
+        assertTrue(rule.runOnIdle { app.host.npBackdrop.fading(t) })
+    }
+
+    @Test
+    fun aCoverBlurredAgainDuringItsFadeSwapsInPlace() {
+        val shorter = scale(Window(W, H_SHORT, SDK, none, none, none, none, none), Nav.None, Surface.NowPlaying, false)
+        val painted = Painted(png(Color.BLUE))
+        val (app, f) = coverApp(painted)
+        val art = settledCover(app)
+        nextCover(app, f, painted, art)
+        val b = app.host.npBackdrop
+        val next = b.shown
+        frames((Tok.motion_backdropFade / FRAME_MS / 2).toInt())
+        assertTrue("premise: the new cover fades in", rule.runOnIdle { b.fading(rule.mainClock.currentTime) })
+        rule.runOnIdle { app.np = shorter }
+        frames(BLUR_FRAMES)
+        assertNotSame("premise: the cover is blurred again", next, b.shown)
+        val t = rule.mainClock.currentTime
+        val ls = rule.runOnIdle { b.layers(t) }
+        assertEquals("the fade runs on", 2, ls.size)
+        assertTrue("the outgoing cover still shows", ls[0].alpha > 0f)
+        assertTrue("the new blur still fades in", ls[1].alpha < 1f)
+    }
+
     @Test
     fun afterAPhoneSessionThePhoneArtGivesNoCover() {
         val app = lyricsApp(Edit())
@@ -1827,6 +1952,9 @@ class HostTest {
         private const val COVER = 64
         private const val DURATION = 180_000L
         private const val H_SHORT = 1080
+        private const val ART_SONGS = 20
+        private const val WAIT_MS = 5_000L
+        private const val FRAME_MS = 16
         private const val CARRIED = 500
         private const val CARRIED_COPY = "[00:00.50]one\n[00:01.50]two"
         private const val STEP_MS = 100

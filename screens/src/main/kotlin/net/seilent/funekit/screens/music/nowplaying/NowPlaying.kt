@@ -17,6 +17,7 @@ import net.seilent.funekit.kit.np.NP_MARK
 import net.seilent.funekit.kit.np.NP_PRESSES
 import net.seilent.funekit.kit.np.NP_RINGS
 import net.seilent.funekit.kit.np.NpLayout
+import net.seilent.funekit.api.ArtRef
 import net.seilent.funekit.api.PlayerState
 import net.seilent.funekit.api.Repeat
 import kotlin.coroutines.CoroutineContext
@@ -65,6 +66,9 @@ class NowPlayingModel {
     var art: ImageBitmap? by mutableStateOf(null)
     var artKey: Any? = null
     var artPhone = false
+    internal var artPic = 0L
+    internal var artRef: ArtRef? = null
+    internal var artId: Any? = null
     var ring by mutableIntStateOf(0)
         private set
     var titleFocus by mutableStateOf(false)

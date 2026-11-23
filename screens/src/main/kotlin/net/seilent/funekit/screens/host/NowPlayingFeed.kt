@@ -144,12 +144,13 @@ fun NowPlayingFeed(np: NowPlayingModel, g: NpLayout, src: MusicSource?, phone: P
         val key = listOf(track, ref, g.artSide, phoneArt, np.variant)
         if (np.artKey == key) return@LaunchedEffect
         val source = src
+        var pic = 0L
         val img = when {
             np.variant -> phoneArt?.asImageBitmap()
             ref == null || source == null -> null
             else -> {
                 val config = configFor(Build.VERSION.SDK_INT, true)
-                val got = quietly { withContext(Dispatchers.IO) { listOf(largeArt(g.artSide, config) { source.viewed { it.art(ref, g.artSide) } }) } }
+                val got = quietly { withContext(Dispatchers.IO) { listOf(largeArt(g.artSide, config, { pic = it }) { source.viewed { it.art(ref, g.artSide) } }) } }
                 if (got == null) {
                     np.art = null
                     return@LaunchedEffect
@@ -157,9 +158,28 @@ fun NowPlayingFeed(np: NowPlayingModel, g: NpLayout, src: MusicSource?, phone: P
                 got.single()?.asImageBitmap()
             }
         }
-        np.artPhone = np.variant
-        np.art = img
+        if (np.variant) {
+            np.artPhone = true
+            np.art = img
+            np.artKey = key
+            np.artRef = null
+            return@LaunchedEffect
+        }
+        when {
+            img != null && pic == np.artPic && np.art != null && !np.artPhone -> Unit
+            img != null && ref == np.artRef -> {
+                np.art = img
+                np.artPic = pic
+            }
+            else -> {
+                np.art = img
+                np.artPic = pic
+                np.artId = Any()
+            }
+        }
+        np.artPhone = false
         np.artKey = key
+        np.artRef = ref
     }
     return feed
 }

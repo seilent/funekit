@@ -142,6 +142,9 @@ kit/src/main/kotlin/net/seilent/funekit/kit/Cover.kt SHIFT 8 fos player/gfx/font
 kit/src/main/kotlin/net/seilent/funekit/kit/art/Art.kt MB 1048576 platform ActivityManager.getMemoryClass bytes per MB: ActivityManager.getMemoryClass is in MB and the art cache is sized in bytes
 kit/src/main/kotlin/net/seilent/funekit/kit/art/Art.kt SHARE 16 FB FB-lit-7 icons and software covers share one sixteenth of the memory class, the launcher icon budget
 kit/src/main/kotlin/net/seilent/funekit/kit/art/Art.kt LOW_RAM_SHARE 32 FB FB-lit-8 a low RAM device gives icons and software covers one 32nd of the memory class
+kit/src/main/kotlin/net/seilent/funekit/kit/art/ArtCache.kt PIX_BYTES 4 platform Bitmap.getPixels the cover key hashes four bytes for each ARGB_8888 pixel int getPixels answers
+kit/src/main/kotlin/net/seilent/funekit/kit/art/ArtCache.kt CRC_SHIFT 32 fos player/ui/app.cpp:19657 the cover key holds the pixel crc in its high 32 bits (funeOS cover_pic_ = c << 32 | w << 16 | h)
+kit/src/main/kotlin/net/seilent/funekit/kit/art/ArtCache.kt SIDE_SHIFT 16 fos player/ui/app.cpp:19657 the cover key holds the tile width above its height (funeOS cover_pic_ = c << 32 | w << 16 | h)
 kit/src/main/kotlin/net/seilent/funekit/kit/home/Home.kt HALF 2 fos player/ui/app.cpp:620 the home ring rect half the ring plus a px and the play glyph at half the ring (funeOS ui/app.cpp home_ring_rect, draw_home_ring)
 kit/src/main/kotlin/net/seilent/funekit/kit/home/Home.kt GROW 3 fos player/ui/app.cpp:21463 the home item press and glow rect grown 3 px (funeOS ui/app.cpp item_rect .grow(3))
 kit/src/main/kotlin/net/seilent/funekit/kit/Tiles.kt HALF 2 fos player/ui/rows.cpp:909 the box caption clip inset is the box line centre plus half its width (funeOS ui/rows.cpp draw_box_tile t.grow(-px(boxInset + boxLine / 2)))

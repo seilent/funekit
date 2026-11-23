@@ -1,5 +1,11 @@
 package net.seilent.funekit.screens.host
 
+import android.graphics.Bitmap
+import android.graphics.Color
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -11,6 +17,7 @@ import net.seilent.funekit.Insets
 import net.seilent.funekit.Nav
 import net.seilent.funekit.Surface
 import net.seilent.funekit.Window
+import net.seilent.funekit.api.ArtRef
 import net.seilent.funekit.api.Busy
 import net.seilent.funekit.api.Library
 import net.seilent.funekit.api.LibraryState
@@ -26,11 +33,16 @@ import net.seilent.funekit.kit.np.NpLayout
 import net.seilent.funekit.scale
 import net.seilent.funekit.screens.music.MusicSource
 import net.seilent.funekit.screens.music.nowplaying.NowPlayingModel
+import net.seilent.funekit.screens.music.nowplaying.PhoneRepeat
+import net.seilent.funekit.screens.music.nowplaying.PhoneTrack
 import net.seilent.funekit.screens.music.testFake
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -38,6 +50,8 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import java.io.ByteArrayOutputStream
+import java.io.IOException
 import java.util.concurrent.atomic.AtomicInteger
 
 @RunWith(RobolectricTestRunner::class)
@@ -137,6 +151,89 @@ class NowPlayingFeedTest {
         assertEquals(ids[2], np.shown.track)
     }
 
+    private var cover = png(Color.BLUE)
+    private var artFails = false
+    private var phone by mutableStateOf<PhoneSession?>(null)
+
+    private fun painted(v: LibraryView): LibraryView = object : LibraryView by v {
+        override suspend fun art(ref: ArtRef, maxSide: Int): ByteArray = if (artFails) throw IOException("art read failed") else cover
+    }
+
+    private val artLibrary = object : Library by fake.library {
+        override fun view(): LibraryView = painted(fake.library.view())
+
+        override fun view(generation: Long): LibraryView = painted(fake.library.view(generation))
+    }
+
+    private val artSrc = MusicSource(artLibrary, fake.player, fake.quickplay, fake.favorites, fake.playlists, fake.lyrics)
+
+    private fun png(color: Int): ByteArray {
+        val b = Bitmap.createBitmap(PNG_SIDE, PNG_SIDE, Bitmap.Config.ARGB_8888)
+        b.eraseColor(color)
+        return ByteArrayOutputStream().also { b.compress(Bitmap.CompressFormat.PNG, 100, it) }.toByteArray()
+    }
+
+    private fun artFor(np: NowPlayingModel, track: Long) {
+        rule.waitUntil(WAIT_MS) { (np.artKey as? List<*>)?.firstOrNull() == track }
+    }
+
+    private fun artPlayed(np: NowPlayingModel, n: Int = 2): List<Long> {
+        val ids = runBlocking { fake.library.view().page(Listing.Songs, 0, ART_SONGS).rows.filter { it.art != null }.map { it.id }.take(n) }
+        runBlocking { fake.player.play(ids, 0, 0) }
+        rule.setContent { NowPlayingFeed(np, NpLayout(s), artSrc, phone) { 0L } }
+        artFor(np, ids[0])
+        return ids
+    }
+
+    @Test
+    fun aTrackWithTheSameArtPictureKeepsTheArt() {
+        val np = NowPlayingModel()
+        val (_, b) = artPlayed(np)
+        val first = checkNotNull(np.art)
+        player { next() }
+        artFor(np, b)
+        assertSame(first, np.art)
+    }
+
+    @Test
+    fun aTrackWithAnotherArtPictureReadsItsArt() {
+        val np = NowPlayingModel()
+        val (_, b) = artPlayed(np)
+        val first = checkNotNull(np.art)
+        cover = png(Color.RED)
+        player { next() }
+        artFor(np, b)
+        assertNotSame(first, checkNotNull(np.art))
+    }
+
+    @Test
+    fun theSamePictureAfterAFailedReadReadsItsArtAgain() {
+        val np = NowPlayingModel()
+        val (_, _, c) = artPlayed(np, ART_TRACKS)
+        artFails = true
+        player { next() }
+        rule.waitUntil(WAIT_MS) { np.art == null }
+        artFails = false
+        player { next() }
+        artFor(np, c)
+        assertNotNull("the same picture after a failed read shows its art", np.art)
+    }
+
+    @Test
+    fun anOwnTrackResumedOverAPhoneSessionReadsItsArtAgain() {
+        val np = NowPlayingModel()
+        artPlayed(np)
+        player { pause() }
+        val phoneArt = Bitmap.createBitmap(PNG_SIDE, PNG_SIDE, Bitmap.Config.ARGB_8888)
+        rule.runOnIdle { phone = PhoneSession(PhoneTrack("Radio", "Song", "Artist", "Album", true, false, PHONE_MS, 0L, 0L, 1f, false, PhoneRepeat.Off, 0, 0, phoneArt), {}) {} }
+        rule.waitForIdle()
+        rule.waitUntil(WAIT_MS) { np.artPhone }
+        assertSame("premise: the phone's art shows", phoneArt, np.art?.asAndroidBitmap())
+        player { resume() }
+        rule.waitUntil(WAIT_MS) { !np.artPhone && np.art != null }
+        assertNotSame("the own track's art replaces the phone's", phoneArt, np.art?.asAndroidBitmap())
+    }
+
     private fun settle() {
         scheduler.runCurrent()
         rule.waitForIdle()
@@ -201,5 +298,10 @@ class NowPlayingFeedTest {
         const val SHAPE = "short"
         const val OFFSET = 500
         const val MOVED = 200
+        const val PNG_SIDE = 64
+        const val ART_SONGS = 20
+        const val ART_TRACKS = 3
+        const val WAIT_MS = 5_000L
+        const val PHONE_MS = 180_000L
     }
 }

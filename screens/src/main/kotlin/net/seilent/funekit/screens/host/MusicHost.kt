@@ -1660,15 +1660,24 @@ class MusicHost<S : Any> internal constructor(
         val art = np.art?.takeIf { !np.artPhone }
         val gs = npGeo.s
         var cover by remember { mutableStateOf<Blurred?>(null) }
+        var showing by remember { mutableStateOf<Any?>(null) }
         LaunchedEffect(art, shown, gs) {
             if (!shown || art == null || cover?.of(art, gs) == true) return@LaunchedEffect
+            val id = np.artId
             val img = withContext(np.workContext) { CoverBlur.image(art, gs.widthPx, gs.heightPx, gs) }
-            cover = Blurred(art, gs, img?.let { NpPicture(it, whole = true) })
+            cover = Blurred(art, gs, img?.let { NpPicture(it, whole = true) }, id)
         }
         val done = cover?.takeIf { it.of(art, gs) }
         val wait = shown && art != null && done == null
         val want = (if (shown) done?.picture else null) ?: pic
-        LaunchedEffect(want, wait) { if (!wait) backdrop.set(want, now()) }
+        LaunchedEffect(want, wait) {
+            if (wait) return@LaunchedEffect
+            val id = done?.takeIf { want != null && it.picture === want }?.artId
+            val t = now()
+            val same = id != null && id === showing
+            if (same && backdrop.fading(t)) backdrop.swap(want) else backdrop.set(want, t, cut = same)
+            showing = id
+        }
     }
 
     fun npBack(): Boolean {
@@ -2106,7 +2115,7 @@ fun <S : Any> rememberMusicHost(
     return host
 }
 
-private class Blurred(val art: ImageBitmap, val scale: Scale, val picture: NpPicture?) {
+private class Blurred(val art: ImageBitmap, val scale: Scale, val picture: NpPicture?, val artId: Any?) {
     fun of(a: ImageBitmap?, s: Scale): Boolean = art === a && scale == s
 }
 
