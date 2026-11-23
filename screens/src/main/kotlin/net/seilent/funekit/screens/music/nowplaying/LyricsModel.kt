@@ -114,7 +114,10 @@ class LyricsModel {
     val plainTrack = RowTrack(1, 0)
     val plainFade = ThumbFade()
 
+    internal var held: (Long) -> Int? = { null }
+
     private var src: List<Lrc.Line> = emptyList()
+    private var carried = 0
     private var lineTrack: Long? = null
     private var slideTrack: Long? = null
     private var slideGen = -1
@@ -142,39 +145,52 @@ class LyricsModel {
         changed()
     }
 
-    fun load(track: Long, text: String?, offsetMs: Int) {
-        loaded(track, parsed(text), offsetMs)
+    fun load(track: Long, text: String?, offsetMs: Int, carries: Boolean = false) {
+        loaded(track, parsed(text), offsetMs, if (carries) offsetMs else 0)
     }
 
-    private fun loaded(track: Long, p: Lrc.Parsed, offsetMs: Int) {
+    private fun loaded(track: Long, p: Lrc.Parsed, served: Int, carried: Int) {
         if (this.track != track) return
+        val same = !pending && p.lines.map { it.text } == src.map { it.text } && p.plain == plain
+        val off = held(track) ?: served
+        val shifted = Lrc.shift(p.lines, (off - carried).toLong())
         src = p.lines
-        this.offsetMs = offsetMs
-        lines = Lrc.shift(src, offsetMs.toLong())
+        this.carried = carried
+        offsetMs = off
+        if (same && shifted == lines) return
+        lines = shifted
         plain = p.plain
         pending = false
-        changed()
+        if (same) retimed() else changed()
     }
 
+    private fun keeps(track: Long): Boolean = track == this.track && !pending
+
     suspend fun read(l: Lyrics, track: Long, on: CoroutineContext) {
-        begin(track)
-        val text = l.lyrics(track)
-        val off = l.offsetMs(track)
-        val p = withContext(on) { parsed(text) }
-        loaded(track, p, off)
+        if (!keeps(track)) begin(track)
+        val c = l.copy(track)
+        val served = c?.carriedMs ?: l.offsetMs(track)
+        val carried = c?.carriedMs ?: 0
+        val p = withContext(on) { parsed(c?.text) }
+        loaded(track, p, served, carried)
     }
 
     suspend fun readPhone(pl: PhoneLyrics, t: PhoneTrack, shown: Long, on: CoroutineContext) {
-        begin(shown)
+        if (!keeps(shown)) begin(shown)
         val text = pl.lyrics(t)
         val off = pl.offsetMs(t)
         val p = withContext(on) { parsed(text) }
-        loaded(shown, p, off)
+        loaded(shown, p, off, 0)
     }
 
-    fun retime(offsetMs: Int) {
-        this.offsetMs = offsetMs
-        lines = Lrc.shift(src, offsetMs.toLong())
+    fun retime(track: Long, ms: Int) {
+        if (track != this.track || pending || ms == offsetMs) return
+        offsetMs = ms
+        lines = Lrc.shift(src, (ms - carried).toLong())
+        retimed()
+    }
+
+    private fun retimed() {
         lineTrack = null
         slide = false
         gen++

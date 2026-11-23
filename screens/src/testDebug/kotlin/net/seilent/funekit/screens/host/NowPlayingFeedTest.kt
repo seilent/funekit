@@ -1,9 +1,11 @@
 package net.seilent.funekit.screens.host
 
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import net.seilent.funekit.Insets
 import net.seilent.funekit.Nav
@@ -17,6 +19,8 @@ import net.seilent.funekit.api.Listing
 import net.seilent.funekit.api.Page
 import net.seilent.funekit.api.Player
 import net.seilent.funekit.api.Repeat
+import net.seilent.funekit.core.Lrc
+import net.seilent.funekit.fake.Fake
 import net.seilent.funekit.fake.FakeSet
 import net.seilent.funekit.kit.np.NpLayout
 import net.seilent.funekit.scale
@@ -24,6 +28,7 @@ import net.seilent.funekit.screens.music.MusicSource
 import net.seilent.funekit.screens.music.nowplaying.NowPlayingModel
 import net.seilent.funekit.screens.music.testFake
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -132,11 +137,69 @@ class NowPlayingFeedTest {
         assertEquals(ids[2], np.shown.track)
     }
 
+    private fun settle() {
+        scheduler.runCurrent()
+        rule.waitForIdle()
+    }
+
+    private fun carryingFeed(np: NowPlayingModel, offset: Int): Pair<Fake, Long> {
+        val f = testFake(FakeSet.Demo, scheduler, lyricsCarried = true)
+        val t = checkNotNull(f.lyricTrack(SHAPE))
+        np.lyricsView = true
+        np.workContext = Dispatchers.Unconfined
+        runBlocking {
+            f.lyrics.setOffset(t, offset)
+            f.player.play(listOf(t), 0, 0)
+        }
+        val source = MusicSource(f.library, f.player, f.quickplay, f.favorites, f.playlists, f.lyrics)
+        rule.setContent { NowPlayingFeed(np, NpLayout(s), source, null) { 0L } }
+        settle()
+        assertEquals("premise: the lyric track shows", t, np.shown.track)
+        return f to t
+    }
+
+    private fun stamps(t: Long): List<Long> =
+        Lrc.parse(checkNotNull(runBlocking { fake.lyrics.lyrics(t) }).toByteArray(Charsets.UTF_8)).lines.map { it.ms }
+
+    @Test
+    fun aCarryingSourceShowsItsLinesOnceWithTheServedOffset() {
+        val np = NowPlayingModel()
+        val (f, t) = carryingFeed(np, OFFSET)
+        val fixture = stamps(t)
+        assertEquals(fixture.map { maxOf(0L, it - OFFSET) }, np.lyrics.lines.map { it.ms })
+        assertEquals(OFFSET, np.lyrics.offsetMs)
+        runBlocking { f.lyrics.setOffset(t, 0) }
+        settle()
+        assertEquals(fixture, np.lyrics.lines.map { it.ms })
+        assertEquals(0, np.lyrics.offsetMs)
+    }
+
+    @Test
+    fun aReReadOfTheShownTrackKeepsItsLinesUntilTheNewCopyLands() {
+        val np = NowPlayingModel()
+        val (f, t) = carryingFeed(np, OFFSET)
+        val fixture = stamps(t)
+        assertEquals("premise: the first copy shows", fixture.map { maxOf(0L, it - OFFSET) }, np.lyrics.lines.map { it.ms })
+        val held = StandardTestDispatcher()
+        rule.runOnIdle { np.workContext = held }
+        runBlocking { f.lyrics.setOffset(t, MOVED) }
+        settle()
+        assertFalse("a re-read keeps its copy while it parses", np.lyrics.pending)
+        assertEquals(fixture.map { maxOf(0L, it - OFFSET) }, np.lyrics.lines.map { it.ms })
+        held.scheduler.advanceUntilIdle()
+        rule.waitForIdle()
+        assertEquals(fixture.map { maxOf(0L, it - MOVED) }, np.lyrics.lines.map { it.ms })
+        assertEquals(MOVED, np.lyrics.offsetMs)
+    }
+
     private companion object {
         const val SDK = 35
         const val V1_W = 240
         const val V1_H = 320
         const val SONGS = 3
         const val SEEK_MS = 30_000L
+        const val SHAPE = "short"
+        const val OFFSET = 500
+        const val MOVED = 200
     }
 }

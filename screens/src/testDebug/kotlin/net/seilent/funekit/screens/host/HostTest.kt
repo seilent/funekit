@@ -6,6 +6,9 @@ import android.graphics.Color
 import android.view.View
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.State
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ImageBitmap
@@ -35,6 +38,7 @@ import net.seilent.funekit.px
 import net.seilent.funekit.scale
 import net.seilent.funekit.screens.music.MusicPage
 import net.seilent.funekit.screens.music.album.AlbumModel
+import net.seilent.funekit.screens.music.nowplaying.AdjustHit
 import net.seilent.funekit.screens.music.nowplaying.NowPlayingModel
 import net.seilent.funekit.screens.music.nowplaying.NpAct
 import net.seilent.funekit.screens.music.nowplaying.NpPicture
@@ -685,9 +689,41 @@ class HostTest {
         }
     }
 
+    private class MovingEdit(start: Int) : OffsetEdit {
+        override var shownMs by mutableIntStateOf(start)
+        override var editing = false
+        private var from = start
+
+        override fun begin() {
+            from = shownMs
+            editing = true
+        }
+
+        override fun step(d: Int) {
+            shownMs += STEP_MS * d
+        }
+
+        override fun coarse(d: Int) {
+            shownMs += COARSE_MS * d
+        }
+
+        override fun keep() {
+            editing = false
+        }
+
+        override fun restore() {
+            shownMs = from
+            editing = false
+        }
+
+        override fun entry(adjust: Boolean) {}
+
+        override fun end() {}
+    }
+
     private fun song(id: Long) = Row(id, Kind.Song, "Song", "Artist", null, durationMs = DURATION, album = "Album")
 
-    private fun lyricsApp(e: Edit, view: Boolean = true, mode: Boolean = true, pl: PhoneLyrics? = null): TestApp =
+    private fun lyricsApp(e: OffsetEdit, view: Boolean = true, mode: Boolean = true, pl: PhoneLyrics? = null): TestApp =
         TestApp(page, np, null, Level(START, null)) { rule.mainClock.currentTime }.also {
             it.lyricsOn = view
             it.edit = e
@@ -739,6 +775,165 @@ class HostTest {
         assertEquals("the sheet stays up", OverKind.Sheet, app.stack.overlay?.kind)
         assertEquals("the edge restores the edit", listOf("restore"), e.calls)
         assertFalse("the edit ends", e.editing)
+    }
+
+    private fun carriedApp(e: MovingEdit): TestApp = lyricsApp(e).also {
+        rule.runOnIdle { it.music.np.lyrics.load(1, CARRIED_COPY, CARRIED, carries = true) }
+        frames(CUT_FRAMES)
+    }
+
+    private fun shownLines(app: TestApp): List<Long> = rule.runOnIdle { app.music.np.lyrics.lines.map { it.ms } }
+
+    private fun hudUp() {
+        val at = Offset(page.widthPx / 2f, px(Tok.overlayPlusY, page.stdPpu).toFloat())
+        rule.onRoot().performTouchInput {
+            down(at)
+            up()
+        }
+        frames(CUT_FRAMES)
+    }
+
+    private fun offsetHud(app: TestApp) {
+        rule.runOnIdle { app.host.openOffset() }
+        frames(OPEN_FRAMES)
+        rule.runOnIdle { app.menuHost.act(0) }
+        frames(OPEN_FRAMES)
+        assertTrue("premise: the hud is up", app.host.fieldSheet!!.hud.shown)
+    }
+
+    @Test
+    fun anOffsetStepPreviewsTheShownCopyAtTheEditsValue() {
+        val e = MovingEdit(CARRIED)
+        val app = carriedApp(e)
+        assertEquals("premise: the copy shows as served", listOf(500L, 1500L), shownLines(app))
+        offsetHud(app)
+        hudUp()
+        assertEquals("premise: the step moves the edit", CARRIED + STEP_MS, e.shownMs)
+        assertEquals(listOf(400L, 1400L), shownLines(app))
+    }
+
+    @Test
+    fun aRestoreAndAnUnkeptCloseLandTheCopyBackAtTheStart() {
+        val e = MovingEdit(CARRIED).also { it.editing = true }
+        val app = carriedApp(e)
+        rule.runOnIdle { app.host.openOffset() }
+        frames(OPEN_FRAMES)
+        assertFalse("premise: the live edit shows no hud", app.host.fieldSheet!!.hud.shown)
+        rule.runOnIdle { app.host.fieldSheet!!.tap(AdjustHit.Up0) }
+        frames(CUT_FRAMES)
+        assertEquals(listOf(400L, 1400L), shownLines(app))
+        rule.runOnIdle { app.stack.edgeBack(app.host.popKind) }
+        frames(OPEN_FRAMES)
+        assertEquals("premise: the sheet stays up", OverKind.Sheet, app.stack.overlay?.kind)
+        assertEquals("the restore lands the copy back", listOf(500L, 1500L), shownLines(app))
+        rule.runOnIdle {
+            e.begin()
+            app.host.fieldSheet!!.tap(AdjustHit.Up0)
+        }
+        frames(CUT_FRAMES)
+        assertEquals(listOf(400L, 1400L), shownLines(app))
+        rule.runOnIdle { app.host.fieldEnd() }
+        frames(CUT_FRAMES)
+        assertEquals("an unkept close lands the copy back", listOf(500L, 1500L), shownLines(app))
+    }
+
+    @Test
+    fun aTypedValueShowsAtTheReturn() {
+        val e = MovingEdit(CARRIED)
+        val app = carriedApp(e)
+        rule.runOnIdle { app.host.openOffset() }
+        frames(OPEN_FRAMES)
+        assertTrue(rule.runOnIdle { app.menuHost.hold!!(0) })
+        frames(CUT_FRAMES)
+        assertNull("premise: the entry closes the sheet", app.stack.overlay)
+        rule.runOnIdle { e.shownMs = TYPED_MS }
+        frames(CUT_FRAMES)
+        rule.runOnIdle { app.host.fieldReturn(false) }
+        frames(3)
+        assertEquals("premise: the sheet is back", OverKind.Sheet, app.stack.overlay?.kind)
+        assertEquals(listOf(0L, 500L), shownLines(app))
+    }
+
+    @Test
+    fun aCopyServedDuringTheEditLandsAtTheEditsValue() {
+        val e = MovingEdit(CARRIED)
+        val app = carriedApp(e)
+        offsetHud(app)
+        hudUp()
+        assertEquals("premise: the step moves the edit", CARRIED + STEP_MS, e.shownMs)
+        rule.runOnIdle { app.music.np.lyrics.load(1, "[00:00.80]one\n[00:01.80]two", 200, carries = true) }
+        assertEquals(listOf(400L, 1400L), shownLines(app))
+    }
+
+    @Test
+    fun aCopyForAnotherTrackTakesNoOpenEdit() {
+        val e = MovingEdit(CARRIED)
+        val app = carriedApp(e)
+        offsetHud(app)
+        hudUp()
+        assertEquals("premise: the step moves the edit", CARRIED + STEP_MS, e.shownMs)
+        val lines = rule.runOnIdle {
+            val l = app.music.np.lyrics
+            l.begin(2)
+            l.load(2, "[00:00.80]one\n[00:01.80]two", 200, carries = true)
+            l.lines.map { it.ms }
+        }
+        assertEquals("another track's copy lands as served", listOf(800L, 1800L), lines)
+    }
+
+    @Test
+    fun anAppMoveOfTheShownOffsetPreviewsWithNoSheetCall() {
+        val e = MovingEdit(CARRIED)
+        val app = carriedApp(e)
+        rule.runOnIdle { app.host.openOffset() }
+        frames(OPEN_FRAMES)
+        assertEquals("premise: the sheet is up", OverKind.Sheet, app.stack.overlay?.kind)
+        rule.runOnIdle { e.shownMs = APP_MS }
+        frames(CUT_FRAMES)
+        assertEquals(listOf(300L, 1300L), shownLines(app))
+    }
+
+    @Test
+    fun aTypedEntryClosedByACutKeepsTheRunAndReopensItsSheet() {
+        val e = Edit()
+        val app = lyricsApp(e)
+        rule.runOnIdle { app.host.openOffset() }
+        frames(OPEN_FRAMES)
+        assertTrue(rule.runOnIdle { app.menuHost.hold!!(0) })
+        frames(CUT_FRAMES)
+        assertNull("premise: the entry closes the sheet", app.stack.overlay)
+        val keys = Overlay(OverKind.Sheet)
+        rule.runOnIdle { app.stack.open(keys) }
+        frames(OPEN_FRAMES)
+        assertSame("premise: the entry is a stack overlay", keys, app.stack.overlay)
+        rule.runOnIdle {
+            app.stack.cut()
+            app.host.fieldReturn(false)
+        }
+        frames(OPEN_FRAMES)
+        assertNotNull("the run stays", app.host.fieldSheet)
+        assertEquals("the sheet is back", OverKind.Sheet, app.stack.overlay?.kind)
+        assertNotSame("the sheet is the run's own", keys, app.stack.overlay)
+    }
+
+    @Test
+    fun anOffsetOpenWhileTheReopenLandsIsRefusedAndTheRunStays() {
+        val e = Edit()
+        val app = lyricsApp(e)
+        rule.runOnIdle { app.host.openOffset() }
+        frames(OPEN_FRAMES)
+        val sheet = app.host.fieldSheet
+        assertTrue(rule.runOnIdle { app.menuHost.hold!!(0) })
+        frames(CUT_FRAMES)
+        assertNull("premise: the entry closes the sheet", app.stack.overlay)
+        rule.runOnIdle { app.host.fieldReturn(false) }
+        rule.runOnIdle {
+            assertTrue("premise: the reopen is asked and not landed", app.stack.moving && app.stack.overlay == null)
+            app.host.openOffset()
+        }
+        frames(OPEN_FRAMES)
+        assertSame("the run stays", sheet, app.host.fieldSheet)
+        assertEquals("its sheet is back", OverKind.Sheet, app.stack.overlay?.kind)
     }
 
     @Test
@@ -1583,6 +1778,12 @@ class HostTest {
         private const val COVER = 64
         private const val DURATION = 180_000L
         private const val H_SHORT = 1080
+        private const val CARRIED = 500
+        private const val CARRIED_COPY = "[00:00.50]one\n[00:01.50]two"
+        private const val STEP_MS = 100
+        private const val COARSE_MS = 1000
+        private const val TYPED_MS = 1500
+        private const val APP_MS = 700
         private const val MIN_SHIFT = 10
         private const val COL = 2
         private const val WHITE = 200

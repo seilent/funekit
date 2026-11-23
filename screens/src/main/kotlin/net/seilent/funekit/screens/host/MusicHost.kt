@@ -10,6 +10,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -1297,9 +1298,15 @@ class MusicHost<S : Any> internal constructor(
         LaunchedEffect(stack) {
             snapshotFlow { stack.overlay }.collect { o ->
                 val r = fieldRun ?: return@collect
-                if (o === r.over || r.entry) return@collect
+                if (o === r.over) {
+                    r.entry = false
+                    r.reopen = false
+                    return@collect
+                }
+                if (r.entry) return@collect
                 fieldRun = null
                 r.sheet.dismiss()
+                offsetSync(r)
             }
         }
         LaunchedEffect(stack) {
@@ -1723,11 +1730,11 @@ class MusicHost<S : Any> internal constructor(
         fieldEnd()
         val p = phone?.track
         val edit = (if (np.variant && p != null) app.phoneLyrics?.offset(p) else app.offset(track)) ?: return
-        fieldOpen(FieldRun(OffsetSheet(edit), null, { offsetOpen() == track }) { offsetGone(track) })
+        fieldOpen(FieldRun(OffsetSheet(edit), null, { offsetOpen() == track }, track = track) { offsetGone(track) })
     }
 
     internal fun openFields(sheet: FieldSheet): Boolean {
-        if (stack.phase != Phase.Rest || stack.overlay != null || fieldRun?.entry == false) return false
+        if (stack.phase != Phase.Rest || stack.overlay != null || fieldUp()) return false
         fieldEnd()
         val top = stack.top
         val pivot = shownPivot(top)
@@ -1737,9 +1744,11 @@ class MusicHost<S : Any> internal constructor(
 
     private fun shownPivot(s: S?): String? = rowsOf(s)?.let { it.names.getOrNull(it.pivot) }
 
+    private fun fieldUp(): Boolean = fieldRun?.let { !it.entry || it.reopen } == true
+
     private fun offsetOpen(): Long? {
         if (!np.lyricsView || stack.top?.let(::isNp) != true || stack.overlay != null || stack.phase != Phase.Rest) return null
-        if (fieldRun?.entry == false) return null
+        if (fieldUp()) return null
         val l = np.lyrics
         val t = now()
         if (l.fading(t)) l.land(np.variant)
@@ -1765,6 +1774,19 @@ class MusicHost<S : Any> internal constructor(
         r.live = r.sheet.field() >= 0
         if (!r.live) r.want = false
         if (r.choice == null && !r.entry) fieldCells(r)
+        offsetSync(r)
+    }
+
+    private fun offsetSync(r: FieldRun) {
+        val t = r.track ?: return
+        val sheet = r.sheet as? OffsetSheet ?: return
+        np.lyrics.retime(t, sheet.edit.shownMs)
+    }
+
+    internal fun heldOffset(track: Long): Int? {
+        val r = fieldRun ?: return null
+        if (r.track != track) return null
+        return (r.sheet as? OffsetSheet)?.edit?.shownMs
     }
 
     private fun fieldMenu(r: FieldRun, at: Int) {
@@ -1776,6 +1798,7 @@ class MusicHost<S : Any> internal constructor(
                 fieldCells(r, m)
                 r.live = sheet.field() >= 0
                 if (at >= 0) m.focus.set(at, sheet.items.size, now(), false)
+                offsetSync(r)
             },
             hold = { i -> fieldHold(r, i) },
             scrim = { sheet.scrim().also { fieldSync(r) } },
@@ -1914,7 +1937,7 @@ class MusicHost<S : Any> internal constructor(
                 fieldEnd()
                 return@launch
             }
-            r.entry = false
+            r.reopen = true
             fieldMenu(r, r.held)
             if (adjust) {
                 r.sheet.press(r.held)
@@ -1936,6 +1959,7 @@ class MusicHost<S : Any> internal constructor(
         fieldRun = null
         val over = r.over
         r.sheet.dismiss()
+        offsetSync(r)
         if (over != null && stack.overlay === over) stack.close()
     }
 
@@ -2064,6 +2088,11 @@ fun <S : Any> rememberMusicHost(
     types.eq.panes = eqs.associate { it.id to it.pane }
     val navGround = remember(env.bands, env.accent) { NavGround(env.bands, env.accent) }
     val host = remember { MusicHost(music, models, toast, jump, menuHost, movePaint, scope, app, env, src, volume, types, npGeo, npHalves, npHalfInks, navGround, split, view) }
+    DisposableEffect(host, np) {
+        val held: (Long) -> Int? = host::heldOffset
+        np.lyrics.held = held
+        onDispose { if (np.lyrics.held === held) np.lyrics.held = { null } }
+    }
     host.update(app, env, src, volume, types, phone, feed, npGeo, npHalves, npHalfInks, navGround, split, view, settings.mapValues { it.value.first }, eq.mapValues { it.value.first })
     return host
 }
@@ -2072,9 +2101,10 @@ private class Blurred(val art: ImageBitmap, val scale: Scale, val picture: NpPic
     fun of(a: ImageBitmap?, s: Scale): Boolean = art === a && scale == s
 }
 
-private class FieldRun(val sheet: FieldSheet, val owner: Any?, val reopens: () -> Boolean, val ends: () -> Boolean) {
+private class FieldRun(val sheet: FieldSheet, val owner: Any?, val reopens: () -> Boolean, val track: Long? = null, val ends: () -> Boolean) {
     var over: Overlay? = null
     var entry by mutableStateOf(false)
+    var reopen = false
     var gen = 0
     var held = 0
     var at = 0

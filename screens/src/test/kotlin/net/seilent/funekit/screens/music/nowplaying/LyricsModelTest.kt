@@ -1,5 +1,7 @@
 package net.seilent.funekit.screens.music.nowplaying
 
+import net.seilent.funekit.api.LyricCopy
+import net.seilent.funekit.api.Lyrics
 import net.seilent.funekit.fx
 import net.seilent.funekit.fxInt
 import net.seilent.funekit.fxMul
@@ -47,6 +49,66 @@ class LyricsModelTest {
         assertTrue(m.pending)
         assertEquals(LYRIC_TITLE, m.index(at(1600, track = 2)))
         assertEquals(LyricView.Blank, m.view(1000, at(1600, track = 2)))
+    }
+
+    private class Served(private val copy: LyricCopy, private val off: Int) : Lyrics {
+        override val fetch = MutableStateFlow(false)
+
+        override val revision = MutableStateFlow(0L)
+
+        override suspend fun lyrics(track: Long): String = copy.text
+
+        override suspend fun copy(track: Long): LyricCopy = copy
+
+        override suspend fun offsetMs(track: Long): Int = off
+
+        override suspend fun setOffset(track: Long, ms: Int) {}
+
+        override suspend fun setFetch(on: Boolean) {}
+    }
+
+    private fun served(copy: LyricCopy, off: Int = 0) = LyricsModel().also { runBlocking { it.read(Served(copy, off), 1, EmptyCoroutineContext) } }
+
+    private val carried = LyricCopy("[00:00.50]one\n[00:01.50]two\n[00:02.50]three", 500)
+
+    @Test
+    fun aCarriedCopyKeepsItsServedLinesAndShowsItsOffset() {
+        val m = served(carried)
+        assertEquals(listOf(500L, 1500L, 2500L), m.lines.map { it.ms })
+        assertEquals(500, m.offsetMs)
+    }
+
+    @Test
+    fun aRetimeMovesACarriedCopyByTheDifferenceAndOnlyForItsTrack() {
+        val m = served(carried)
+        m.retime(1, 800)
+        assertEquals(listOf(200L, 1200L, 2200L), m.lines.map { it.ms })
+        m.retime(1, 200)
+        assertEquals(listOf(800L, 1800L, 2800L), m.lines.map { it.ms })
+        m.retime(2, 0)
+        assertEquals("a retime of another track moves nothing", listOf(800L, 1800L, 2800L), m.lines.map { it.ms })
+        assertEquals(200, m.offsetMs)
+    }
+
+    @Test
+    fun aCopyWithNoCarriedOffsetIsShiftedByTheKit() {
+        val m = served(LyricCopy(text, null), 500)
+        assertEquals(listOf(500L, 1500L, 2500L), m.lines.map { it.ms })
+        assertEquals(500, m.offsetMs)
+        m.retime(1, 0)
+        assertEquals(listOf(1000L, 2000L, 3000L), m.lines.map { it.ms })
+    }
+
+    @Test
+    fun aReReadOfTheSameCopyAtTheSameOffsetLeavesTheModel() {
+        val m = loaded()
+        m.view(10_000, at(1100))
+        m.view(10_016, at(2050))
+        assertTrue("premise: a slide runs", m.sliding(10_016))
+        val gen = m.gen
+        m.load(1, text, 0)
+        assertTrue("the slide runs on", m.sliding(10_032))
+        assertEquals("the copy keeps its generation", gen, m.gen)
     }
 
     @Test

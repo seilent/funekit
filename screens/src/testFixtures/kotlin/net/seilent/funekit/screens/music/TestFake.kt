@@ -13,5 +13,6 @@ fun testFake(
     set: FakeSet = FakeSet.Demo,
     scheduler: TestCoroutineScheduler = TestCoroutineScheduler(),
     services: Boolean = false,
+    lyricsCarried: Boolean = false,
     clock: () -> Long = { scheduler.currentTime * NANOS_PER_MS },
-): Fake = Fake(CoroutineScope(StandardTestDispatcher(scheduler)), clock, set, 0L, LEASE_MS, services = services)
+): Fake = Fake(CoroutineScope(StandardTestDispatcher(scheduler)), clock, set, 0L, LEASE_MS, services = services, lyricsCarried = lyricsCarried)
