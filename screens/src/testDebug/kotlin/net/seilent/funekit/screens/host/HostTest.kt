@@ -31,6 +31,7 @@ import net.seilent.funekit.api.Kind
 import net.seilent.funekit.api.Library
 import net.seilent.funekit.api.LibraryView
 import net.seilent.funekit.api.Listing
+import net.seilent.funekit.api.Player
 import net.seilent.funekit.api.Row
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.MenuForm
@@ -39,6 +40,7 @@ import net.seilent.funekit.kit.motion.MoveKind
 import net.seilent.funekit.kit.motion.OverKind
 import net.seilent.funekit.kit.motion.Overlay
 import net.seilent.funekit.kit.stack.Phase
+import net.seilent.funekit.kit.touch.Swipe
 import net.seilent.funekit.px
 import net.seilent.funekit.scale
 import net.seilent.funekit.fake.Fake
@@ -49,6 +51,7 @@ import net.seilent.funekit.screens.music.album.AlbumModel
 import net.seilent.funekit.screens.music.nowplaying.AdjustHit
 import net.seilent.funekit.screens.music.nowplaying.NowPlayingModel
 import net.seilent.funekit.screens.music.nowplaying.NpAct
+import net.seilent.funekit.screens.music.nowplaying.npTitleGlow
 import net.seilent.funekit.screens.music.nowplaying.NpPicture
 import net.seilent.funekit.screens.music.nowplaying.NpShown
 import net.seilent.funekit.screens.music.nowplaying.OffsetEdit
@@ -89,6 +92,9 @@ class HostTest {
     private val passAt = Offset(Tok.canvasW / 2 * np.ppu + (np.left - page.left), (np.h - Tok.gesture_bottom / 2) * np.ppu)
     private val titleAt = Tok.npTextX + TITLE_DX to np.board.npTitleY - TITLE_DY
     private val seekAt = (Tok.npSeekBandX0 + np.board.npSeekBandX1) / 2 to (np.board.npProgressY + np.board.npSeekBandBottom) / 2
+    private val titlePx = Offset((Tok.npTextX + TITLE_DX) * np.ppu + (np.left - page.left), (np.board.npTitleY - TITLE_DY) * np.ppu)
+    private val artPx = NpLayout(np).let { Offset(it.artX + it.artSide / 2f + (np.left - page.left), it.artY + it.artSide / 2f) }
+    private val seekPx = Offset(seekAt.first * np.ppu + (np.left - page.left), seekAt.second * np.ppu)
     private val markAt = NpLayout(np).let { Offset(it.markX + (np.left - page.left).toFloat(), it.markY.toFloat()) }
     private val idleFrames = ((NowPlayingModel.IDLE + NowPlayingModel.IDLE_FADE) / FRAME_MS + 2).toInt()
     private val idleFadeFrames = (NowPlayingModel.IDLE_FADE / FRAME_MS + 2).toInt()
@@ -2133,6 +2139,98 @@ class HostTest {
         frames(OPEN_FRAMES)
         assertTrue("the key turns the mode on", m.lyrics.mode)
         assertNull("no sheet opens", app.stack.overlay)
+    }
+
+    private fun npGlow(app: TestApp): Float? = rule.runOnIdle { npTitleGlow(app.music.np, rule.mainClock.currentTime) }
+
+    private fun landed(app: TestApp) {
+        var n = 0
+        while (app.stack.phase != Phase.Rest && n < 4 * OPEN_FRAMES) {
+            frames(1)
+            n++
+        }
+    }
+
+    private fun seekApp(seeks: MutableList<Long>): TestApp {
+        val f = testFake(FakeSet.Demo)
+        val player = object : Player by f.player {
+            override suspend fun seek(ms: Long) {
+                seeks += ms
+                f.player.seek(ms)
+            }
+        }
+        val ts = runBlocking { f.library.view().page(Listing.Songs, 0, ART_SONGS).rows.map { it.id }.take(2) }
+        runBlocking { f.player.play(ts, 0, 0) }
+        val src = MusicSource(f.library, player, f.quickplay, f.favorites, f.playlists, f.lyrics)
+        return TestApp(page, np, src, Level(START, null)) { rule.mainClock.currentTime }.also {
+            it.compose(rule, root = true)
+            rule.waitForIdle()
+            rule.mainClock.autoAdvance = false
+            rule.runOnIdle { it.host.resetNp(listOf(TestScreen.Music(MusicEntry(it.stack.entry(), MusicPage.Hub)))) }
+            frames(OPEN_FRAMES)
+        }
+    }
+
+    @Test
+    fun aPushFromNowPlayingDropsItsHeldTouchAndAnUpAfterACloseActsNothing() {
+        val seeks = mutableListOf<Long>()
+        val app = seekApp(seeks)
+        rule.onRoot().performTouchInput { down(titlePx) }
+        frames(CUT_FRAMES)
+        assertNotNull("premise: the held title glows", npGlow(app))
+        rule.runOnIdle { app.host.npTap(NpAct.Queue) }
+        frames(CUT_FRAMES)
+        assertNull("the push from now playing drops its held title", npGlow(app))
+        rule.onRoot().performTouchInput { up() }
+        frames(OPEN_FRAMES)
+        assertFalse("premise: the queue is the top", app.host.isNp(app.stack.top!!))
+        rule.runOnIdle { app.stack.back(app.host.popKind) }
+        frames(OPEN_FRAMES)
+        assertTrue("premise: now playing is the top again", app.host.isNp(app.stack.top!!))
+        rule.onRoot().performTouchInput { down(artPx) }
+        frames(CUT_FRAMES)
+        rule.runOnIdle { app.stack.back(app.host.popKind) }
+        frames(CUT_FRAMES)
+        assertEquals("premise: the close runs", MoveKind.T8, app.stack.turn?.kind)
+        rule.onRoot().performTouchInput { up() }
+        frames(OPEN_FRAMES)
+        assertNull("an up after now playing leaves acts nothing", app.stack.overlay)
+        assertNull("no glow after the close", npGlow(app))
+        landed(app)
+        rule.runOnIdle { app.host.openNowPlaying() }
+        frames(OPEN_FRAMES)
+        landed(app)
+        assertTrue("premise: now playing is open again", app.host.isNp(app.stack.top!!))
+        rule.onRoot().performTouchInput { down(seekPx) }
+        frames(CUT_FRAMES)
+        assertTrue("premise: the seek band down seeks", app.music.np.seeking)
+        rule.runOnIdle { app.stack.back(app.host.popKind) }
+        frames(CUT_FRAMES)
+        assertEquals("premise: the second close runs", MoveKind.T8, app.stack.turn?.kind)
+        rule.onRoot().performTouchInput { up() }
+        frames(OPEN_FRAMES)
+        assertTrue("a seek let go after now playing leaves seeks nothing", seeks.isEmpty())
+    }
+
+    @Test
+    fun aSeekDragThatOutlivesACloseStartSeeksNothingAtItsEnd() {
+        val seeks = mutableListOf<Long>()
+        val app = seekApp(seeks)
+        val m = app.music.np
+        npDown(app, seekAt)
+        assertTrue("premise: the seek band down seeks", m.seeking)
+        val x = seekPx.x
+        rule.runOnIdle {
+            assertTrue("premise: the drag takes the seek", app.host.npPan.begin(x, x, seekPx))
+            app.host.npPan.drag(x / 2)
+        }
+        rule.runOnIdle { app.stack.back(app.host.popKind) }
+        frames(CUT_FRAMES)
+        assertEquals("premise: the close runs", MoveKind.T8, app.stack.turn?.kind)
+        rule.runOnIdle { app.host.npPan.end(Swipe.None) }
+        frames(OPEN_FRAMES)
+        assertTrue("a seek drag ended after now playing leaves seeks nothing", seeks.isEmpty())
+        assertFalse("the drag's end still ends the seek", m.seeking)
     }
 
     @Test

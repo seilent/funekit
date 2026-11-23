@@ -536,6 +536,7 @@ class MusicHost<S : Any> internal constructor(
     }
 
     fun starting(t: Turn<S>) {
+        if (t.from?.let(::isNp) == true && t.kind != MoveKind.T8) np.cancelTouch()
         for (s in listOfNotNull(t.from, t.to)) modelOf(s)?.lists?.forEach { it.land() }
         modelOf(t.from)?.lists?.forEach { it.cancel() }
         if (edit?.second?.let { it === modelOf(t.from) } == true && rangeLeft()) rangeHud.dismiss()
@@ -574,8 +575,10 @@ class MusicHost<S : Any> internal constructor(
         rowsOf(stack.top)?.stopAim()
     }
 
+    private fun npSeekLive(): Boolean = stack.phase == Phase.Rest && stack.top?.let(::isNp) == true
+
     fun up(t: Long, upX: Float?) {
-        if (np.seeking) np.seekUp(npSeekHalf.g, upX?.let { npSeekHalf.ux(it) } ?: np.seekX)?.let { ms -> scope.launch(FailFast) { quiet { src?.player?.seek(ms) } } }
+        if (np.seeking) np.seekUp(npSeekHalf.g, upX?.let { npSeekHalf.ux(it) } ?: np.seekX)?.let { ms -> if (npSeekLive()) scope.launch(FailFast) { quiet { src?.player?.seek(ms) } } }
         np.gestureUp()
         hubOf(stack.top)?.let {
             it.fade.release(t)
@@ -605,7 +608,7 @@ class MusicHost<S : Any> internal constructor(
 
         override fun end(s: Swipe) {
             if (np.seeking) {
-                np.seekUp(npSeekHalf.g, np.seekX)?.let { ms -> scope.launch(FailFast) { quiet { src?.player?.seek(ms) } } }
+                np.seekUp(npSeekHalf.g, np.seekX)?.let { ms -> if (npSeekLive()) scope.launch(FailFast) { quiet { src?.player?.seek(ms) } } }
                 return
             }
             val d = when (s) {
@@ -1545,7 +1548,7 @@ class MusicHost<S : Any> internal constructor(
                         live = rest && stack.top == sc, visible = sh.visible, frozen = sh.frozen,
                         hideFocus = stack.hideFocus, snap = stack.snap,
                         onAct = ::npTap,
-                        onSeek = { ms -> scope.launch(FailFast) { quiet { src?.player?.seek(ms) } } },
+                        onSeek = { ms -> if (npSeekLive()) scope.launch(FailFast) { quiet { src?.player?.seek(ms) } } },
                         split = split,
                         backdrop = backdrop,
                     )
@@ -1756,6 +1759,7 @@ class MusicHost<S : Any> internal constructor(
     internal val npBackdrop: NpBackdrop get() = backdrop
 
     internal fun npTap(act: NpAct) {
+        if (stack.phase != Phase.Rest || stack.top?.let(::isNp) != true) return
         when (act) {
             NpAct.Back -> stack.back(popKind)
             NpAct.Lyrics -> if (np.lyricsView) lyricsToggle()

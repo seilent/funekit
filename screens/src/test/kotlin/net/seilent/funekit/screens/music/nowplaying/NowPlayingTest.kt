@@ -14,6 +14,7 @@ import net.seilent.funekit.Nav
 import net.seilent.funekit.Surface
 import net.seilent.funekit.Window
 import net.seilent.funekit.gen.Tok
+import net.seilent.funekit.kit.motion.Curves
 import net.seilent.funekit.kit.np.NP_BACK
 import net.seilent.funekit.kit.np.NP_HEART
 import net.seilent.funekit.kit.np.NP_MARK
@@ -34,12 +35,16 @@ import net.seilent.funekit.screens.host.npMark
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 private const val HELD_AT = 1000L
+private const val AT = 1000L
+private const val TITLE_DX = 20f
+private const val TITLE_DY = 4f
 private const val MS_NANOS = 1000000L
 private const val RATE = 48000
 private const val DURATION = 180000L
@@ -227,6 +232,57 @@ class NowPlayingTest {
         m.keyed(40)
         assertEquals("the key drops the heart press at once", 1f, m.press[NP_HEART].scale(40f), 0f)
         assertEquals(NpAct.None, m.tap(a105, 40))
+    }
+
+    private fun titleDown(m: NowPlayingModel, now: Long) = m.down(a105, Tok.npTextX + TITLE_DX, a105.s.board.npTitleY - TITLE_DY, now)
+
+    @Test
+    fun aTitleDownGlowsOnTheCubicOverThePressGlowAndTheTapCutsIt() {
+        val m = NowPlayingModel()
+        m.sync(shown(1), 0)
+        titleDown(m, AT)
+        assertEquals(Curves.cubicOut.at(0.5f), npTitleGlow(m, AT + 25)!!, 0f)
+        assertTrue("the glow keeps the page animating while it rises", m.animating(AT + 49))
+        assertFalse("the risen glow lets the page rest", m.animating(AT + 50))
+        assertEquals(1f, npTitleGlow(m, AT + 50)!!, 0f)
+        assertEquals(NpAct.Queue, m.tap(a105, AT + 60))
+        assertNull("the tap cuts the glow", npTitleGlow(m, AT + 60))
+    }
+
+    @Test
+    fun aSlopCancelAndAnInfoHoldCutTheTitleGlowAndTheNextDownGlowsAgain() {
+        val m = NowPlayingModel()
+        m.sync(shown(1), 0)
+        titleDown(m, AT)
+        assertNotNull("premise: the title down glows", npTitleGlow(m, AT + 10))
+        m.cancel(AT + 20)
+        assertNull("the slop cancel cuts the glow", npTitleGlow(m, AT + 20))
+        titleDown(m, AT + 30)
+        assertNotNull("the next down glows again", npTitleGlow(m, AT + 40))
+        assertTrue("premise: the hold is an info hold", m.hold(a105))
+        assertNull("the hold cuts the glow", npTitleGlow(m, AT + 50))
+    }
+
+    @Test
+    fun aTitleDownGlowsOnlyOnALibraryTrackOffTheLyricsView() {
+        val v = NowPlayingModel()
+        v.feed(PhoneTrack("Radio", "T", "A", "B", true, false, 180000, 0, 0, 1f, false, PhoneRepeat.Off, 0, 0, null))
+        v.sync(NpShown.of(v.phone!!), 0)
+        titleDown(v, AT)
+        assertTrue("premise: the variant title takes the focus", v.titleFocus)
+        assertNull("the variant title takes no glow", npTitleGlow(v, AT + 50))
+        val l = lyrics(true)
+        titleDown(l, AT)
+        assertNull("the lyrics view takes no glow", npTitleGlow(l, AT + 50))
+        val e = NowPlayingModel()
+        titleDown(e, AT)
+        assertNull("no track takes no glow", npTitleGlow(e, AT + 50))
+        val s = NowPlayingModel()
+        s.feed(PlayerState(queueSize = 4, index = 0, track = 1, playing = true))
+        s.sync(shown(1), 0)
+        s.down(a105, 14.1f + 152.7f / 4, 300f, AT)
+        assertTrue("premise: the seek band down seeks", s.seeking)
+        assertNull("a seek band down takes no glow", npTitleGlow(s, AT + 50))
     }
 
     @Test

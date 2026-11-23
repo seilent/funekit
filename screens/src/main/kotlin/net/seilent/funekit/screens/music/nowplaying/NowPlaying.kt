@@ -9,6 +9,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import kotlinx.coroutines.Dispatchers
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.Edges
+import net.seilent.funekit.kit.Glow
 import net.seilent.funekit.kit.motion.Curves
 import net.seilent.funekit.kit.motion.Press
 import net.seilent.funekit.kit.np.NP_BACK
@@ -92,6 +93,7 @@ class NowPlayingModel {
 
     fun lyricsShown(): Boolean = lyricsView && lyrics.shown(variant)
     val press = Array(NP_PRESSES) { i -> Press().also { it.scaled = i == NP_MARK } }
+    val titleGlow = Glow()
 
     private var held = NpShown.None
     private var heldMark = false
@@ -229,6 +231,7 @@ class NowPlayingModel {
 
     fun cancelTouch() {
         for (p in press) p.drop()
+        titleGlow.off()
         touchDown = false
         seeking = false
         if (slide.target != null) {
@@ -362,8 +365,11 @@ class NowPlayingModel {
             }
         }
         if (!lyr && g.titleHit(x, y) && !titleFocus) titleFocus = true
+        if (titleHeld(g)) titleGlow.down(0, now)
         bump()
     }
+
+    private fun titleHeld(g: NpLayout): Boolean = touchDown && !seeking && !variant && !lyricsShown() && shown.track != null && g.titleHit(downX, downY)
 
     private fun markLive(now: Long): Boolean = !lyricsShown() && !lyrics.fading(now) && markAt(now) && (!variant || lyrics.phoneLyrics)
 
@@ -401,6 +407,7 @@ class NowPlayingModel {
         if (seeking) return
         if (!touchDown) return
         touchDown = false
+        titleGlow.off()
         val t = now.toFloat()
         for (p in press) p.cancel(t)
         cancelled = true
@@ -411,6 +418,7 @@ class NowPlayingModel {
         if (seeking) return NpAct.None
         if (!touchDown) return NpAct.None
         touchDown = false
+        titleGlow.off()
         val t = now.toFloat()
         for (p in press) p.tap(t)
         bump()
@@ -434,9 +442,10 @@ class NowPlayingModel {
     }
 
     fun hold(g: NpLayout): Boolean {
-        if (!touchDown || seeking || variant || lyricsShown() || shown.track == null || !g.titleHit(downX, downY)) return false
+        if (!titleHeld(g)) return false
         touchDown = false
         titleFocus = false
+        titleGlow.off()
         slide.armed = false
         slide.touch = false
         bump()
@@ -445,7 +454,7 @@ class NowPlayingModel {
 
     fun pressing(now: Long): Boolean = press.any { it.stale(now.toFloat()) }
 
-    fun animating(now: Long): Boolean = !idleDone(now) || pressing(now) || slideBusy() || lyrics.fading(now)
+    fun animating(now: Long): Boolean = !idleDone(now) || pressing(now) || slideBusy() || lyrics.fading(now) || titleGlow.moving(now)
 
     var slide = NpSlide()
         private set

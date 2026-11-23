@@ -21,6 +21,10 @@ import net.seilent.funekit.keptText
 import net.seilent.funekit.kit.Chrome
 import net.seilent.funekit.kit.Covers
 import net.seilent.funekit.kit.Edges
+import net.seilent.funekit.kit.GlowText
+import net.seilent.funekit.kit.RowGlow
+import net.seilent.funekit.kit.pressGlow
+import net.seilent.funekit.kit.rolePx
 import net.seilent.funekit.kit.Ink
 import net.seilent.funekit.kit.StatusInk
 import net.seilent.funekit.kit.Word
@@ -263,9 +267,12 @@ fun DrawScope.npTimeBand(g: NpLayout, t: NpTimeInk, durationMs: Long, accent: Co
     rec?.word("np.time.right", right, px, g.timeBase.toFloat(), ta)
 }
 
-fun DrawScope.npTitle(g: NpLayout, ink: NpInk, variant: Boolean, alpha: Float, rec: DrawRecord?) {
+fun npTitleGlow(m: NowPlayingModel, now: Long): Float? = m.titleGlow.level(now).takeIf { it > 0f }
+
+fun DrawScope.npTitle(g: NpLayout, ink: NpInk, variant: Boolean, alpha: Float, rec: DrawRecord?, glow: RowGlow? = null) {
     val a = Roles.npViewTitle.alpha * alpha
     val c = g.textClip
+    if (glow != null) pressGlow(glow.glow, listOf(GlowText(ink.title, g.textX64, g.titleY, rolePx(Roles.npViewTitle, g.s))), Edges(c.x0, c.y0, c.x1, c.y1), g.s.ppu, glow.level * alpha)
     clipRect(c.x0.toFloat(), 0f, c.x1.toFloat(), size.height) {
         val x = penPx(g.textX64)
         word(ink.title, x, g.titleY.toFloat(), Ink.white, a)

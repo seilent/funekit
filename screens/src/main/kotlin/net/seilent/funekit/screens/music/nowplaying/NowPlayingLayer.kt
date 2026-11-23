@@ -27,6 +27,7 @@ import net.seilent.funekit.kit.Edges
 import net.seilent.funekit.kit.StatusInk
 import net.seilent.funekit.kit.np.NpLayout
 import net.seilent.funekit.kit.pxSize
+import net.seilent.funekit.kit.RowGlow
 import net.seilent.funekit.kit.rememberLook
 import net.seilent.funekit.kit.stack.PageLayer
 import net.seilent.funekit.kit.statusRow
@@ -160,6 +161,7 @@ fun NowPlayingLayer(
         val mark = rememberLook(m, covered = covered) { npMarkLook(m, frame) }
         val rings = rememberLook(m, hideFocus, snap, covered = covered) { npRingsLook(m, frame, hideFocus) }
         val statusAlpha = rememberLook(m, covered = covered) { npStatusAlpha(m, frame) }
+        val glow = rememberLook(m, covered = covered) { npTitleGlow(m, frame) }
         val full = Modifier.pxSize(s.widthPx, s.heightPx)
         Canvas(full) { halves.forEach { h -> if (NpPart.Back in h.parts) npHalf(h) { npBackRing(h.g, back.value, k, null) } } }
         if (lyricsNow) {
@@ -172,7 +174,7 @@ fun NowPlayingLayer(
                     npHalf(h) {
                         if (NpPart.Top in h.parts) npTop(h.g, inks[i], variant, k, null)
                         if (NpPart.Art in h.parts) npArt(h.g, art, variant, k, t.covers)
-                        if (NpPart.Title in h.parts) npTitle(h.g, inks[i], variant, k, null)
+                        if (NpPart.Title in h.parts) npTitle(h.g, inks[i], variant, k, null, glow.value?.let { RowGlow(m.titleGlow, it) })
                     }
                 }
             }
