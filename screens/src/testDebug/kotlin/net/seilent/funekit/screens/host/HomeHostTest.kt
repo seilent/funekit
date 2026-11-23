@@ -52,6 +52,7 @@ import net.seilent.funekit.kit.quickplay.QuickplayState
 import net.seilent.funekit.kit.quickplay.peekHit
 import net.seilent.funekit.kit.quickplay.qpTiles
 import net.seilent.funekit.kit.stack.Phase
+import net.seilent.funekit.kit.touch.Swipe
 import net.seilent.funekit.scale
 import net.seilent.funekit.screens.music.MusicPage
 import net.seilent.funekit.screens.music.MusicSource
@@ -596,6 +597,88 @@ class HomeHostTest {
         assertEquals("a home entry is listed once", failed?.message)
     }
 
+    private fun gated(data: QpData) {
+        launcher(qpSource(data))
+        rule.runOnUiThread { rig.quickplay = false }
+        settle()
+    }
+
+    private fun tapPeek() {
+        val peek = peekHit(home)
+        tap((peek.x0 + peek.x1) / 2f, (peek.y0 + peek.y1) / 2f)
+    }
+
+    @Test
+    fun aGateOffDrawsNoPeekAndTakesNoSwipe() {
+        gated(songData(songs(TILES)))
+        assertFalse("no peek is drawn", state.shown(true, true, false).peek)
+        assertFalse("no swipe is taken toward the pane", state.acts(Swipe.Right))
+        val from = Offset(a105Page.widthPx * DRAG_FROM, a105Page.heightPx - DRAG_Y)
+        rule.onRoot().performTouchInput {
+            down(from)
+            repeat(DRAG_STEPS) { moveBy(Offset(DRAG_PX, 0f)) }
+        }
+        assertFalse("the drag opens no pane", state.quickplay.pan.shown)
+        rule.onRoot().performTouchInput { up() }
+        settle()
+        assertFalse(state.quickplay.pan.shown)
+    }
+
+    @Test
+    fun aPeekTapWithTheGateOffOpensNothing() {
+        gated(songData(songs(TILES)))
+        tapPeek()
+        settle()
+        assertFalse(state.quickplay.pan.shown)
+        assertFalse(state.quickplay.pan.front)
+    }
+
+    @Test
+    fun aGateOffHomeMovePaintsNoPeek() {
+        gated(songData(songs(TILES)))
+        rule.runOnUiThread {
+            stack.push(TestScreen.Music(MusicEntry(stack.entry(), MusicPage.Hub)), MoveKind.T2)
+            Snapshot.sendApplyNotifications()
+        }
+        frame()
+        assertTrue("premise: the push moves", stack.moving)
+        assertFalse(checkNotNull(app.movePaint.ctx.home).paint.quickplay)
+        assertEquals("the push starts with no peek", 0f, app.movePaint.ctx.ends.peek0, 0f)
+        until("the push lands") { stack.phase == Phase.Rest }
+        rule.runOnUiThread { app.host.back() }
+        frame()
+        assertTrue("premise: the back moves", stack.moving)
+        assertEquals("home lands with no peek", 0f, app.movePaint.ctx.ends.peek1, 0f)
+    }
+
+    @Test
+    fun aGateTurnedOffLeavesAnOpenPaneOpenUntilItCloses() {
+        val qp = front(songData(songs(TILES)))
+        rule.runOnUiThread { rig.quickplay = false }
+        settle()
+        assertTrue("the open pane stays open", qp.pan.front && qp.pan.still)
+        rule.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
+        settle()
+        assertFalse("a back closes it", qp.pan.front)
+        assertFalse(qp.pan.shown)
+        tapPeek()
+        settle()
+        assertFalse("the gate keeps it closed", qp.pan.front)
+    }
+
+    @Test
+    fun aGateTurnedOffMidPanEndsTheMoveTowardHome() {
+        launcher(qpSource(songData(songs(TILES))))
+        tapPeek()
+        frame()
+        val qp = state.quickplay
+        assertTrue("premise: the pan runs toward the front", qp.pan.front && !qp.pan.still)
+        rule.runOnUiThread { rig.quickplay = false }
+        settle()
+        assertFalse(qp.pan.front)
+        assertFalse(qp.pan.shown)
+    }
+
     private fun blank() = Offset(a105Page.widthPx - BLANK, a105Page.heightPx - BLANK)
 
     companion object {
@@ -611,5 +694,9 @@ class HomeHostTest {
         private const val UNFOLD_H = 1280
         private const val DENSITY = 2f
         private const val ITEM = 1
+        private const val DRAG_FROM = 0.4f
+        private const val DRAG_Y = 200f
+        private const val DRAG_STEPS = 10
+        private const val DRAG_PX = 20f
     }
 }

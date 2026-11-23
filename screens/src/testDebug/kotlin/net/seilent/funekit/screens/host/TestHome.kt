@@ -24,6 +24,7 @@ class TestHome(home: Scale, entries: List<HomeEntry>, source: QpSource?) {
     var entries by mutableStateOf(entries)
     var source by mutableStateOf(source)
     var density by mutableStateOf<Density?>(null)
+    var quickplay by mutableStateOf(true)
     var state: HomeState? = null
         private set
     val picks = mutableListOf<HomeEntry>()
@@ -36,7 +37,7 @@ class TestHome(home: Scale, entries: List<HomeEntry>, source: QpSource?) {
 
     @Composable
     internal fun State(toast: Toast, covers: Covers, m: TextMeasurer, fonts: FontFamily.Resolver, density: Density, now: () -> Long, poke: () -> Unit, log: (String) -> Unit): HomeState {
-        val s = rememberHomeState(entries, { it.sub }, home, source, now, poke, toast, covers, m, fonts, this.density ?: density, log)
+        val s = rememberHomeState(entries, { it.sub }, home, source, quickplay, now, poke, toast, covers, m, fonts, this.density ?: density, log)
         state = s
         if (menus.lastOrNull() !== s.menu) menus += s.menu
         return s

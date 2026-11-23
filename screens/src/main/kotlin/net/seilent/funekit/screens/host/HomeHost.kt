@@ -325,7 +325,7 @@ fun homeStarting(t: Turn<*>, menu: HomeMenu, touch: ListTouch) {
     if (t.from == null) touch.cancel()
 }
 
-class HomeShown(val home: Boolean, val pan: Boolean, val front: Boolean, val frontFrozen: Boolean)
+class HomeShown(val home: Boolean, val pan: Boolean, val front: Boolean, val frontFrozen: Boolean, val peek: Boolean)
 
 class HomeState internal constructor(
     entries: List<HomeEntry>,
@@ -341,6 +341,7 @@ class HomeState internal constructor(
     qpTouch: ListTouch,
     peekBox: Edges,
     source: QpSource?,
+    gate: Boolean,
     internal var now: () -> Long,
     internal var poke: () -> Unit,
     internal var toast: Toast,
@@ -359,6 +360,7 @@ class HomeState internal constructor(
     internal var qpTouch by mutableStateOf(qpTouch)
     internal var peekBox by mutableStateOf(peekBox)
     internal var source by mutableStateOf(source)
+    internal var gate by mutableStateOf(gate)
     internal var frame by mutableLongStateOf(0L)
     private var peekDown = false
     private var held: List<HomeEntry>? = null
@@ -401,12 +403,12 @@ class HomeState internal constructor(
     fun back() = leave()
 
     fun show(front: Boolean) {
-        panLayers(front)
+        if (!panLayers(front)) return
         qp.pan.show(front, now())
         poke()
     }
 
-    fun acts(s: Swipe): Boolean = if (qp.pan.front) peekDown && s == Swipe.Left else s == Swipe.Right
+    fun acts(s: Swipe): Boolean = if (qp.pan.front) peekDown && s == Swipe.Left else gate && s == Swipe.Right
 
     fun homePan(stack: PageStack<*>): Pan = object : Pan {
         override fun begin(x: Float, origin: Float, down: Offset): Boolean {
@@ -415,7 +417,7 @@ class HomeState internal constructor(
             val front = pan.front
             if (front && !inPeek(down)) return false
             if (if (front) x >= origin else x <= origin) return false
-            panLayers(!front)
+            if (!panLayers(!front)) return false
             pan.begin(x)
             poke()
             return true
@@ -435,7 +437,8 @@ class HomeState internal constructor(
 
     fun shown(atHome: Boolean, rest: Boolean, modal: Boolean): HomeShown {
         val p = qp.pan
-        return HomeShown(atHome && rest && !p.shown, atHome && p.shown, atHome && p.front && p.still, atHome && p.front && modal)
+        val home = atHome && rest && !p.shown
+        return HomeShown(home, atHome && p.shown, atHome && p.front && p.still, atHome && p.front && modal, home && gate)
     }
 
     fun tick(t: Long) {
@@ -465,15 +468,27 @@ class HomeState internal constructor(
 
     fun off(): Float = menu.off(homeTouch.state.firstVisibleItemScrollOffset, geo)
 
-    fun paint(ringLit: Boolean): HomePaint = LauncherHomePaint(geo, inks, menu, ringLit, qpLayout, qpWords, qp, qpBox, qpTouch, ::off)
+    fun paint(ringLit: Boolean): HomePaint = LauncherHomePaint(geo, inks, menu, ringLit, qpLayout, qpWords, qp, qpBox, qpTouch, gate, ::off)
 
     internal fun landed() {
         held = null
     }
 
+    internal fun gateOff() {
+        val p = qp.pan
+        val toFront = if (p.dragged) !p.front else p.front && !p.still
+        if (!toFront) return
+        p.run(false, now())
+        poke()
+    }
+
     private fun inPeek(o: Offset): Boolean = o.x >= peekBox.x0 && o.x < peekBox.x1 && o.y >= peekBox.y0 && o.y < peekBox.y1
 
-    private fun panLayers(front: Boolean) = qpPanStart(front, geo, menu, homeTouch, qp, qpTouch, qpLayout, toast)
+    private fun panLayers(front: Boolean): Boolean {
+        if (front && !gate) return false
+        qpPanStart(front, geo, menu, homeTouch, qp, qpTouch, qpLayout, toast)
+        return true
+    }
 
     internal fun update(
         entries: List<HomeEntry>,
@@ -489,6 +504,7 @@ class HomeState internal constructor(
         qpTouch: ListTouch,
         peekBox: Edges,
         source: QpSource?,
+        gate: Boolean,
         now: () -> Long,
         poke: () -> Unit,
         toast: Toast,
@@ -508,6 +524,7 @@ class HomeState internal constructor(
         this.qpTouch = qpTouch
         this.peekBox = peekBox
         this.source = source
+        this.gate = gate
         this.now = now
         this.poke = poke
         this.toast = toast
@@ -521,6 +538,7 @@ fun rememberHomeState(
     sub: (HomeEntry) -> String,
     scale: Scale,
     source: QpSource?,
+    quickplay: Boolean,
     now: () -> Long,
     poke: () -> Unit,
     toast: Toast,
@@ -544,12 +562,13 @@ fun rememberHomeState(
     val qpBox = remember(qpLayout, density, fonts, covers) { qpBoxes(measurer, fonts, qpLayout, density, covers) }
     val qpTouch = rememberListTouch(Kind.Quickplay, scale, qp::forget)
     val peekBox = remember(scale, qpLayout.panelPx) { menuPeek(scale, qpLayout.panelPx) }
-    val state = remember { HomeState(entries, scale, ink, geo, menu, homeTouch, qp, qpWords, qpLayout, qpBox, qpTouch, peekBox, source, now, poke, toast, log) }
-    state.update(entries, scale, ink, geo, menu, homeTouch, qp, qpWords, qpLayout, qpBox, qpTouch, peekBox, source, now, poke, toast, log)
+    val state = remember { HomeState(entries, scale, ink, geo, menu, homeTouch, qp, qpWords, qpLayout, qpBox, qpTouch, peekBox, source, quickplay, now, poke, toast, log) }
+    state.update(entries, scale, ink, geo, menu, homeTouch, qp, qpWords, qpLayout, qpBox, qpTouch, peekBox, source, quickplay, now, poke, toast, log)
     LaunchedEffect(menu) {
         withFrameMillis { menu.enter(it) }
         poke()
     }
+    LaunchedEffect(quickplay) { if (!quickplay) state.gateOff() }
     LaunchedEffect(source) {
         val src = source ?: return@LaunchedEffect
         qp.waiting = qp.data.generation == 0L
@@ -649,7 +668,7 @@ fun <S : Any> HomeLayer(
         val track = if (q.kind == QpKind.Song) q.id else null
         return host.openMusic(SheetTarget(SheetKind.Tile, q.title, listing, g, track = track, pin = q.kind.api(), id = q.id, pinned = tile.section == QP_PINS, from = SheetFrom.Tile))
     }
-    if (shown.home) {
+    if (shown.peek) {
         val peek = rememberLook(qpLayout, qpBox, covered = false) { qpAlpha(0f, menu.peek(state.frame)) to qp.look(qpLayout, state.frame) }
         Canvas(Modifier.pxSize(page.widthPx, page.heightPx)) {
             val (aq, look) = peek.value

@@ -35,11 +35,10 @@ class LauncherHomePaint(
     private val qp: QuickplayState,
     private val qpBox: QpBoxes,
     private val qpTouch: ListTouch,
+    override val quickplay: Boolean = true,
     private val homeOff: () -> Float = { 0f },
 ) : HomePaint {
-    override val quickplay: Boolean = true
-
-    override fun peekAlpha(at: Long): Float = Tok.qpPeekAlpha * menu.peek(at)
+    override fun peekAlpha(at: Long): Float = if (quickplay) Tok.qpPeekAlpha * menu.peek(at) else 0f
 
     override fun baseline(item: Int): Float = geo.baseline(item)
 
