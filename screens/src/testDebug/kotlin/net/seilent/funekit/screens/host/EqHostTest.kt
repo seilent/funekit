@@ -135,6 +135,13 @@ class EqHostTest {
     }
 
     @Test
+    fun anEqPageWhoseOnePivotHasNoNameDrawsAChromeWithNoPivots() {
+        val app = app(TestPane(listOf(RowPivot("", lines("hp", ROWS)))))
+        open(app)
+        assertEquals("the chrome has no pivots", 0, app.host.eqChromes.getValue(ID).count)
+    }
+
+    @Test
     fun aSecondEnterOfTheSameEqScreenKeepsTheSwitchedPivot() {
         val app = app()
         val (sc, m) = open(app, BT)

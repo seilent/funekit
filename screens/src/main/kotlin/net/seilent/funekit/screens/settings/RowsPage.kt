@@ -27,6 +27,8 @@ private const val SPOT_FIELDS = 3
 
 data class RowPivot<out R>(val name: String, val rows: List<R>)
 
+internal fun <R> pivotNames(pivots: List<RowPivot<R>>): List<String> = if (pivots.singleOrNull()?.name == "") emptyList() else pivots.map { it.name }
+
 class RowsPane {
     val focus = FocusTrack().also { it.attach() }
     var px by mutableIntStateOf(0)

@@ -159,7 +159,7 @@ abstract class PageType<M : PageModel, D : Any>(protected val types: MusicTypes)
 
     fun backOf(pm: PageModel?): Boolean = of(pm)?.let(::back) == true
 
-    fun pivotOf(pm: PageModel?): Pair<PivotPage, Chrome>? = of(pm)?.let { m -> (m as? PivotPage)?.let { it to chrome(m) } }
+    open fun pivotOf(pm: PageModel?): Pair<PivotPage, Chrome>? = of(pm)?.let { m -> (m as? PivotPage)?.let { it to chrome(m) } }
 
     fun retain(models: PageModels) {
         draws.keys.retainAll { models[it.entry] === it }
@@ -465,6 +465,8 @@ class SettingsType(types: MusicTypes) : PageType<SettingsModel, SettingsDraw>(ty
     override fun side(m: SettingsModel): PagePaint = SettingsPaint(drawOf(m), chrome(m), types.homeItem(m.id.header), env.bands, env.accent)
 
     override fun thumb(m: SettingsModel): PageThumb = PageThumb(m.fade, drawOf(m).thumbAt(m.pivot, m.pane.px) != null, m::poke)
+
+    override fun pivotOf(pm: PageModel?): Pair<PivotPage, Chrome>? = super.pivotOf(pm)?.takeIf { it.second.count > 0 }
 }
 
 class EqType(types: MusicTypes) : PageType<EqModel, EqDraw>(types) {

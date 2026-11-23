@@ -190,6 +190,7 @@ import net.seilent.funekit.screens.settings.SettingsId
 import net.seilent.funekit.screens.settings.SettingsLayer
 import net.seilent.funekit.screens.settings.SettingsModel
 import net.seilent.funekit.screens.settings.SettingsPage
+import net.seilent.funekit.screens.settings.pivotNames
 import net.seilent.funekit.screens.settings.settingsChrome
 import net.seilent.funekit.screens.settings.valueSheet
 
@@ -2085,7 +2086,7 @@ fun <S : Any> rememberMusicHost(
     val settings = pages.associate { page ->
         key(page.id) {
             val pivots = page.rows.pivots.value
-            val names = remember(pivots) { pivots.map { it.name } }
+            val names = remember(pivots) { pivotNames(pivots) }
             val c = rememberChrome(env.page, page.id.header, names)
             page.id to (pivots to remember(c, page.look) { settingsChrome(c, page.look) })
         }
@@ -2096,7 +2097,7 @@ fun <S : Any> rememberMusicHost(
     val eq = eqs.associate { page ->
         key(page.id) {
             val pivots = page.pane.pivots.value
-            val names = remember(pivots) { pivots.map { it.name } }
+            val names = remember(pivots) { pivotNames(pivots) }
             val c = rememberChrome(env.page, page.id.header, names, Roles.settingsItem.case, Roles.settingsItem.weight)
             page.id to (pivots to remember(c) { settingsChrome(c, HeaderLook.Page) })
         }

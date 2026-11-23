@@ -13,6 +13,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
+import net.seilent.funekit.FuneTheme
 import net.seilent.funekit.Insets
 import net.seilent.funekit.Nav
 import net.seilent.funekit.Roles
@@ -20,6 +21,7 @@ import net.seilent.funekit.Surface
 import net.seilent.funekit.Window
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.Accent
+import net.seilent.funekit.kit.Chrome
 import net.seilent.funekit.kit.MenuForm
 import net.seilent.funekit.kit.motion.MoveKind
 import net.seilent.funekit.kit.motion.OverKind
@@ -47,6 +49,7 @@ import net.seilent.funekit.screens.settings.SettingsId
 import net.seilent.funekit.screens.settings.SettingsModel
 import net.seilent.funekit.screens.settings.SettingsPage
 import net.seilent.funekit.screens.settings.SettingsRows
+import net.seilent.funekit.screens.settings.rememberSettingsChrome
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotSame
@@ -390,6 +393,47 @@ class SettingsHostTest {
         val c = app.host.types.settings.chromes.getValue(ID)
         assertEquals(Tok.page_headerX, c.headerPen, 0f)
         assertEquals(Roles.pageHeader.alpha, c.headerAlpha, 0f)
+    }
+
+    @Test
+    fun aPageWhoseOnePivotHasNoNameDrawsAChromeWithNoPivots() {
+        val id = SettingsId(PAGE)
+        val app = app(SettingsPage(id, Rows(listOf(SettingPivot("", listOf(choice("a"), choice("b"))))), HeaderLook.Page))
+        val (_, m) = open(app, id)
+        val c = app.host.types.settings.chromes.getValue(id)
+        assertEquals("the chrome has no pivots", 0, c.count)
+        assertEquals("the header is the page's word", PAGE, c.header.text)
+        assertEquals("the page shows its rows", listOf("a", "b"), m.rows(m.pivot).map { it.key })
+        assertEquals("the focus is on the first row", 0, m.focusRow(m.pivot))
+    }
+
+    @Test
+    fun aSidewaysDragOnAPageWithNoPivotsLeavesItsRowsInPlace() {
+        val id = SettingsId(PAGE)
+        val app = app(SettingsPage(id, Rows(listOf(SettingPivot("", listOf(choice("a"), choice("b"))))), HeaderLook.Page), root = true)
+        val (_, m) = open(app, id)
+        val step = 2 * Tok.touchSlop * page.touchPpu / PAN_STEPS
+        rule.onRoot().performTouchInput { down(Offset(page.widthPx / 2f, PAN_Y)) }
+        frames(1)
+        repeat(PAN_STEPS) {
+            rule.onRoot().performTouchInput { moveBy(Offset(-step, 0f)) }
+            frames(1)
+            assertEquals("the rows stay at x 0 during the drag", 0, m.dragX(rule.mainClock.currentTime, page.ppu))
+        }
+        rule.onRoot().performTouchInput { up() }
+        repeat(OPEN_FRAMES) {
+            frames(1)
+            assertEquals("the rows stay at x 0 after the drag", 0, m.dragX(rule.mainClock.currentTime, page.ppu))
+        }
+    }
+
+    @Test
+    fun rememberSettingsChromeOfAnUnnamedPivotHasNoPivots() {
+        val m = SettingsModel(ENTRY, ID).also { it.pivots = listOf(SettingPivot("", listOf(choice("a")))) }
+        var chrome: Chrome? = null
+        rule.setContent { FuneTheme(page) { chrome = rememberSettingsChrome(page, m, HeaderLook.Page) } }
+        rule.waitForIdle()
+        assertEquals("the chrome has no pivots", 0, chrome?.count)
     }
 
     @Test
@@ -1086,6 +1130,8 @@ class SettingsHostTest {
         private const val LEFT = "left db"
         private const val RIGHT = "right db"
         private const val LEVEL = "level"
+        private const val PAN_Y = 200f
+        private const val PAN_STEPS = 8
         private const val LIMIT = 20
         private const val LANDED = 5
         private const val HUE_STEP = 10

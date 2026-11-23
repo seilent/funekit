@@ -26,7 +26,7 @@ fun settingsSwitch(m: RowsPage<*>, chrome: Chrome, to: Int, now: Long) = pivotSw
 
 @Composable
 fun rememberSettingsChrome(s: Scale, m: SettingsModel, look: HeaderLook): Chrome {
-    val c = rememberChrome(s, m.id.header, m.names)
+    val c = rememberChrome(s, m.id.header, pivotNames(m.groups))
     return remember(c, look) { settingsChrome(c, look) }
 }
 
