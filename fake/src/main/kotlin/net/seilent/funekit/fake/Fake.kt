@@ -18,6 +18,7 @@ class Fake(
     trackRefs: Boolean = false,
     services: Boolean = false,
     lyricsCarried: Boolean = false,
+    offersQuickplay: Boolean = true,
 ) {
     private val bus = MutableSharedFlow<EngineEvent>(extraBufferCapacity = EVENTS, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     private val store = Store(set, services)
@@ -25,7 +26,7 @@ class Fake(
 
     val library = FakeLibrary(scope, clock, set, latencyMs, leaseMs, store, bus, trackRefs)
     val player = FakePlayer(scope, clock, library, store, bus)
-    val quickplay = FakeQuickplay(store, library, pinCap)
+    val quickplay = FakeQuickplay(store, library, pinCap, offersQuickplay)
     val favorites = FakeFavorites(store, library, latencyMs)
     val playlists = FakePlaylists(store, library)
     val settings = FakeSettings(player)

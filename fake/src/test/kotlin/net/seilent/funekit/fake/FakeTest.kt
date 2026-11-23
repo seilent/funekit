@@ -71,6 +71,18 @@ class FakeTest {
     }
 
     @Test
+    fun aFakeOfferingNoQuickplayRefusesPinsAndMovesNoRevision() = runTest {
+        val f = Fake(backgroundScope, { now() }, FakeSet.Main, 40, 5_000, offersQuickplay = false)
+        assertFalse(f.quickplay.available.value)
+        assertTrue(fake().quickplay.available.value)
+        val song = f.library.view().page(Listing.Songs, 0, 1).rows.single().id
+        val r = f.quickplay.revision.value
+        assertTrue(runCatching { f.quickplay.pin(Kind.Song, song) }.exceptionOrNull() is UnsupportedOperationException)
+        assertTrue(runCatching { f.quickplay.unpin(Kind.Song, song) }.exceptionOrNull() is UnsupportedOperationException)
+        assertEquals(r, f.quickplay.revision.value)
+    }
+
+    @Test
     fun viewIsCachedPerSnapshot() = runTest {
         val f = fake()
         val view = f.library.view()

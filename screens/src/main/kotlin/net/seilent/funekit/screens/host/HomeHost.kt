@@ -684,8 +684,10 @@ fun <S : Any> HomeLayer(
     }
     fun qpHold(tile: QpTile): Boolean {
         if (tile.section == QP_PLAYING) return false
+        val s = music ?: return false
+        if (!s.quickplay.available.value) return false
         val q = tile.item
-        val g = music?.library?.generation?.value ?: return false
+        val g = s.library.generation.value
         val listing = when (q.kind) {
             QpKind.Album -> Listing.AlbumTracks(q.id)
             QpKind.Artist -> Listing.ArtistTracks(q.id)

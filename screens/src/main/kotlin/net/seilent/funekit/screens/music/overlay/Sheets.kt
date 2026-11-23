@@ -62,21 +62,21 @@ class SheetExtra(val word: String, val act: (Long) -> ExtraSheet?)
 
 class ExtraSheet(val title: String, val items: List<String>, val pick: (Int) -> Boolean)
 
-fun sheetWords(t: SheetTarget, pinned: Boolean, delete: Boolean, extras: List<SheetExtra>): List<String> {
+fun sheetWords(t: SheetTarget, pinned: Boolean, delete: Boolean, extras: List<SheetExtra>, pins: Boolean = true): List<String> {
     for (e in extras) require(e.word !in kitWords) { "an extra takes a word no kit sheet shows: ${e.word}" }
     val del = delete && (t.kind == SheetKind.Song || t.kind == SheetKind.Album)
-    return sheetItems(t, pinned) + listOfNotNull(DELETE.takeIf { del }) + extras.map { it.word }
+    return sheetItems(t, pinned, pins) + listOfNotNull(DELETE.takeIf { del }) + extras.map { it.word }
 }
 
-fun sheetItems(t: SheetTarget, pinned: Boolean): List<String> {
-    val pin = if (pinned) UNPIN_QP else PIN
+fun sheetItems(t: SheetTarget, pinned: Boolean, pins: Boolean = true): List<String> {
+    val pin = if (!pins) null else if (pinned) UNPIN_QP else PIN
     return when (t.kind) {
         SheetKind.Song -> buildList {
-            addAll(listOf(PLAY, PLAY_NEXT, ADD, ADD_TO_PLAYLIST, pin, INFO))
+            addAll(listOfNotNull(PLAY, PLAY_NEXT, ADD, ADD_TO_PLAYLIST, pin, INFO))
             if (t.from != SheetFrom.Album) add(GO_TO_ALBUM)
             if (t.from == SheetFrom.Search) add(GO_TO_ARTIST)
         }
-        SheetKind.Album, SheetKind.Artist -> listOf(PLAY, PLAY_NEXT, ADD, SHUFFLE, ADD_TO_PLAYLIST, pin)
+        SheetKind.Album, SheetKind.Artist -> listOfNotNull(PLAY, PLAY_NEXT, ADD, SHUFFLE, ADD_TO_PLAYLIST, pin)
         SheetKind.Genre -> listOf(PLAY, PLAY_NEXT, ADD, ADD_TO_PLAYLIST)
         SheetKind.Folder -> listOf(PLAY, PLAY_NEXT, ADD, SHUFFLE, ADD_TO_PLAYLIST)
         SheetKind.Playlist, SheetKind.Favorites -> buildList {
@@ -84,7 +84,7 @@ fun sheetItems(t: SheetTarget, pinned: Boolean): List<String> {
             add(OPEN_PLAYLIST)
             if (t.kind == SheetKind.Playlist && t.writable) add(DELETE_PLAYLIST)
         }
-        SheetKind.Tile -> listOf(if (pinned) UNPIN else PIN, PLAY_NEXT, ADD)
+        SheetKind.Tile -> listOfNotNull(if (!pins) null else if (pinned) UNPIN else PIN, PLAY_NEXT, ADD)
         SheetKind.Queue -> buildList {
             add(REMOVE)
             if (t.slot != t.cur && t.slot != t.cur + 1) add(PLAY_NEXT)

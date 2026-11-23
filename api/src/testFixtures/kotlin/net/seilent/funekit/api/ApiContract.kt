@@ -343,10 +343,13 @@ abstract class ApiContract : SeamContract() {
         val view = s.library.view()
         val keep = firstSong(view, roots.first().id)
         val gone = firstSong(view, roots.last().id)
+        val pins = s.quickplay.available.value
         val r = s.quickplay.revision.value
-        s.quickplay.pin(Kind.Song, gone)
-        s.until(s.quickplay.revision) { it > r }
-        assertTrue(view.pins(0, 100).rows.any { it.id == gone })
+        if (pins) {
+            s.quickplay.pin(Kind.Song, gone)
+            s.until(s.quickplay.revision) { it > r }
+            assertTrue(view.pins(0, 100).rows.any { it.id == gone })
+        }
         s.player.play(listOf(keep, gone), 0, 0)
         routed(s, keep)
         val g = s.library.generation.value
@@ -354,7 +357,7 @@ abstract class ApiContract : SeamContract() {
         s.until(s.library.generation) { it > g }
         s.until(s.player.state) { it.queueSize == 1 }
         assertEquals(listOf(keep), queue(s))
-        assertTrue(s.library.view().pins(0, 100).rows.none { it.id == gone })
+        if (pins) assertTrue(s.library.view().pins(0, 100).rows.none { it.id == gone })
         assertEquals(roots.dropLast(1), s.until(s.library.roots) { it.size == roots.size - 1 })
     }
 

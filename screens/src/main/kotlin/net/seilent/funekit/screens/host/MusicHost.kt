@@ -1176,10 +1176,11 @@ class MusicHost<S : Any> internal constructor(
     fun openMusic(t: SheetTarget): Boolean {
         val s = src ?: return false
         if (stack.phase != Phase.Rest || stack.overlay != null || sheetItems(t, false).isEmpty()) return false
+        val pins = s.quickplay.available.value
         fun open(pinned: Boolean) {
             val del = if (t.kind == SheetKind.Song || t.kind == SheetKind.Album) app.sheetDelete(t) else null
             val extras = app.sheetExtras(t)
-            val words = sheetWords(t, pinned, del != null, extras)
+            val words = sheetWords(t, pinned, del != null, extras, pins)
             openMenu(MenuForm.Sheet, t.title, words, false, -1, 0, false, { i -> pickMusic(t, words, i, s, del, extras) })?.let(::libraryOver)
         }
         t.pinned?.let {
@@ -1187,7 +1188,7 @@ class MusicHost<S : Any> internal constructor(
             return true
         }
         scope.launch(FailFast) {
-            val pinned = t.pin?.let { k -> quiet { s.viewed { v -> v.pinned(k, t.id) } } } ?: false
+            val pinned = t.pin?.takeIf { pins }?.let { k -> quiet { s.viewed { v -> v.pinned(k, t.id) } } } ?: false
             if (stack.phase != Phase.Rest || stack.overlay != null) return@launch
             open(pinned)
         }

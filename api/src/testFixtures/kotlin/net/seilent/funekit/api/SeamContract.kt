@@ -591,6 +591,7 @@ abstract class SeamContract {
     @Test
     fun quickplayPagesAreGenerationTaggedAndRevised() = runTest {
         val s = open(Edge.Main)
+        if (!s.quickplay.available.value) return@runTest
         val view = s.library.view()
         val seeded = view.pins(0, 100).rows
         val unpinned = s.quickplay.revision.value
@@ -1250,6 +1251,7 @@ abstract class SeamContract {
     @Test
     fun indexOfMatchesTheKindOnAMixedListing() = runTest {
         val s = open(Edge.Main)
+        if (!s.quickplay.available.value) return@runTest
         val view = s.library.view()
         val album = view.page(Listing.Albums, 0, 1).rows.single()
         val song = view.page(Listing.AlbumTracks(album.id), 0, 1).rows.single()
@@ -1370,6 +1372,7 @@ abstract class SeamContract {
     @Test
     fun pinnedFollowsPinAndUnpin() = runTest {
         val s = open(Edge.Main)
+        if (!s.quickplay.available.value) return@runTest
         val view = s.library.view()
         val album = view.allRows(Listing.Albums).first { !view.pinned(Kind.Album, it.id) && !view.pinned(Kind.Artist, it.id) }
         var r = s.quickplay.revision.value
@@ -1380,6 +1383,24 @@ abstract class SeamContract {
         s.quickplay.unpin(Kind.Album, album.id)
         s.until(s.quickplay.revision) { it > r }
         assertFalse(view.pinned(Kind.Album, album.id))
+    }
+
+    @Test
+    fun aQuickplayPinsWhenAvailableAndRefusesWhenNot() = runTest {
+        val s = open(Edge.Main)
+        val view = s.library.view()
+        val r = s.quickplay.revision.value
+        if (s.quickplay.available.value) {
+            val album = view.allRows(Listing.Albums).first { !view.pinned(Kind.Album, it.id) }
+            s.quickplay.pin(Kind.Album, album.id)
+            s.until(s.quickplay.revision) { it > r }
+            assertTrue(view.pinned(Kind.Album, album.id))
+            return@runTest
+        }
+        val album = view.page(Listing.Albums, 0, 1).rows.single()
+        unsupported { s.quickplay.pin(Kind.Album, album.id) }
+        unsupported { s.quickplay.unpin(Kind.Album, album.id) }
+        assertEquals(r, s.quickplay.revision.value)
     }
 
     @Test
@@ -1589,6 +1610,7 @@ abstract class SeamContract {
     @Test
     fun aPinPastTheCapAnswersNoSpace() = runTest {
         val s = open(Edge.Main)
+        if (!s.quickplay.available.value) return@runTest
         val view = s.library.view()
         val free = view.allRows(Listing.Songs).map { it.id }.filter { !view.pinned(Kind.Song, it) }
         var r = s.quickplay.revision.value
@@ -1651,8 +1673,9 @@ abstract class SeamContract {
         val tracks = view.allRows(listing).map { it.id }
         val favorites = view.allRows(Listing.Favorites).map { it.id }
         val queued = queue(s)
-        val pins = view.pins(0, 100).rows
-        val held = pins.first { it.kind != Kind.Service }
+        val offers = s.quickplay.available.value
+        val pins = if (offers) view.pins(0, 100).rows else emptyList()
+        val held = if (offers) pins.first { it.kind != Kind.Service } else null
         val free = songs(s, 20).first { id -> pins.none { it.kind == Kind.Song && it.id == id } }
         val g = view.generation
         val q = s.player.state.value.queueRevision
@@ -1675,9 +1698,14 @@ abstract class SeamContract {
             { s.favorites.add(TrackSet.Ids(listOf(b))) },
             { s.favorites.remove(0, fr) },
             { s.favorites.move(0, 1, fr) },
-            { s.quickplay.pin(Kind.Song, free) },
-            { s.quickplay.unpin(held.kind, held.id) },
-        )
+        ) + if (held == null) {
+            emptyList()
+        } else {
+            listOf<suspend () -> Unit>(
+                { s.quickplay.pin(Kind.Song, free) },
+                { s.quickplay.unpin(held.kind, held.id) },
+            )
+        }
         s.card?.let { card ->
             for (c in listOf(Card.Out, Card.Error, Card.Held)) {
                 card(c)
@@ -1691,7 +1719,7 @@ abstract class SeamContract {
         assertEquals(lists, view.allRows(Listing.Playlists))
         assertEquals(tracks, view.allRows(listing).map { it.id })
         assertEquals(favorites, view.allRows(Listing.Favorites).map { it.id })
-        assertEquals(pins, view.pins(0, 100).rows)
+        if (offers) assertEquals(pins, view.pins(0, 100).rows)
         val r = s.playlists.revision.value
         s.playlists.add(list.id, TrackSet.Ids(listOf(a)))
         s.until(s.playlists.revision) { it > r }
@@ -1925,6 +1953,7 @@ abstract class SeamContract {
             assertTrue("$e", e is UnsupportedOperationException || e is Refused)
             return@runTest
         }
+        if (!s.quickplay.available.value) return@runTest
         hook()
         val pins = view.allRows(Listing.Pins)
         val history = view.allRows(Listing.History)

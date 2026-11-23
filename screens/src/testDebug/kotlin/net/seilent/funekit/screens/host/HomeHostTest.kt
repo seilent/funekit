@@ -39,6 +39,7 @@ import net.seilent.funekit.api.Busy
 import net.seilent.funekit.api.Card
 import net.seilent.funekit.api.Kind
 import net.seilent.funekit.api.Library
+import net.seilent.funekit.api.LibraryView
 import net.seilent.funekit.api.LibraryState
 import net.seilent.funekit.api.Listing
 import net.seilent.funekit.api.NoCard
@@ -68,7 +69,17 @@ import net.seilent.funekit.scale
 import net.seilent.funekit.screens.music.MusicPage
 import net.seilent.funekit.screens.music.MusicSource
 import net.seilent.funekit.screens.music.nowplaying.NowPlayingModel
+import net.seilent.funekit.screens.music.overlay.ADD
+import net.seilent.funekit.screens.music.overlay.ADD_TO_PLAYLIST
+import net.seilent.funekit.screens.music.overlay.GO_TO_ALBUM
+import net.seilent.funekit.screens.music.overlay.INFO
+import net.seilent.funekit.screens.music.overlay.PLAY
+import net.seilent.funekit.screens.music.overlay.PLAY_NEXT
+import net.seilent.funekit.screens.music.overlay.SHUFFLE
+import net.seilent.funekit.screens.music.overlay.SheetKind
+import net.seilent.funekit.screens.music.overlay.SheetTarget
 import net.seilent.funekit.screens.music.overlay.UNPIN
+import net.seilent.funekit.screens.music.overlay.sheetItems
 import net.seilent.funekit.screens.music.testFake
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -108,6 +119,7 @@ class HomeHostTest {
     private val state: HomeState get() = checkNotNull(rig.state)
 
     private val fake = testFake(FakeSet.Demo)
+    private val noPins = testFake(FakeSet.Demo, quickplay = false)
     private var reply: CompletableDeferred<Unit>? = null
     private var cold = false
     private var qpPlays = true
@@ -775,6 +787,63 @@ class HomeHostTest {
         settle()
         assertEquals("a held card shows the hint", "", state.quickplay.status)
         assertTrue(state.qpWords.hint.size > 1)
+    }
+
+    private fun noPinsMusic(lib: Library = noPins.library) = MusicSource(lib, noPins.player, noPins.quickplay, noPins.favorites, noPins.playlists, noPins.lyrics)
+
+    private fun albumSheet(): SheetTarget {
+        val a = runBlocking { noPins.library.view().page(Listing.Albums, 0, 1).rows.single() }
+        return SheetTarget(SheetKind.Album, a.title, Listing.AlbumTracks(a.id), noPins.library.generation.value, pin = Kind.Album, id = a.id)
+    }
+
+    private fun openSheet(t: SheetTarget) {
+        var opened = false
+        rule.runOnUiThread { opened = app.host.openMusic(t) }
+        assertTrue("premise: the sheet is asked", opened)
+        settle()
+        assertEquals(OverKind.Sheet, stack.overlay?.kind)
+    }
+
+    @Test
+    fun anAlbumSheetOnASourceWithNoQuickplayOffersNoPin() {
+        launcher(qpSource(QpData.EMPTY), noPinsMusic())
+        val t = albumSheet()
+        openSheet(t)
+        assertEquals(listOf(PLAY, PLAY_NEXT, ADD, SHUFFLE, ADD_TO_PLAYLIST), app.menu.items)
+        val song = t.copy(kind = SheetKind.Song, pin = Kind.Song)
+        assertEquals("the next verb takes the place of the pin", listOf(PLAY, PLAY_NEXT, ADD, ADD_TO_PLAYLIST, INFO, GO_TO_ALBUM), sheetItems(song, false, pins = false))
+    }
+
+    @Test
+    fun aTileHoldOnASourceWithNoQuickplayOpensNoSheet() {
+        val data = QpData(null, items(TILES, QpKind.Album), emptyList(), emptyList(), 1L)
+        launcher(qpSource(data), noPinsMusic())
+        showFront()
+        val o = tileAt(data, 0)
+        rule.onRoot().performTouchInput { down(o) }
+        step(holdMs + HOLD)
+        settle()
+        assertNull(stack.overlay)
+        rule.onRoot().performTouchInput { up() }
+    }
+
+    @Test
+    fun aSheetOnASourceWithNoQuickplayReadsNoPinned() {
+        var reads = 0
+        fun counted(v: LibraryView) = object : LibraryView by v {
+            override suspend fun pinned(kind: Kind, id: Long): Boolean {
+                reads++
+                return v.pinned(kind, id)
+            }
+        }
+        val lib = object : Library by noPins.library {
+            override fun view(): LibraryView = counted(noPins.library.view())
+
+            override fun view(generation: Long): LibraryView = counted(noPins.library.view(generation))
+        }
+        launcher(qpSource(QpData.EMPTY), noPinsMusic(lib))
+        openSheet(albumSheet())
+        assertEquals("a source with no quickplay is asked no pinned", 0, reads)
     }
 
     private fun blank() = Offset(a105Page.widthPx - BLANK, a105Page.heightPx - BLANK)
