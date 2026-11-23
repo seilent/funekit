@@ -25,6 +25,13 @@ class CoverBlurTest {
     }
 
     @Test
+    fun aWidthAtTheExactMidpointTakesTheLowerWidth() {
+        assertEquals(3, CoverBlur.width(4.0))
+        assertEquals(5, CoverBlur.width(4.0001))
+        assertEquals(1, CoverBlur.width(2.0))
+    }
+
+    @Test
     fun theGridIsAQuarterOfTheScreenBox() {
         assertArrayEquals(intArrayOf(180, 320), CoverBlur.grid(720, 1280))
         assertNull(CoverBlur.cover(IntArray(16), 4, 4, 3, 3, v1))
@@ -45,6 +52,12 @@ class CoverBlurTest {
         val g = CoverBlur.cover(src, w, h, 4, 4, v1)!!
         assertEquals(1, g.w)
         assertEquals(white, g.px.single())
+    }
+
+    @Test
+    fun theAreaAverageRoundsEachBoxOfTheCrop() {
+        val src = intArrayOf(1, 1, 1, 0, 0, 0, 0, 0)
+        assertArrayEquals("2 of 4 ones round up, 1 of 4 down", intArrayOf(1, 0), CoverBlur.area(src, 4, 2, 2, 1))
     }
 
     @Test

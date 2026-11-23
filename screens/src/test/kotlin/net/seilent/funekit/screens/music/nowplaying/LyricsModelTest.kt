@@ -19,6 +19,7 @@ import org.junit.Test
 import kotlin.coroutines.EmptyCoroutineContext
 
 private const val DURATION = 180000L
+private const val EXP_OUT6_HALF = 62428L
 
 class LyricsModelTest {
     private val text = "[00:01.00]one\n[00:02.00]two\n[00:03.00]three"
@@ -121,6 +122,29 @@ class LyricsModelTest {
         assertEquals(10_016 - 50L, m.slideAt)
         assertEquals(Tok.motion_lyricSlide.toLong(), m.slideD)
         assertFalse(m.sliding(10_016 - 50 + Tok.motion_lyricSlide.toLong()))
+    }
+
+    @Test
+    fun theSlideRunsExpOut6AndLandsOnTheLine() {
+        val m = loaded()
+        m.view(10_000, at(1100))
+        m.view(10_016, at(2050))
+        val half = m.slideAt + m.slideD / 2
+        assertEquals(LyricView.Column(0, 1, EXP_OUT6_HALF), m.view(half, at(2050 + half - 10_016)))
+        val end = m.slideAt + m.slideD
+        assertEquals(LyricView.Column(1, 1, fxInt(1)), m.view(end, at(2050 + end - 10_016)))
+    }
+
+    @Test
+    fun aTrackChangeLandsTheNewTracksLineWithNoSlide() {
+        val m = loaded()
+        m.view(10_000, at(1100))
+        m.begin(2)
+        m.load(2, text, 0)
+        val v = m.view(10_016, at(2050, track = 2))
+        assertFalse("no slide across a track change", m.sliding(10_016))
+        assertEquals(1, m.lineShown)
+        assertEquals(LyricView.Column(1, 1, fxInt(1)), v)
     }
 
     @Test

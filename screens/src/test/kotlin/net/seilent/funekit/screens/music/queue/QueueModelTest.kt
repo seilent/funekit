@@ -56,6 +56,19 @@ class QueueModelTest {
     }
 
     @Test
+    fun aQueueRowDrawsItsTitleOverItsArtistWithItsSlotNumber() {
+        val ids = songs(8)
+        val m = opened(ids, 2)
+        val rows = runBlocking { f.library.view().page(Listing.Queue, 0, ids.size).rows }
+        val r = checkNotNull(m.rowModel(4))
+        assertEquals("the title is the primary line", rows[4].title, r.primary)
+        assertEquals("the artist line is the source's", rows[4].sub, r.secondary)
+        assertEquals("the slot number counts from one", "5", r.number)
+        assertFalse(r.accent)
+        assertTrue("the playing slot takes the accent", checkNotNull(m.rowModel(2)).accent)
+    }
+
+    @Test
     fun aModelBuiltBeforeTheFirstStateWithATrackFocusesNothingUntilItComes() {
         val m = QueueModel(0)
         m.geometry(RowSpec(PITCH, VIEW))

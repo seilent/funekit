@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import net.seilent.funekit.Dpi
 import net.seilent.funekit.Insets
 import net.seilent.funekit.Nav
+import net.seilent.funekit.Roles
 import net.seilent.funekit.Surface
 import net.seilent.funekit.Window
 import net.seilent.funekit.scale
@@ -29,6 +30,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import kotlin.math.abs
+import kotlin.math.ceil
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -73,6 +75,17 @@ class RowDrawTest {
     private fun near(want: Int, got: Int, tol: Int = 3) = assertTrue("want $want got $got", abs(want - got) <= tol)
 
     private fun over(alpha: Float) = Math.round(bg + (0xFF - bg) * alpha)
+
+    @Test
+    fun aRowWithNoSecondaryCentresItsTitleAndDrawsNothingUnderIt() {
+        val r = RowModel(primary = "Song")
+        val h = Rows.pitch(a105, r)
+        val size = rolePx(Roles.listPrimary, a105)
+        val ink = rowInk(measurer, fonts, r, a105, unitDensity, false, null)
+        assertEquals("the title sits centred in the row", (h - Metrics.ascent(size) - Metrics.descent(size)) / 2 + Metrics.ascent(size), ink.lines.title)
+        val s = row(r)
+        for (y in ink.lines.title + ceil(ink.primary.inkBottom).toInt() until h) for (x in 0 until a105.widthPx) assertEquals("no ink at $x, $y", bg, s.red(x, y))
+    }
 
     @Test
     fun aDividerRowDrawsItsLetterTileAndLetter() {

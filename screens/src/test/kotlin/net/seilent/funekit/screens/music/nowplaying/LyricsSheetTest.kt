@@ -22,6 +22,7 @@ import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.Ink
 import net.seilent.funekit.kit.np.NpLayout
 import net.seilent.funekit.px
+import net.seilent.funekit.px64
 import net.seilent.funekit.scale
 import net.seilent.funekit.sheet.Render
 import net.seilent.funekit.sheet.Sheet
@@ -74,6 +75,28 @@ class LyricsSheetTest {
     }
 
     @Test
+    fun aBlankPlainLineIsOneEmptyRow() {
+        val g = geo(false)
+        val k = ink(g, listOf("first", "", "third"))
+        assertEquals(listOf(false, true, false), k.plain.map { it == null })
+    }
+
+    @Test
+    fun aLongPlainCopyShowsTheScrollThumbAtTheRightEdge() {
+        val g = geo(false)
+        val k = ink(g, List(LONG_PLAIN) { "plain line $it" })
+        assertEquals("premise: one row a line", LONG_PLAIN, k.plain.size)
+        val p = lyricPlain(g, k.t)
+        val m = LyricsModel()
+        m.plainRows(p.spec, k.plain.size)
+        val bar = checkNotNull(lyricPlainBar(g, p, m))
+        assertEquals(px(Tok.canvasW - Tok.scrollbar_width, g.p), bar.x0)
+        assertEquals(px(Tok.canvasW, g.p), bar.x1)
+        assertEquals("the thumb starts at the text top", px64(fx(Tok.npTextTop), fx(g.p)), bar.y0)
+        assertEquals(p.y0, bar.y0)
+    }
+
+    @Test
     fun theLyricsColumnOnV1() {
         val g = geo(false)
         val t = LyricTable.of(g.s)
@@ -105,5 +128,6 @@ class LyricsSheetTest {
 
     companion object {
         private const val FOLDER = "lyrics"
+        private const val LONG_PLAIN = 200
     }
 }

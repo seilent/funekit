@@ -13,6 +13,7 @@ import net.seilent.funekit.Insets
 import net.seilent.funekit.Nav
 import net.seilent.funekit.Surface
 import net.seilent.funekit.Window
+import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.np.NP_BACK
 import net.seilent.funekit.kit.np.NP_MARK
 import net.seilent.funekit.kit.np.NpLayout
@@ -47,6 +48,10 @@ private const val SWAP = 3000L
 private const val TEXT_AT = 3117L
 private const val OTHER_AT = 3050L
 private const val START_AT = 2950L
+private const val DRAG_FROM = 0.25f
+private const val DRAG_TO = 0.75f
+private const val SEEK_Y = 300f
+private const val AFTER_UP = 2000L
 
 class NowPlayingTest {
     private val none = Insets(0, 0, 0, 0)
@@ -223,6 +228,28 @@ class NowPlayingTest {
         assertEquals(45000.0, m.seekUp(a105, 14.1f + 152.7f / 4)!!.toDouble(), 1.0)
         assertFalse(m.seeking)
         assertEquals(null, m.seekUp(a105, 50f))
+    }
+
+    @Test
+    fun aSeekDragShowsItsTargetTimeAndFillUntilTheUp() {
+        val state = PlayerState(queueSize = 4, index = 0, track = 1, playing = true, anchor = Anchor(0, RATE, 0, true, DURATION))
+        val m = NowPlayingModel()
+        m.feed(state)
+        m.sync(shown(1), 0)
+        val unit = NowPlayingModel()
+        unit.feed(state)
+        unit.sync(shown(1), 0)
+        val x = { f: Float -> Tok.npArtX + f * a105.s.board.npArt }
+        m.down(a105, x(DRAG_FROM), SEEK_Y, 0)
+        assertTrue("premise: the down takes the band", m.seeking)
+        m.seekMove(a105, x(DRAG_TO))
+        val target = a105.seekAt(x(DRAG_TO), DURATION)
+        val held = npTimes(a105, m, HELD_AT, HELD_AT * MS_NANOS)
+        assertEquals("the time shows the drag's target", npTime(target), held.left)
+        assertEquals("the fill shows the drag's target", (target * a105.bar.w / DURATION).toInt(), held.fill)
+        assertNotEquals("premise: the unit plays elsewhere", npTimes(a105, unit, HELD_AT, HELD_AT * MS_NANOS), held)
+        m.seekUp(a105, x(DRAG_TO))
+        assertEquals("after the up the unit's time and fill", npTimes(a105, unit, AFTER_UP, AFTER_UP * MS_NANOS), npTimes(a105, m, AFTER_UP, AFTER_UP * MS_NANOS))
     }
 
     @Test

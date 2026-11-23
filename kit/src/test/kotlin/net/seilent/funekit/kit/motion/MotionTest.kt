@@ -123,6 +123,28 @@ class MotionTest {
         assertEquals(0.8962f, Curves.cubicOut.at(212f / 400), 0.0001f)
     }
 
+    private fun cexp(x: Double): Double {
+        val r = x / CEXP_SCALE
+        var term = 1.0
+        var sum = 1.0
+        for (i in 1 until CEXP_TERMS) {
+            term *= r / i
+            sum += term
+        }
+        repeat(CEXP_SQUARES) { sum *= sum }
+        return sum
+    }
+
+    @Test
+    fun expOut6IsTheFuneOsTable() {
+        for (i in 0..SEG) {
+            val t = i.toDouble() / SEG
+            val q = (1 - (cexp(6 * (1 - t)) - 1) / (cexp(6.0) - 1)) * FX
+            val want = (if (q < 0) q - 0.5 else q + 0.5).toInt()
+            assertEquals("entry $i", want, (Curves.expOut6.at(i.toFloat() / SEG) * FX).roundToInt())
+        }
+    }
+
     @Test
     fun curvesHitTheirEnds() {
         val all = listOf(
@@ -371,5 +393,10 @@ class MotionTest {
 
     private companion object {
         const val SETTLED = 10000f
+        const val SEG = 512
+        const val FX = 65536f
+        const val CEXP_SCALE = 1024.0
+        const val CEXP_TERMS = 12
+        const val CEXP_SQUARES = 10
     }
 }

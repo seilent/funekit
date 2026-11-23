@@ -13,6 +13,7 @@ import net.seilent.funekit.fxMul
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.gen.TokBoard
 import net.seilent.funekit.kit.Word
+import net.seilent.funekit.kit.motion.Curves
 import net.seilent.funekit.kit.np.NpLayout
 import net.seilent.funekit.kit.pen64
 import net.seilent.funekit.px
@@ -205,10 +206,114 @@ class LyricRowsTest {
     }
 
     @Test
+    fun aBlankPlainLineKeepsAnEmptyRowAndThePlainViewEndsAtTheLastWholeRow() {
+        val ppu = fx(g.p)
+        val rows = lyricPlainRows(g, t, listOf(word(30f), null, word(30f)), 0, end = false, rtl = false)
+        val slots = listOf(t.top, t.top + 2 * t.ap)
+        assertEquals("the blank line keeps its row", slots.map { t.baseline(t.ap, t.plain.size, it, ppu) }, rows.map { it.base })
+        val end = t.end(t.ap)
+        assertEquals("the view ends at a whole row", 0L, (end - t.top) % t.ap)
+        assertTrue("the last whole row in the room", end <= t.bottom && t.bottom < end + t.ap)
+        val all = lyricPlainRows(g, t, List(PLAIN_ROWS) { word(30f) }, 0, end = false, rtl = false)
+        assertEquals(((end - t.top) / t.ap).toInt(), all.size)
+        assertEquals(px64(end, ppu), lyricPlain(g, t).y1)
+    }
+
+    private val slideText = listOf(
+        "Light on the water", "Every road leads back home", FOUR, "Under a paper moon", FIVE, "Say my name again", "Lights out",
+        "Across the quiet field", "Nothing left to lose", "", "Hold on until the morning", "Under the last light",
+    )
+
+    private class Wrapped(private val texts: List<String>) : LyricInk {
+        override fun rows(line: Int, big: Boolean): Int =
+            if (line < 0) 1 else texts[line].split(" ").filter { it.isNotEmpty() }.chunked(if (big) BIG_WORDS else NEXT_WORDS).size
+
+        override fun top(line: Int, big: Boolean): Int = 0
+
+        override fun bottom(line: Int, big: Boolean, row: Int): Int = 0
+    }
+
+    private fun table(b: TokBoard.Board) = LyricTable(
+        Roles.npTitle, Roles.npNext, plain, fx(Tok.npLyricPitch), fx(Tok.npNextPitch),
+        fx(Tok.npAlbumBaseline) - fx(Tok.npTextTop), fx(Tok.npTextTop), fx(b.npLyricBottom),
+    )
+
+    private fun slideFrames(): List<Long> =
+        (0..Tok.motion_lyricSlide.toInt() + FRAME step FRAME).map { e -> fx(Curves.expOut6.at((e / Tok.motion_lyricSlide).coerceIn(0f, 1f))) }
+
+    private val boards = listOf("v1" to TokBoard.v1, "r1" to TokBoard.r1, "a105" to TokBoard.a105)
+
+    @Test
+    fun noTwoRowClipsOverlapOnAnyFrameOfALineChange() {
+        val ink = Wrapped(slideText)
+        for ((name, b) in boards) for (scale in SCALES) {
+            val tb = table(b)
+            for (to in slideText.indices) for (p in slideFrames()) {
+                val r = LyricRows.column(tb, to - 1, to, p, fx(scale), slideText, "", ink).draws.filter { it.y1 > it.y0 }
+                for (i in r.indices) for (j in i + 1 until r.size) {
+                    assertTrue("$SLIDE_LINES: $name x$scale to $to p $p lines ${r[i].line} ${r[j].line}", minOf(r[i].y1, r[j].y1) <= maxOf(r[i].y0, r[j].y0))
+                }
+            }
+        }
+    }
+
+    @Test
+    fun aFirstLineWithNothingAboveGrowsFromTheColumnTop() {
+        val d = LyricRows.column(t, LYRIC_TITLE, 0, one / 2, one, listOf("", ""), "", Rows()).draws.single()
+        assertEquals(0, d.line)
+        assertEquals(t.top, d.top)
+        assertEquals(t.cp / 2, d.h)
+    }
+
+    private fun side(d: LyricDraw, p: Long): Int = if (d.old == null || d.new == null) 0 else if (p < one / 2) 1 else 2
+
+    @Test
+    fun noRowClipOrColumnBottomMovesDownOnAnySlideFrame() {
+        val ink = Wrapped(slideText)
+        for ((name, b) in boards) for (scale in SCALES) {
+            val tb = table(b)
+            val ppu = fx(scale)
+            for (to in slideText.indices) {
+                val rest = LyricRows.column(tb, to - 1, to - 1, one, ppu, slideText, "", ink).draws.associateBy { it.line }
+                var last: Map<Pair<Int, Int>, LyricDraw>? = null
+                var bottom = Long.MAX_VALUE
+                for (p in slideFrames()) {
+                    val c = LyricRows.column(tb, to - 1, to, p, ppu, slideText, "", ink)
+                    val at = "$SLIDE_LINES: $name x$scale to $to p $p"
+                    val now = c.draws.associateBy { it.line to side(it, p) }
+                    val prev = last
+                    if (prev == null) {
+                        for ((k, d) in now) if (k.second != 2) rest[k.first]?.let { assertTrue("$at line ${k.first} starts below its rest", d.top <= it.top) }
+                    } else {
+                        for ((k, d) in now) prev[k]?.let {
+                            assertTrue("$at line ${k.first} moves down", d.top <= it.top)
+                            assertTrue("$at line ${k.first} clip moves down", d.y1 <= it.y1)
+                        }
+                    }
+                    assertTrue("$at column bottom moves down", c.bottom <= bottom)
+                    bottom = c.bottom
+                    last = now
+                }
+            }
+        }
+    }
+
+    @Test
     fun theLyricDirectionSkipsTimeTagsAndIsolatedRuns() {
         val hebrew = "\u05e9\u05dc\u05d5\u05dd"
         assertEquals(Bidi.DIRECTION_RIGHT_TO_LEFT, lyricDir(listOf("123", "[00:01.00] $hebrew")))
         assertEquals(Bidi.DIRECTION_LEFT_TO_RIGHT, lyricLineDir("\u2067$hebrew\u2069 hi", Bidi.DIRECTION_RIGHT_TO_LEFT))
         assertEquals(Bidi.DIRECTION_RIGHT_TO_LEFT, lyricLineDir("\u2067abc\u2069 123", Bidi.DIRECTION_RIGHT_TO_LEFT))
+    }
+
+    private companion object {
+        const val PLAIN_ROWS = 50
+        const val FRAME = 16
+        const val BIG_WORDS = 3
+        const val NEXT_WORDS = 5
+        const val FOUR = "We kept on running through the rain until the city lights went out"
+        const val FIVE = "$FOUR and the morning came slow over the quiet field where nothing was left"
+        const val SLIDE_LINES = "funeOS player/app/slidecases.h slide_case :10-16, player/tests/screens_test.cpp test_lyrics_slide :20182-20187, v0.4.2"
+        val SCALES = listOf(1f, 2f, 3f)
     }
 }
