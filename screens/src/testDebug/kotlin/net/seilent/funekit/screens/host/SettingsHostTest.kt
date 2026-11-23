@@ -25,6 +25,7 @@ import net.seilent.funekit.kit.Chrome
 import net.seilent.funekit.kit.MenuForm
 import net.seilent.funekit.kit.motion.MoveKind
 import net.seilent.funekit.kit.motion.OverKind
+import net.seilent.funekit.kit.motion.Overlay
 import net.seilent.funekit.kit.stack.PageKind
 import net.seilent.funekit.kit.stack.Phase
 import net.seilent.funekit.kit.stack.Turn
@@ -1016,6 +1017,37 @@ class SettingsHostTest {
         m.lists = listOf(list)
         rule.runOnIdle { app.host.starting(Turn(MoveKind.T4h, sc, null, popping = true)) }
         assertFalse(list.scroll.dragging)
+    }
+
+    @Test
+    fun aVolumeOpenBehindAHeldSheetKeepsTheListDrag() {
+        val app = app(SettingsPage(ID, Rows(pivot(choice("a"))), HeaderLook.Settings))
+        val (_, m) = open(app)
+        val list = dragging()
+        m.lists = listOf(list)
+        rule.runOnIdle {
+            app.stack.open(Overlay(OverKind.Sheet))
+            app.host.openVolume(rule.mainClock.currentTime)
+        }
+        assertEquals("a volume open behind a held open keeps the list drag", true, list.scroll.dragging)
+        frames(OPEN_FRAMES)
+        assertEquals("the held sheet takes the slot", OverKind.Sheet, app.stack.overlay?.kind)
+    }
+
+    @Test
+    fun aRangeTapWhileAnOpenIsHeldMarksNoEditAndSendsNothing() {
+        val rows = hudRows()
+        val app = app(SettingsPage(ID, rows, HeaderLook.Settings))
+        val (_, m) = open(app)
+        val editing = rule.runOnIdle {
+            app.stack.open(Overlay(OverKind.Sheet))
+            app.host.settingsTap(m, m.rows(m.pivot)[0])
+            m.editing
+        }
+        assertEquals("a range tap behind a held open marks no edit", null, editing)
+        frames(OPEN_FRAMES)
+        assertTrue("the tap sends nothing", rows.sets.isEmpty())
+        assertEquals(OverKind.Sheet, app.stack.overlay?.kind)
     }
 
     @Test

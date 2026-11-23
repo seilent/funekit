@@ -62,6 +62,8 @@ class PageStack<P : Any>(
         private set
     var overlay: Overlay? by mutableStateOf(null)
         private set
+    private var opening: Overlay? by mutableStateOf(null)
+    private var onOpenRuns = false
     var clock by mutableLongStateOf(0L)
         private set
     var asked by mutableIntStateOf(0)
@@ -126,6 +128,8 @@ class PageStack<P : Any>(
     val moving: Boolean
         get() = phase != Phase.Rest || asks.isNotEmpty() || overlay?.let { it.closing || it.moving(clock) } == true
 
+    val taken: Boolean get() = overlay != null || opening != null
+
     val canBack: Boolean get() = pages.isNotEmpty() || overlay != null || phase != Phase.Rest
 
     val armed: Boolean
@@ -180,20 +184,32 @@ class PageStack<P : Any>(
         hides: Boolean = o.kind == OverKind.Dlg,
         covers: Boolean = o.kind == OverKind.Sheet || o.kind == OverKind.Dlg,
         onOpen: (Long) -> Unit = {},
-    ) = ask { now ->
-        armedLand(now)
-        if (phase != Phase.Rest) land(now)
-        landOverlay(now, show = false)
-        if (overlay != null) return@ask
-        o.open(now)
-        overlay = o
-        openSeq = ++seq
-        if (handedOff) {
-            handedOff = false
-            if (o.back == null) o.back = { true }
+    ): Boolean {
+        check(!onOpenRuns) { "an open's onOpen opens nothing" }
+        if (overlay == null && opening != null) return false
+        if (overlay == null) opening = o
+        ask { now ->
+            armedLand(now)
+            if (phase != Phase.Rest) land(now)
+            landOverlay(now, show = false)
+            if (opening === o) opening = null
+            if (overlay != null) return@ask
+            o.open(now)
+            overlay = o
+            openSeq = ++seq
+            if (handedOff) {
+                handedOff = false
+                if (o.back == null) o.back = { true }
+            }
+            snapshot(hides, covers)
+            onOpenRuns = true
+            try {
+                onOpen(now)
+            } finally {
+                onOpenRuns = false
+            }
         }
-        snapshot(hides, covers)
-        onOpen(now)
+        return true
     }
 
     fun close() = ask { now -> overlay?.let { closeOverlay(it, now) } }

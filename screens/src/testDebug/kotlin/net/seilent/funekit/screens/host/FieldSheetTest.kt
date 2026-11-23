@@ -18,6 +18,7 @@ import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.MenuForm
 import net.seilent.funekit.kit.motion.MoveKind
 import net.seilent.funekit.kit.motion.OverKind
+import net.seilent.funekit.kit.motion.Overlay
 import net.seilent.funekit.kit.touch.Gesture
 import net.seilent.funekit.px
 import net.seilent.funekit.scale
@@ -272,6 +273,19 @@ class FieldSheetTest {
         assertEquals("the sheet reopens at the item", Q, app.menu.focus.row)
         assertFalse("an item return opens no adjust", f.hud.shown)
         assertEquals(listOf("entry $Q false"), f.calls)
+    }
+
+    @Test
+    fun aFieldSheetAskedWhileAnOpenIsHeldIsRefused() {
+        val (app, _) = app()
+        val opened = rule.runOnIdle {
+            app.stack.open(Overlay(OverKind.Sheet))
+            app.host.openFields(BandFields())
+        }
+        assertFalse("a field sheet asked while an open is held is refused", opened)
+        frames(OPEN_FRAMES)
+        assertEquals(OverKind.Sheet, app.stack.overlay?.kind)
+        assertNull(app.host.fieldSheet)
     }
 
     @Test

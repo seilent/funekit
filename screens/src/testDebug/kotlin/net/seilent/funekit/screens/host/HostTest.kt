@@ -604,6 +604,19 @@ class HostTest {
     }
 
     @Test
+    fun aVolumeKeyAndASheetInOneFrameOpenOnlyThePlate() {
+        val app = app(Level(START, null))
+        val sheet = rule.runOnIdle {
+            app.host.volPress(1)
+            app.host.openMenu(MenuForm.Sheet, "sheet", listOf("one", "two"), false, -1, 0, false, { true })
+        }
+        frames(OPEN_FRAMES)
+        assertNull("a sheet asked while the plate's open is held is refused at its call", sheet)
+        assertEquals(OverKind.Volume, app.stack.overlay?.kind)
+        assertTrue("the plate shows", app.host.hud.visible(rule.mainClock.currentTime))
+    }
+
+    @Test
     fun twoMenuOpensBeforeAFrameDrawTheMenuOfTheOverlayTheStackOpened() {
         val app = app(Level(START, null))
         rule.runOnIdle {
@@ -755,6 +768,19 @@ class HostTest {
             }
             frames(OPEN_FRAMES)
         }
+
+    @Test
+    fun aLyricsOffsetAskedWhileAnOpenIsHeldIsRefused() {
+        val e = Edit()
+        val app = lyricsApp(e)
+        rule.runOnIdle {
+            app.stack.open(Overlay(OverKind.Sheet))
+            app.host.openOffset()
+        }
+        frames(OPEN_FRAMES)
+        assertNull("a lyrics offset asked while an open is held is refused", app.host.fieldSheet)
+        assertEquals(OverKind.Sheet, app.stack.overlay?.kind)
+    }
 
     @Test
     fun aLyricsSheetRowTapOpensTheAdjustOverlayOnlyOnceTheSheetHasSettled() {

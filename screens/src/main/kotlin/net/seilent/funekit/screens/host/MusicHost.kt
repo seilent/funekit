@@ -299,7 +299,7 @@ class MusicHost<S : Any> internal constructor(
         private set
     val hud = VolumeHud(env.np.board, env.np.w, env.np.h)
     private val volumeOverlay = Overlay(OverKind.Volume, hud) { if (hud.pendingSeek() != null) volSeek() }
-    private val menuOvers = ArrayList<Pair<Overlay, Long>>()
+    private val menuOvers = ArrayList<Overlay>()
     private val libraryOvers = ArrayList<Overlay>()
     private val exits = ArrayList<OwedExit>()
     private var exitEpoch = 0
@@ -632,7 +632,8 @@ class MusicHost<S : Any> internal constructor(
         hold: ((Int) -> Boolean)? = null,
         scrim: () -> Boolean = { false },
         setup: (Menu) -> Unit = {},
-    ): Overlay {
+    ): Overlay? {
+        if (holding()) return null
         val menu = menuHost.menu
         if (stack.overlay != null) stack.accept()
         menu.open(form, title, items, now(), readOnly, mixedRow, lead = lead, confirm = confirm)
@@ -643,25 +644,26 @@ class MusicHost<S : Any> internal constructor(
         menuHost.hold = hold
         menuHost.scrim = scrim
         val o = Overlay(if (form == MenuForm.Sheet) OverKind.Sheet else OverKind.Dlg)
-        val at = stack.clock
-        menuOvers.retainAll { it.first === stack.overlay || it.second == at }
-        menuOvers += o to at
+        menuOvers.retainAll { it === stack.overlay }
+        menuOvers += o
         menuOpens++
         stack.open(o)
         return o
     }
 
-    fun openSheet(sheet: SettingSheet, pick: (Int) -> Boolean): Overlay {
+    fun openSheet(sheet: SettingSheet, pick: (Int) -> Boolean): Overlay? {
         val o = openMenu(sheet.form, sheet.title, sheet.items, sheet.readOnly, sheet.mixedRow, sheet.lead, sheet.confirm, pick, sheet.lift) { menu ->
             if (sheet.focus >= 0) menu.value(sheet.focus, sheet.mark, sheet.wrap, now())
             if (sheet.values.isNotEmpty() || sheet.mixed.isNotEmpty()) menu.cells(sheet.values, sheet.mixed, -1)
             if (sheet.swatches.isNotEmpty()) menu.swatches(sheet.swatches)
-        }
+        } ?: return null
         val m = rowsOf(stack.top)
         m?.edit(sheet.edit?.takeIf { sheet.focus >= 0 }, sheet.lift)
         edit = m?.let { o to it }
         return o
     }
+
+    private fun holding(): Boolean = stack.overlay == null && stack.taken
 
     fun closing(o: Overlay) {
         if (o === range?.first) rangeLeft()
@@ -705,13 +707,14 @@ class MusicHost<S : Any> internal constructor(
             stack.cut()
         } else if (stack.overlay === o) {
             stack.close()
-        } else if (menuOvers.any { it.first === o }) {
+        } else if (menuOvers.any { it === o }) {
             editGone = o
         }
     }
 
     private fun openAdjust(m: RowsPage<*>, src: RowAdjust): Boolean {
         require(src.hud === rangeHud) { "a row adjust shows on the host's hud" }
+        if (stack.taken) return false
         if (!src.open(now())) return false
         val o = Overlay(OverKind.Adjust, src.hud)
         stack.open(o)
@@ -795,6 +798,7 @@ class MusicHost<S : Any> internal constructor(
         }
         val o = stack.overlay
         if (o != null && o !== volumeOverlay) return
+        if (holding()) return
         fun show(at: Long) {
             val artist = if (np.variant) np.shown.from else np.shown.artist
             hud.show(at, volume.percent(), playOf(feed) == Play.Playing, artist, np.shown.title)
@@ -930,7 +934,7 @@ class MusicHost<S : Any> internal constructor(
                 menuHost.act = { true }
             } else {
                 if (stack.phase != Phase.Rest || stack.overlay != null) return@launch
-                libraryOver(openMenu(MenuForm.Sheet, title, lines.lines, true, lines.pathRow, 0, false, { true }))
+                openMenu(MenuForm.Sheet, title, lines.lines, true, lines.pathRow, 0, false, { true })?.let(::libraryOver)
             }
         }
     }
@@ -1052,10 +1056,10 @@ class MusicHost<S : Any> internal constructor(
         if (word == DELETE) {
             val d = del ?: return true
             val a = deleteAsk(t, d.songs)
-            libraryOver(openMenu(MenuForm.Dlg, a.title, a.items, false, 0, a.lead, true, { k ->
+            openMenu(MenuForm.Dlg, a.title, a.items, false, 0, a.lead, true, { k ->
                 if (a.items[k] == a.yes) deleteYes(t, d, sheetSrc)
                 true
-            }) { menu -> menu.focus.set(a.focus, a.items.size, now(), false) })
+            }) { menu -> menu.focus.set(a.focus, a.items.size, now(), false) }?.let(::libraryOver)
             return false
         }
         if (t.kind == SheetKind.Entry && word != INFO) {
@@ -1070,10 +1074,10 @@ class MusicHost<S : Any> internal constructor(
         }
         if (word == DELETE_PLAYLIST) {
             val ask = listOf(DELETE_PLAYLIST, KEEP_PLAYLIST)
-            libraryOver(openMenu(MenuForm.Dlg, DELETE_ASK, ask, false, -1, 0, true, { k ->
+            openMenu(MenuForm.Dlg, DELETE_ASK, ask, false, -1, 0, true, { k ->
                 if (ask[k] == DELETE_PLAYLIST) scope.launch(FailFast) { quiet { confirmDelete(DELETE_PLAYLIST, t.id, s) } }
                 true
-            }) { menu -> menu.focus.set(ask.indexOf(KEEP_PLAYLIST), ask.size, now(), false) })
+            }) { menu -> menu.focus.set(ask.indexOf(KEEP_PLAYLIST), ask.size, now(), false) }?.let(::libraryOver)
             return false
         }
         if (word == INFO) {
@@ -1098,7 +1102,7 @@ class MusicHost<S : Any> internal constructor(
     }
 
     private fun libraryOver(o: Overlay): Overlay {
-        libraryOvers.retainAll { m -> menuOvers.any { it.first === m } }
+        libraryOvers.retainAll { m -> menuOvers.any { it === m } }
         libraryOvers += o
         return o
     }
@@ -1177,7 +1181,7 @@ class MusicHost<S : Any> internal constructor(
             val del = if (t.kind == SheetKind.Song || t.kind == SheetKind.Album) app.sheetDelete(t) else null
             val extras = app.sheetExtras(t)
             val words = sheetWords(t, pinned, del != null, extras)
-            libraryOver(openMenu(MenuForm.Sheet, t.title, words, false, -1, 0, false, { i -> pickMusic(t, words, i, s, del, extras) }))
+            openMenu(MenuForm.Sheet, t.title, words, false, -1, 0, false, { i -> pickMusic(t, words, i, s, del, extras) })?.let(::libraryOver)
         }
         t.pinned?.let {
             open(it)
@@ -1465,7 +1469,7 @@ class MusicHost<S : Any> internal constructor(
         override fun sheet(sheet: SettingSheet, pick: (Int) -> Boolean, closed: () -> Unit): Boolean {
             if (!eqLive(m)) return false
             val e = EqSheet(closed)
-            e.over = openSheet(sheet) { i -> pick(i).also { if (it) e.picked = true } }
+            e.over = openSheet(sheet) { i -> pick(i).also { if (it) e.picked = true } } ?: return false
             eqSheets += e
             own = e.over
             run = null
@@ -1582,7 +1586,7 @@ class MusicHost<S : Any> internal constructor(
             AdjustOverlayHost(rangeSource)
             return
         }
-        if (over == null || menuOvers.none { it.first === over }) return
+        if (over == null || menuOvers.none { it === over }) return
         val f = fieldRun?.takeIf { it.over === over }
         if (f != null) {
             val src = remember(f) {
@@ -1751,7 +1755,7 @@ class MusicHost<S : Any> internal constructor(
     }
 
     internal fun openFields(sheet: FieldSheet): Boolean {
-        if (stack.phase != Phase.Rest || stack.overlay != null || fieldUp()) return false
+        if (stack.phase != Phase.Rest || stack.taken || fieldUp()) return false
         fieldEnd()
         val top = stack.top
         val pivot = shownPivot(top)
@@ -1764,7 +1768,7 @@ class MusicHost<S : Any> internal constructor(
     private fun fieldUp(): Boolean = fieldRun?.let { !it.entry || it.reopen } == true
 
     private fun offsetOpen(): Long? {
-        if (!np.lyricsView || stack.top?.let(::isNp) != true || stack.overlay != null || stack.phase != Phase.Rest) return null
+        if (!np.lyricsView || stack.top?.let(::isNp) != true || stack.taken || stack.phase != Phase.Rest) return null
         if (fieldUp()) return null
         val l = np.lyrics
         val t = now()
@@ -1808,18 +1812,20 @@ class MusicHost<S : Any> internal constructor(
 
     private fun fieldMenu(r: FieldRun, at: Int) {
         val sheet = r.sheet
-        r.over = openMenu(
-            MenuForm.Sheet, sheet.title, sheet.items, readOnly = false, mixedRow = -1, lead = 0, confirm = false,
-            act = { i -> fieldPick(r, i) },
-            setup = { m ->
-                fieldCells(r, m)
-                r.live = sheet.field() >= 0
-                if (at >= 0) m.focus.set(at, sheet.items.size, now(), false)
-                offsetSync(r)
-            },
-            hold = { i -> fieldHold(r, i) },
-            scrim = { sheet.scrim().also { fieldSync(r) } },
-        ).also { it.back = { fieldEdge(r) } }
+        r.over = checkNotNull(
+            openMenu(
+                MenuForm.Sheet, sheet.title, sheet.items, readOnly = false, mixedRow = -1, lead = 0, confirm = false,
+                act = { i -> fieldPick(r, i) },
+                setup = { m ->
+                    fieldCells(r, m)
+                    r.live = sheet.field() >= 0
+                    if (at >= 0) m.focus.set(at, sheet.items.size, now(), false)
+                    offsetSync(r)
+                },
+                hold = { i -> fieldHold(r, i) },
+                scrim = { sheet.scrim().also { fieldSync(r) } },
+            ),
+        ) { "a field sheet opens on a free slot" }.also { it.back = { fieldEdge(r) } }
     }
 
     private fun fieldPick(r: FieldRun, i: Int): Boolean {
