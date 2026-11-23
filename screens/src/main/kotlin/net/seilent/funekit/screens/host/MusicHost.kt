@@ -1292,7 +1292,7 @@ class MusicHost<S : Any> internal constructor(
         LaunchedEffect(npHalfInks, stack) {
             snapshotFlow { np.revision }.collect {
                 if (stack.moving && !stack.armed) return@collect
-                npHalfInks.forEach { it.prime(SystemClock.uptimeMillis()) }
+                npHalfInks.forEach { it.prime(now()) }
                 npPrimed = np.shown.track
             }
         }
@@ -2082,7 +2082,7 @@ fun <S : Any> rememberMusicHost(
     val npHalves = remember(npGeo, split) { split?.halves ?: listOf(npFlat(npGeo)) }
     val phone by app.phone.collectAsState()
     val phoneLyrics = app.phoneLyrics
-    val feed = NowPlayingFeed(np, npHalves.holding(NpPart.Art).g, src, phone, phoneLyrics) { SystemClock.uptimeMillis() }
+    val feed = NowPlayingFeed(np, npHalves.holding(NpPart.Art).g, src, phone, phoneLyrics, env.now)
     LaunchedEffect(phoneLyrics) { phoneLyrics?.mode?.collect { np.lyrics.echo(it, np.variant) } }
     val npHalfInks = remember(npHalves, env.measurer, env.fonts, env.density, env.covers) { npHalves.map { NpInks(NpMeasure(it.g, env.measurer, env.fonts, env.density, env.covers), np) } }
     val types = rememberMusicTypes(env, app::homeItem)

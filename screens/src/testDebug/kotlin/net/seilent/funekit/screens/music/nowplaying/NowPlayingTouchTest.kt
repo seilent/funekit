@@ -1,5 +1,6 @@
 package net.seilent.funekit.screens.music.nowplaying
 
+import android.os.SystemClock
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -19,6 +20,7 @@ import net.seilent.funekit.Insets
 import net.seilent.funekit.Nav
 import net.seilent.funekit.Surface
 import net.seilent.funekit.Window
+import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.Edges
 import net.seilent.funekit.kit.Ink
 import net.seilent.funekit.kit.motion.VariantMotion
@@ -230,6 +232,17 @@ class NowPlayingTouchTest {
     }
 
     @Test
+    fun theIdleDimComesAfterAnInputOnTheFrameClock() {
+        val m = compose()
+        rule.mainClock.advanceTimeBy(MINUTE)
+        val at = rule.mainClock.currentTime
+        m.wake(at)
+        assertTrue("premise: the frame clock runs ahead of uptime", at - SystemClock.uptimeMillis() > NowPlayingModel.IDLE)
+        frames(((NowPlayingModel.IDLE + NowPlayingModel.IDLE_FADE) / FRAME + 2).toInt())
+        assertEquals(Tok.motion_idleAlpha, m.idleAlpha(rule.mainClock.currentTime), 0.001f)
+    }
+
+    @Test
     fun theHeartRingTapIsTheFavoriteActAndFocusesIt() {
         val m = compose()
         tap(622f, 1195f)
@@ -240,6 +253,7 @@ class NowPlayingTouchTest {
     private companion object {
         const val DURATION = 180000L
         const val FRAME = 16L
+        const val MINUTE = 60000L
         const val FOLD_W = 1080
         const val FOLD_H = 2520
         const val FOLD_TOP = 1250

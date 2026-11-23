@@ -128,7 +128,7 @@ fun NowPlayingLayer(
             val seen = m.revision to m.lyrics.revision
             val wake = m.wakeAt(frame)
             val wait = suspend { snapshotFlow { m.revision to m.lyrics.revision }.first { it != seen } }
-            if (wake == null) wait() else withTimeoutOrNull(maxOf(1L, wake - npUptime())) { wait() }
+            if (wake == null) wait() else withTimeoutOrNull(maxOf(1L, wake - frame)) { wait() }
         }
     }
     val shown by remember(m) { derivedStateOf { m.shownAt(frame) } }

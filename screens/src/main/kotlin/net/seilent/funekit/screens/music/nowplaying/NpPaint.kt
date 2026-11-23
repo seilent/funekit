@@ -94,8 +94,6 @@ fun npTimes(g: NpLayout, m: NowPlayingModel, now: Long, nanos: Long): NpTimes {
 
 private const val NANOS_PER_MS = 1000000L
 
-fun npUptime(): Long = SystemClock.uptimeMillis()
-
 fun npNanosAt(at: Long): Long = SystemClock.elapsedRealtimeNanos() - (SystemClock.uptimeMillis() - at) * NANOS_PER_MS
 
 fun timeRight64(g: NpLayout, left: Float, right: Float, durationMs: Long): Int {
