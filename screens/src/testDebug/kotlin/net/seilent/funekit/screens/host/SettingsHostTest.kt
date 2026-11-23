@@ -31,8 +31,11 @@ import net.seilent.funekit.kit.touch.ListTouch
 import net.seilent.funekit.px
 import net.seilent.funekit.scale
 import net.seilent.funekit.screens.music.nowplaying.AdjustCol
+import net.seilent.funekit.screens.music.nowplaying.AdjustHit
+import net.seilent.funekit.screens.music.nowplaying.AdjustHud
 import net.seilent.funekit.screens.settings.AimKind
 import net.seilent.funekit.screens.settings.HeaderLook
+import net.seilent.funekit.screens.settings.RangeAdjust
 import net.seilent.funekit.screens.settings.SETTINGS
 import net.seilent.funekit.screens.settings.SettingAdjust
 import net.seilent.funekit.screens.settings.SettingFlag
@@ -123,6 +126,12 @@ class SettingsHostTest {
     }
 
     private val upRightAt = Offset(px(Tok.canvasW - Tok.edge - Tok.adjustColumn, page.stdPpu).toFloat(), px(Tok.overlayPlusY, page.stdPpu).toFloat())
+
+    private val upLeftAt = Offset(px(Tok.edge + Tok.adjustColumn, page.stdPpu).toFloat(), upRightAt.y)
+
+    private val upCentreAt = Offset(page.widthPx / 2f, upRightAt.y)
+
+    private val downCentreAt = Offset(upCentreAt.x, px(page.board.overlayMinusY, page.stdPpu).toFloat())
 
     private val numberAt = Offset(px(Tok.canvasW - Tok.edge - Tok.adjustColumn, page.stdPpu).toFloat(), px(page.board.overlayRingY, page.stdPpu) - 2f)
 
@@ -648,6 +657,41 @@ class SettingsHostTest {
     }
 
     @Test
+    fun aOneColumnRangeRowStepsUpOnItsPlusAndDownOnItsMinus() {
+        val rows = Rows(pivot(balance().copy(key = LEVEL, title = LEVEL))).also { r ->
+            r.adjusts = { _, l -> SettingAdjust(listOf(AdjustCol(l.toString(), LEVEL)), LEVEL, l.toString()) }
+        }
+        hudApp(rows)
+        press(upCentreAt)
+        assertEquals("the plus steps up", listOf(mapOf(LEVEL to "1")), rows.sets)
+        press(downCentreAt)
+        assertEquals("the minus steps down", listOf(mapOf(LEVEL to "1"), mapOf(LEVEL to "0")), rows.sets)
+    }
+
+    @Test
+    fun aBalanceLeftPlusStepsTheBalanceLeft() {
+        val rows = hudRows()
+        hudApp(rows)
+        press(upLeftAt)
+        assertEquals("the left plus moves the balance left", listOf(mapOf(BAL to "-1")), rows.sets)
+    }
+
+    @Test
+    fun aRangeRowThatChangesItsColumnCountMidEditFails() {
+        val two = listOf(AdjustCol("0", LEFT), AdjustCol("0", RIGHT))
+        val rows = Rows(pivot(balance())).also { r ->
+            r.adjusts = { _, l -> SettingAdjust(if (l == 0) two else two.take(1), BAL, l.toString()) }
+        }
+        val src = RangeAdjust(balance(), rows, SettingsModel(ENTRY, ID), AdjustHud(), 0, {}, CoroutineScope(EmptyCoroutineContext))
+        assertTrue("premise: the edit opens with two columns", src.open(0L))
+        val failed = runCatching { src.tap(AdjustHit.Up1) }.exceptionOrNull()
+        assertTrue("the step fails, $failed", failed is IllegalArgumentException)
+        val message = failed?.message.orEmpty()
+        assertTrue("the message names the rule, $message", message.startsWith("a range row keeps its column count for its edit"))
+        assertTrue("the message names the row, $message", message.contains(BAL))
+    }
+
+    @Test
     fun backSendsTheLevelAtOpenAndClosesTheHud() {
         val rows = hudRows()
         val app = app(SettingsPage(ID, rows, HeaderLook.Settings))
@@ -1041,6 +1085,7 @@ class SettingsHostTest {
         private const val BAL = "balance"
         private const val LEFT = "left db"
         private const val RIGHT = "right db"
+        private const val LEVEL = "level"
         private const val LIMIT = 20
         private const val LANDED = 5
         private const val HUE_STEP = 10

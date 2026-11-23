@@ -22,23 +22,28 @@ class RangeAdjust internal constructor(
         private set
     private val pending = mutableListOf<Int>()
     private var done = false
+    private var cols = 0
 
     override val key: String get() = row.key
 
     override fun open(now: Long): Boolean {
         val a = rows.adjust(row, row.level) ?: return false
+        cols = a.cols.size
         hud.open(now, a.cols, a.line1, a.line2)
         return true
     }
 
     override fun tap(h: AdjustHit) {
+        val mirror = cols > 1
         val d = when (h) {
             AdjustHit.Exit -> {
                 end(false)
                 return
             }
-            AdjustHit.Up0, AdjustHit.Down1 -> -row.step
-            AdjustHit.Down0, AdjustHit.Up1 -> row.step
+            AdjustHit.Up0 -> if (mirror) -row.step else row.step
+            AdjustHit.Down0 -> if (mirror) row.step else -row.step
+            AdjustHit.Up1 -> row.step
+            AdjustHit.Down1 -> -row.step
             AdjustHit.None -> return
         }
         val v = (level + d).coerceIn(row.min, row.max)
@@ -93,6 +98,9 @@ class RangeAdjust internal constructor(
 
     private fun show() {
         if (done) return
-        rows.adjust(row, level)?.let { hud.set(it.cols, it.line2) }
+        rows.adjust(row, level)?.let {
+            require(it.cols.size == cols) { "a range row keeps its column count for its edit: ${row.key} opened with $cols columns, now ${it.cols.size}" }
+            hud.set(it.cols, it.line2)
+        }
     }
 }
