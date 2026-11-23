@@ -12,6 +12,7 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
+import net.seilent.funekit.core.Lrc
 import net.seilent.funekit.core.Section
 import net.seilent.funekit.api.ArtRef
 import net.seilent.funekit.api.Busy
@@ -348,6 +349,21 @@ class FakeTest {
         )
         assertTrue(checkNotNull(f.lyrics.lyrics(id("Slow Comet"))).startsWith("[00:12.00]"))
         assertNull(f.lyrics.lyrics(id("Porchlight")))
+    }
+
+    @Test
+    fun aCarryingFakeServesItsLinesWithItsOffsetAndBumpsTheRevision() = runTest {
+        val f = Fake(backgroundScope, { now() }, FakeSet.Main, 40, 5_000, lyricsCarried = true)
+        val t = id("Slow Comet")
+        val stored = Lrc.parse(checkNotNull(Fixture.shelf(FakeSet.Main).lyrics[t]).toByteArray(Charsets.UTF_8)).lines
+        f.lyrics.setOffset(t, 500)
+        val c = checkNotNull(f.lyrics.copy(t))
+        assertEquals(stored.map { maxOf(0L, it.ms - 500) }, Lrc.parse(c.text.toByteArray(Charsets.UTF_8)).lines.map { it.ms })
+        assertEquals(500, c.carriedMs)
+        assertEquals(1L, f.lyrics.revision.value)
+        f.lyrics.setOffset(id("ひこうき雲"), 250)
+        assertEquals("a set on another track bumps the revision", 2L, f.lyrics.revision.value)
+        assertNull("a default fake carries no offset", checkNotNull(fake().lyrics.copy(t)).carriedMs)
     }
 
     private suspend fun letters(view: LibraryView, listing: Listing): String =

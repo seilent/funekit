@@ -8,5 +8,5 @@ import net.seilent.funekit.api.Subject
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class FakeRefsContractTest : SeamContract() {
-    override fun TestScope.open(edge: Edge): Subject = fakeSubject(edge, refs = true)
+    override fun TestScope.open(edge: Edge): Subject = fakeSubject(edge, refs = true, lyricsCarried = true)
 }

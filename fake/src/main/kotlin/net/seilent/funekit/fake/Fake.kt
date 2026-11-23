@@ -17,6 +17,7 @@ class Fake(
     val pinCap: Int? = null,
     trackRefs: Boolean = false,
     services: Boolean = false,
+    lyricsCarried: Boolean = false,
 ) {
     private val bus = MutableSharedFlow<EngineEvent>(extraBufferCapacity = EVENTS, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     private val store = Store(set, services)
@@ -29,7 +30,7 @@ class Fake(
     val playlists = FakePlaylists(store, library)
     val settings = FakeSettings(player)
     val eq = FakeEq()
-    val lyrics = FakeLyrics(set, latencyMs)
+    val lyrics = FakeLyrics(set, latencyMs, lyricsCarried)
     val scrobbling = FakeScrobbling()
 
     init {

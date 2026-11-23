@@ -11,9 +11,9 @@ import net.seilent.funekit.api.Wait
 import java.nio.ByteBuffer
 
 @OptIn(ExperimentalCoroutinesApi::class)
-internal fun TestScope.fakeSubject(edge: Edge, refs: Boolean = false): Subject {
+internal fun TestScope.fakeSubject(edge: Edge, refs: Boolean = false, lyricsCarried: Boolean = false): Subject {
     val clock = { testScheduler.currentTime * MILLI }
-    val f = Fake(backgroundScope, clock, FakeSet.valueOf(edge.name), LATENCY, LEASE, PIN_CAP, trackRefs = refs, services = refs)
+    val f = Fake(backgroundScope, clock, FakeSet.valueOf(edge.name), LATENCY, LEASE, PIN_CAP, trackRefs = refs, services = refs, lyricsCarried = lyricsCarried)
     val tracks = Fixture.ALBUMS.flatMap { it.tracks }
     return Subject(
         player = f.player,

@@ -14,6 +14,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runTest
+import net.seilent.funekit.core.Lrc
 import net.seilent.funekit.core.Section
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -1394,6 +1395,36 @@ abstract class SeamContract {
         assertEquals(0, s.lyrics.offsetMs(a))
         assertEquals(-500, s.lyrics.offsetMs(b))
     }
+
+    @Test
+    fun aCarryingCopyMovesItsLinesByTheOffsetAndOtherCopiesServeTheSameText() = runTest {
+        val s = open(Edge.Main)
+        var a = -1L
+        var first: LyricCopy? = null
+        for (id in s.library.view().allRows(Listing.Songs).map { it.id }) {
+            val c = s.lyrics.copy(id) ?: continue
+            if (synced(c).isEmpty()) continue
+            a = id
+            first = c
+            break
+        }
+        val zero = checkNotNull(first) { "premise: a song in Songs has synced lyrics" }
+        assertEquals("premise: the first copy is read at no offset", 0, s.lyrics.offsetMs(a))
+        s.lyrics.setOffset(a, 250)
+        val c = checkNotNull(s.lyrics.copy(a))
+        if (c.carriedMs != null) {
+            assertEquals("a carrying copy carries the offset", 250, c.carriedMs)
+            assertEquals("a carrying copy moves its lines by the offset", synced(zero).map { maxOf(0L, it.ms - 250) }, synced(c).map { it.ms })
+            assertEquals("a carrying copy keeps its texts", synced(zero).map { it.text }, synced(c).map { it.text })
+        } else {
+            assertEquals("a copy with no carried offset serves the same text", zero.text, c.text)
+        }
+        assertEquals(250, s.lyrics.offsetMs(a))
+        assertEquals(c.text, s.lyrics.lyrics(a))
+        s.lyrics.setOffset(a, 0)
+    }
+
+    private fun synced(c: LyricCopy): List<Lrc.Line> = Lrc.parse(c.text.toByteArray(Charsets.UTF_8)).lines
 
     @Test
     fun originIsTheListingPlayed() = runTest {
