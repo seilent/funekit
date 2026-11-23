@@ -99,6 +99,8 @@ class S4MotionSheetTest {
         else -> emptyList()
     }
 
+    private fun t5Rules(d: Dev, ms: Int): List<Pair<String, String>> = if (d == sc.a105 && ms == T5_LEAD_SHOT) listOf(PAGE_THUMB to T5_LEAD) else emptyList()
+
     private fun write(name: String, line: String, tiles: List<Tile>) {
         if (tiles.isNotEmpty()) sc.render.write(Sheet(FOLDER, name, listOf(line), tiles))
     }
@@ -159,9 +161,9 @@ class S4MotionSheetTest {
         write("artist-mid", "The artist page 150 and 450 ms into its T3 from the hub (funeOS artist:150 and artist:450).",
             (boards + sc.v1).flatMap { d -> scene(d, Look(), early(d), FIRST_ARTIST) { artistTo(it) } + scene(d, Look(), late, MUKA_NOTE) { artistTo(it, muka) } } +
                 scene(sc.v1, Look(large = true), late, MUKA_NOTE) { artistTo(it, muka) })
-        val t5 = listOf(150, 500).map { Shot("t5artist-$it", SWITCH + it) }
+        fun t5(d: Dev) = listOf(150, 500).map { Shot("t5artist-$it", SWITCH + it, rules = t5Rules(d, it)) }
         write("t5artist", "T5 on the artist page from ALBUMS to SONGS (funeOS t5artist).",
-            boards.flatMap { d -> scene(d, Look(), t5, MUKA_NOTE) { r -> artistTo(r, muka).also { it += SWITCH to { r.switchArtist(ARTIST_SONGS, SWITCH) } } } })
+            boards.flatMap { d -> scene(d, Look(), t5(d), MUKA_NOTE) { r -> artistTo(r, muka).also { it += SWITCH to { r.switchArtist(ARTIST_SONGS, SWITCH) } } } })
         write("albumx", "A tap on the albums header pops album detail with T4m (funeOS albumx:500).",
             boards.flatMap { d -> scene(d, Look(), listOf(Shot("albumx-500", HEADER_TAP + X_SHOT + 500)), FIRST_ALBUM) { r -> albumTo(r).also { header(r, it) } } })
         write("artistx", "A tap on the artists header pops the artist page with T4 (funeOS artistx:150 and :500).",
@@ -311,6 +313,9 @@ class S4MotionSheetTest {
         private const val ARTIST_ROWS = "the Demo ARTISTS list holds 72 rows (50 artists under 22 letters) against funeOS's 75, so at the 812 px NAV BAR ON view the thumb is 125 px against funeOS's 123 (thumb_of) and its last part ends 2 px lower"
         private const val R1_GROUND = "the R1 reference is RGB565: its accent ground steps from 41 to 33 at y 316 where the kit's is a gradient at 38 and 37, so against the color.bg reference of the arriving # tile (border alpha 0.146, half contrast 17.4 levels) the measured ground masks every box row in the kit and 76 of 92 in funeOS, while the border reads 65 over 38 here and 66 over 41 there"
         private const val NAV_T4_R1_FADE = 160
+        private const val T5_LEAD_SHOT = 150
+        private const val PAGE_THUMB = "page.thumb."
+        private const val T5_LEAD = "the A105 starts this T5 at its first shown frame, 8 ms after the switch at 4120, when the pivot strip slot is not yet whole on its GPU (funeOS player/ui/app.cpp App::pivot_lead :34131-34163, v0.4.3), so funeOS's thumb fade reads 2 levels over the ground against the kit's 5, under the half contrast; R1 draws no such lead"
         private const val LEAVE_RING0 = "leave.ring0"
         private const val LEAVE_GLYPH0 = "leave.glyph0"
         private const val LEAVE_FADE = "the leave releases a few ms later in funeOS: the kit's arriving hub is ready at the T4 start, so the leave runs its own ramp (Leave A 0.072 at 160 ms, as at the turn start at 4920), while funeOS's reads 0.042 there, the value of a leave released at 150 ms (1 - 160 / (150 + kTail 17)), its arriving layer rendered then; on R1 navbar-t4 the focused ring's left stroke reads 34 over the 17 ground against funeOS's 26 over 16, so its peak is 17 levels against 12, off the 4 level floor, while ring1, the art and the A105 frames stay inside it"
