@@ -756,6 +756,26 @@ class NowPlayingTest {
     }
 
     @Test
+    fun aMarkTapWhileALyricsFadeRunsTakesNoActAndAfterItTheLyrics() {
+        val m = lyrics(true)
+        m.mark = true
+        val x = a105.markX / a105.p
+        val y = a105.markY / a105.p
+        m.lyrics.toggle(100)
+        m.down(a105, x, y, 110)
+        assertEquals("no mark press during the fade", 1f, m.press[NP_MARK].scale(115f), 0f)
+        assertEquals(NpAct.None, m.tap(a105, 120))
+        m.lyrics.reverse(130)
+        m.lyrics.reverse(140)
+        m.down(a105, x, y, 150)
+        assertEquals("no mark press during the reversed fade", 1f, m.press[NP_MARK].scale(155f), 0f)
+        assertEquals(NpAct.None, m.tap(a105, 160))
+        val end = 140 + 2 * Tok.motion_variantFade.toLong()
+        m.down(a105, x, y, end + 10)
+        assertEquals("after the fade the mark takes its tap", NpAct.Lyrics, m.tap(a105, end + 20))
+    }
+
+    @Test
     fun inLyricsModeTheHiddenMarkTakesNoTap() {
         val m = lyrics(true)
         m.mark = true

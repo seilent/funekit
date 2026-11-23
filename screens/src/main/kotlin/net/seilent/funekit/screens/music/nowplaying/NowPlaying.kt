@@ -347,7 +347,7 @@ class NowPlayingModel {
         slide.armed = !lyr && !holding && !variant && shown.track != null && y < g.s.stdH - Tok.gesture_bottom
         slide.touch = slide.armed
         if (!holding) slide.start = if (slide.armed) shown.track else null
-        markDown = !lyr && markAt(now) && (!variant || lyrics.phoneLyrics) && g.markHit(x, y)
+        markDown = markLive(now) && g.markHit(x, y)
         val t = now.toFloat()
         when {
             g.backHit(x, y) -> press[NP_BACK].down(t)
@@ -364,6 +364,8 @@ class NowPlayingModel {
         if (!lyr && g.titleHit(x, y) && !titleFocus) titleFocus = true
         bump()
     }
+
+    private fun markLive(now: Long): Boolean = !lyricsShown() && !lyrics.fading(now) && markAt(now) && (!variant || lyrics.phoneLyrics)
 
     fun seekShown(): Boolean = !variant && shown.track != null && shown.durationMs > 0
 
@@ -415,7 +417,7 @@ class NowPlayingModel {
         val x = downX
         val y = downY
         if (g.backHit(x, y)) return NpAct.Back
-        if (markDown && markAt(now) && (!variant || lyrics.phoneLyrics) && g.markHit(x, y)) return NpAct.Lyrics
+        if (markDown && markLive(now) && g.markHit(x, y)) return NpAct.Lyrics
         val i = ringAt(g, x, y)
         if (i >= 0) {
             ring = i

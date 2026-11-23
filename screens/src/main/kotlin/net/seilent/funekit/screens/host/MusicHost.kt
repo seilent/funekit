@@ -1708,6 +1708,7 @@ class MusicHost<S : Any> internal constructor(
         val t = now()
         if (l.fading(t)) {
             if (l.on(np.variant)) {
+                np.keyed(t)
                 l.reverse(t, np.variant)
                 syncMode()
                 return true
@@ -1715,6 +1716,7 @@ class MusicHost<S : Any> internal constructor(
             l.land(np.variant)
         }
         if (!l.shown(np.variant)) return false
+        np.keyed(t)
         l.toggle(t, np.variant)
         syncMode()
         return true
@@ -1733,6 +1735,7 @@ class MusicHost<S : Any> internal constructor(
     private fun lyricsToggle() {
         val l = np.lyrics
         val t = now()
+        np.keyed(t)
         if (l.fading(t)) l.reverse(t, np.variant) else l.toggle(t, np.variant)
         syncMode()
     }

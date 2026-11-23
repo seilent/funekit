@@ -89,6 +89,7 @@ class HostTest {
     private val passAt = Offset(Tok.canvasW / 2 * np.ppu + (np.left - page.left), (np.h - Tok.gesture_bottom / 2) * np.ppu)
     private val titleAt = Tok.npTextX + TITLE_DX to np.board.npTitleY - TITLE_DY
     private val seekAt = (Tok.npSeekBandX0 + np.board.npSeekBandX1) / 2 to (np.board.npProgressY + np.board.npSeekBandBottom) / 2
+    private val markAt = NpLayout(np).let { Offset(it.markX + (np.left - page.left).toFloat(), it.markY.toFloat()) }
     private val idleFrames = ((NowPlayingModel.IDLE + NowPlayingModel.IDLE_FADE) / FRAME_MS + 2).toInt()
     private val idleFadeFrames = (NowPlayingModel.IDLE_FADE / FRAME_MS + 2).toInt()
 
@@ -752,13 +753,13 @@ class HostTest {
 
     private fun song(id: Long) = Row(id, Kind.Song, "Song", "Artist", null, durationMs = DURATION, album = "Album")
 
-    private fun lyricsApp(e: OffsetEdit, view: Boolean = true, mode: Boolean = true, pl: PhoneLyrics? = null, modeAtStart: Boolean = false): TestApp =
+    private fun lyricsApp(e: OffsetEdit, view: Boolean = true, mode: Boolean = true, pl: PhoneLyrics? = null, modeAtStart: Boolean = false, root: Boolean = false): TestApp =
         TestApp(page, np, null, Level(START, null)) { rule.mainClock.currentTime }.also {
             it.lyricsOn = view
             it.edit = e
             it.phoneLyricsOf = pl
             it.modeAtStart = modeAtStart
-            it.compose(rule)
+            it.compose(rule, root)
             rule.waitForIdle()
             rule.mainClock.autoAdvance = false
             rule.runOnIdle {
@@ -2098,6 +2099,40 @@ class HostTest {
         assertEquals("the passed down wakes now playing", 1f, idleAlpha(app), 0f)
         rule.onRoot().performTouchInput { up() }
         frames(CUT_FRAMES)
+    }
+
+    @Test
+    fun aMarkTapDuringTheFadeBackLeavesTheFadeRunning() {
+        val app = lyricsApp(Edit(), root = true)
+        val m = app.music.np
+        rule.runOnIdle {
+            m.mark = true
+            app.host.npBack()
+        }
+        frames(3)
+        rule.onRoot().performTouchInput {
+            down(markAt)
+            up()
+        }
+        frames(1)
+        assertFalse("the mode stays off", m.lyrics.mode)
+        assertTrue("the fade back runs on", rule.runOnIdle { m.lyrics.fading(rule.mainClock.currentTime) })
+    }
+
+    @Test
+    fun aKeyTurnDuringAMarkTouchDropsTheTouch() {
+        val app = lyricsApp(Edit(), mode = false, root = true)
+        val m = app.music.np
+        rule.runOnIdle { m.mark = true }
+        frames(CUT_FRAMES)
+        rule.onRoot().performTouchInput { down(markAt) }
+        frames(1)
+        rule.runOnIdle { app.host.showLyrics(true) }
+        frames(1)
+        rule.onRoot().performTouchInput { up() }
+        frames(OPEN_FRAMES)
+        assertTrue("the key turns the mode on", m.lyrics.mode)
+        assertNull("no sheet opens", app.stack.overlay)
     }
 
     @Test
