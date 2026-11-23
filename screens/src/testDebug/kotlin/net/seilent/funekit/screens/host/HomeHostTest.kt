@@ -626,8 +626,7 @@ class HomeHostTest {
             stack.push(TestScreen.Music(MusicEntry(stack.entry(), MusicPage.Hub)), MoveKind.T2)
             Snapshot.sendApplyNotifications()
         }
-        frame()
-        assertTrue("premise: the push moves", stack.moving)
+        until("premise: the push starts its turn") { stack.turn?.kind == MoveKind.T2 }
         rule.runOnUiThread { rig.entries = listOf(entries[2], entries[0], entries[3]) }
         frame()
         assertTrue(app.homeHas("playlists"))
@@ -688,14 +687,12 @@ class HomeHostTest {
             stack.push(TestScreen.Music(MusicEntry(stack.entry(), MusicPage.Hub)), MoveKind.T2)
             Snapshot.sendApplyNotifications()
         }
-        frame()
-        assertTrue("premise: the push moves", stack.moving)
+        until("premise: the push starts its turn") { stack.turn?.kind == MoveKind.T2 }
         assertFalse(checkNotNull(app.movePaint.ctx.home).paint.quickplay)
         assertEquals("the push starts with no peek", 0f, app.movePaint.ctx.ends.peek0, 0f)
         until("the push lands") { stack.phase == Phase.Rest }
         rule.runOnUiThread { app.host.back() }
-        frame()
-        assertTrue("premise: the back moves", stack.moving)
+        until("premise: the back starts its turn") { stack.turn?.let { it.popping && it.to == null } == true }
         assertEquals("home lands with no peek", 0f, app.movePaint.ctx.ends.peek1, 0f)
     }
 
