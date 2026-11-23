@@ -1,6 +1,7 @@
 package net.seilent.funekit.screens.host
 
 import android.graphics.Matrix
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
@@ -107,6 +108,7 @@ class TestApp(page: Scale, np: Scale, src: MusicSource?, private val level: Volu
     var eqList by mutableStateOf<List<EqPage>>(emptyList())
     var hosted by mutableStateOf(true)
     var homeWords: Set<String> = emptySet()
+    var homeHost: TestHome? = null
     var beforeApplied: () -> Unit = {}
     val gate = InputGate()
     val music = MusicModels()
@@ -141,17 +143,21 @@ class TestApp(page: Scale, np: Scale, src: MusicSource?, private val level: Volu
 
     override val eqPages: List<EqPage> get() = eqList
 
-    override fun homeHas(word: String): Boolean = word in homeWords
+    override fun homeHas(word: String): Boolean = homeHost?.state?.has(word) ?: (word in homeWords)
 
-    override fun homeItem(word: String): Int = -1
+    override fun homeItem(word: String): Int = homeHost?.state?.item(word) ?: -1
 
-    override fun homeBusy(now: Long): Boolean = false
+    override fun homeBusy(now: Long): Boolean = homeHost?.state?.panning(now) == true
 
-    override fun homeLand() {}
+    override fun homeLand() {
+        homeHost?.state?.land()
+    }
 
-    override fun homeFront(): Boolean = false
+    override fun homeFront(): Boolean = homeHost?.state?.front == true
 
-    override fun cancel(top: TestScreen?) {}
+    override fun cancel(top: TestScreen?) {
+        if (top == null) homeHost?.state?.cancel()
+    }
 
     override val phone = MutableStateFlow<PhoneSession?>(null)
 
@@ -223,7 +229,12 @@ class TestApp(page: Scale, np: Scale, src: MusicSource?, private val level: Volu
         val bands = remember(page.heightPx) { groundBands(page.heightPx, true) }
         val grid = remember(page) { page.kept() }
         val accent = Accent.color(Accent.defaultHue, true)
-        val env = MusicEnv(page, np, m, fonts, density, covers, bands, accent, accentOff, a, now, { pokes++ }, grid)
+        val poke: () -> Unit = {
+            pokes++
+            homeHost?.poke()
+        }
+        val hs = homeHost?.State(toast, covers, m, fonts, density, now, poke, ::log)
+        val env = MusicEnv(page, np, m, fonts, density, covers, bands, accent, accentOff, a, now, poke, grid)
         val h = rememberMusicHost(this@TestApp, music, models, env, source, split, level, toast, jump, menuHost, movePaint)
         host = h
         stack = remember {
@@ -237,7 +248,10 @@ class TestApp(page: Scale, np: Scale, src: MusicSource?, private val level: Volu
                 enter = h::enter,
                 drop = h::drop,
                 started = h::started,
-                starting = h::starting,
+                starting = {
+                    hs?.starting(it)
+                    h.starting(it)
+                },
                 swapped = h::swapped,
                 closing = { o, _ -> h.closing(o) },
                 dropped = h::dropped,
@@ -245,7 +259,7 @@ class TestApp(page: Scale, np: Scale, src: MusicSource?, private val level: Volu
                 gate = if (root) gate else null,
                 albumOf = h::albumOf,
             ) { t ->
-                movePaint.ends(t, HomeSide(page, home, 0f), t.from?.let { s -> h.side(s)?.let { PageSide(if (h.isNp(s)) np else page, it) } }, t.to?.let { s -> h.side(s)?.let { PageSide(if (h.isNp(s)) np else page, it) } }, MoveForms.board(page.board))
+                movePaint.ends(t, hs?.let { HomeSide(it.scale, it.paint(h.feed != null), it.off()) } ?: HomeSide(page, home, 0f), t.from?.let { s -> h.side(s)?.let { PageSide(if (h.isNp(s)) np else page, it) } }, t.to?.let { s -> h.side(s)?.let { PageSide(if (h.isNp(s)) np else page, it) } }, MoveForms.board(page.board))
             }.also { h.stack = it }
         }
         val stack = stack
@@ -255,6 +269,7 @@ class TestApp(page: Scale, np: Scale, src: MusicSource?, private val level: Volu
             h.applied()
         }
         h.StackClock { MoveKind.T4n }
+        if (hs != null) BackHandler(enabled = stack.top == null && hs.front) { hs.back() }
         val status = StatusState("", -1, false, Play.None, false, -1, -1)
         if (!root) {
             Box(Modifier.pxSize(page.widthPx, page.heightPx).arbiter(a, Swipes(false, false, false, { false }, { _, _ -> }))) {
@@ -267,6 +282,7 @@ class TestApp(page: Scale, np: Scale, src: MusicSource?, private val level: Volu
         }
         LaunchedEffect(stack.turn) { if (stack.turn == null) movePaint.landed() }
         DisposableEffect(stack) { onDispose { gate.dispose() } }
+        if (hs != null) homeHost?.Loop(hs)
         val heldTarget by rememberUpdatedState { o: Offset, at: Long ->
             val ov = stack.overlay
             when {
@@ -299,7 +315,10 @@ class TestApp(page: Scale, np: Scale, src: MusicSource?, private val level: Volu
         }
         val pivotTop = h.pivot(stack.top)
         val npOn = stack.top?.let(h::isNp) == true
-        val swipes = Swipes(
+        val homePan = hs?.let { remember(stack, it) { it.homePan(stack) } }
+        val swipes = if (hs != null && stack.top == null) {
+            Swipes(edges = false, bottom = false, turn = true, acts = { hs.acts(it) }, onSwipe = { _, _ -> }, pan = homePan)
+        } else Swipes(
             edges = page.edgeBack,
             bottom = false,
             turn = pivotTop != null || npOn,
@@ -328,7 +347,9 @@ class TestApp(page: Scale, np: Scale, src: MusicSource?, private val level: Volu
                 .pointerInput(stack) {
                     awaitEachGesture {
                         val d = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                        hs?.downBefore()
                         h.down()
+                        hs?.downAfter(d.position)
                         val moving = stack.moving
                         var up: Long? = null
                         var upX: Float? = null
@@ -345,6 +366,7 @@ class TestApp(page: Scale, np: Scale, src: MusicSource?, private val level: Volu
                 }
                 .arbiter(a, swipes),
         ) {
+            if (hs != null) homeHost?.Layer(hs, h, music, source, page, a)
             h.SettingsPages(pages)
             h.EqPages(pages)
             h.MusicPages(pages, status)
