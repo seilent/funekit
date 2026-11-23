@@ -538,9 +538,9 @@ class WordRunsTest {
         val track64 = pen64(caption.tracking, a105.ppu)
         val placed = { t: String, base: Int -> penPx(Tiles.placed64(textWidth(caption, style, fonts, unitDensity, covers, base)(t), track64)) }
         val arabicTracks = (placed(arabic, Bidi.DIRECTION_RIGHT_TO_LEFT) - adv(flatLacked, arabic, rtl = true)) / TRACK
-        assertEquals("${sdk()}: the kit places an all Arabic caption at -1 track; funeOS Fonts::place (gfx/shape.cpp:234-269) adds no track between two glyphs of one joined face, 0", -1f, arabicTracks, WIDTH_SLACK)
+        assertEquals("${sdk()}: the kit places an all Arabic caption at -1 track; funeOS Fonts::place (gfx/shape.cpp:237-272) adds no track between two glyphs of one joined face, 0", -1f, arabicTracks, WIDTH_SLACK)
         val mixedTracks = (placed(mixed, Bidi.DIRECTION_LEFT_TO_RIGHT) - adv(flatCaption, "AB ") - adv(flatLacked, arabic, rtl = true)) / TRACK
-        assertEquals("${sdk()}: the kit places AB سلام at 2 tracks; funeOS Fonts::place (gfx/shape.cpp:234-269) tracks A to B, B to the space and the space to the Arabic face, 3", 2f, mixedTracks, WIDTH_SLACK)
+        assertEquals("${sdk()}: the kit places AB سلام at 2 tracks; funeOS Fonts::place (gfx/shape.cpp:237-272) tracks A to B, B to the space and the space to the Arabic face, 3", 2f, mixedTracks, WIDTH_SLACK)
     }
 
     @Test
@@ -551,7 +551,7 @@ class WordRunsTest {
         val ink = boxInk(measurer, fonts, "שלום", caption, style, tile, QP_LINES, a105.ppu, unitDensity, covers)
         assertTrue(ink.rtl)
         val row = ink.lines.single()
-        assertEquals("${sdk()}: funeOS rows.cpp:698 places an RTL row at x64 - r.width64, the width Fonts::place gives (one track fewer than its code points)", QP_EDGE, ink.x(row) + row.width - TRACK, UNIT64)
+        assertEquals("${sdk()}: funeOS rows.cpp:1099 places an RTL row at x64 - r.width64, the width Fonts::place gives (one track fewer than its code points)", QP_EDGE, ink.x(row) + row.width - TRACK, UNIT64)
     }
 
     @Test
@@ -562,7 +562,7 @@ class WordRunsTest {
         val arabic = "سلام"
         val ink = boxInk(measurer, fonts, arabic, caption, style, Edges(0, 0, QP_TILE, QP_TILE), QP_LINES, a105.ppu, unitDensity, covers)
         assertTrue(ink.rtl)
-        assertEquals("${sdk()}: BoxInk.x places an all Arabic RTL row one track (1.5 px at the A105) left of funeOS's x64 - r.width64, Fonts::place (gfx/shape.cpp:234-269) adds no track inside one joined face", QP_EDGE - adv(flatLacked, arabic, rtl = true) + TRACK, ink.x(ink.lines.single()), UNIT64 * 2)
+        assertEquals("${sdk()}: BoxInk.x places an all Arabic RTL row one track (1.5 px at the A105) left of funeOS's x64 - r.width64, Fonts::place (gfx/shape.cpp:237-272) adds no track inside one joined face", QP_EDGE - adv(flatLacked, arabic, rtl = true) + TRACK, ink.x(ink.lines.single()), UNIT64 * 2)
     }
 
     companion object {

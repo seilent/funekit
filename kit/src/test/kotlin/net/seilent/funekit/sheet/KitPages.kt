@@ -65,7 +65,7 @@ object KitPages {
     )
 
     val artists = Page(
-        "hub-artists", "as funeOS hub: artists pivot, collection # divider focused as enter_hub leaves it, collection rows with the play ring (the thumb strip under the title is not a row part, see P12d); $ARTIST_ROWS list rows, read off the funeOS t5-1500 list thumb (A105 y 360 to 498) through scrollbar.cpp thumb_of",
+        "hub-artists", "as funeOS hub: artists pivot, collection # divider focused as enter_hub leaves it, collection rows with the play ring (the thumb strip under the title is not a row part: the hub draws it); $ARTIST_ROWS list rows, read off the funeOS t5-1500 list thumb (A105 y 360 to 498) through scrollbar.cpp thumb_of",
         "music", hubPivots, 1,
         listOf(
             RowModel(kind = RowKind.Divider, primary = "#", collection = true),

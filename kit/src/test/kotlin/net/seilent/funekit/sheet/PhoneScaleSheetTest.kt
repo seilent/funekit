@@ -243,7 +243,7 @@ class PhoneScaleSheetTest {
             val before = shot(dev) { fitRuler(it, TokBoard.r1) }
             listOf(
                 tile("${dev.id}-units", "${dev.label}: the R1 and A105 values", dev, before),
-                tile("${dev.id}-rule", "${dev.label}: the rule at funeOS v0.4.2", dev, after, listOf(FIT_NOTE)),
+                tile("${dev.id}-rule", "${dev.label}: the rule at funeOS v0.4.3", dev, after, listOf(FIT_NOTE)),
             )
         }
         render.write(Sheet(FIT, "fitbyheight", listOf(FIT_FORM, Phones.SAME_SIZE), tiles))
@@ -322,7 +322,7 @@ class PhoneScaleSheetTest {
         private const val GEN_NOTE = "Gen's class: the floor follows the line between the R1 and A105 floors, so it grows on tall windows and drops to V1's 10 px on a 320 u canvas"
         private const val FLOOR_FORM = "The smallest text px on each window. The rule: 8 px per u times the window's px per u (the R1 and A105 floor), V1's own 10 px only on the V1 board at its own ppu."
         private const val FIT_NOTE = "a 320 u canvas takes V1's values; a canvas between 320 and 400 u takes the line between V1 and R1; the caption band runs past the hit cell on those windows"
-        private const val FIT_FORM = "Windows whose height limits them (the cover display, the cover sheet, a 1080 x 1600 window) take V1's values for the tokens V1 alone changed at funeOS v0.4.2."
+        private const val FIT_FORM = "Windows whose height limits them (the cover display, the cover sheet, a 1080 x 1600 window) take V1's values for the tokens V1 alone changed at funeOS v0.4.3."
         private const val TOAST_AT = 2000L
         private const val PAGES_FORM = "Pages on the page base: the rows, the pivots and the header word at the A105's size, the extra width and height used."
         private const val JUMP_NOTE = "4.5 px/u over a drawer at 2.96669 px/u: the grid draws 1.52 times larger than the page under it"

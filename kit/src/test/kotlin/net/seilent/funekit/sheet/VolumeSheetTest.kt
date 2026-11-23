@@ -125,19 +125,19 @@ class VolumeSheetTest {
     fun theVolumeHudOnV1() {
         val held = at(AT + 450) { h, t -> h.act(h.hud.down(t, 200f, 60f), t) }
         val tilt = listOf(
-            VolScene("vol-300-tilt-200-60", "funeOS vol:300:tilt:200:60 (main.cpp:8410-8414): a down at (200, 60) u at 450 ms, held to the shot at 500; no control there, so the plate stays flat", AT + 500, knob() + held),
+            VolScene("vol-300-tilt-200-60", "funeOS vol:300:tilt:200:60 (main.cpp:8602-8606): a down at (200, 60) u at 450 ms, held to the shot at 500; no control there, so the plate stays flat", AT + 500, knob() + held),
             VolScene("vol-300-tiltup-200-60-250", "funeOS vol:300:tiltup:200:60:250: as tilt, the touch cut at 500 ms (touch_cut, VolumeHud cancel), the shot 250 ms after it", AT + 750, knob() + held + at(AT + 500) { h, t -> h.hud.cancel(t) }),
         )
         val closeAt = tap(AT + 900, Tok.canvasW / 2 + Tok.vol_skipX / 2, TokBoard.v1.vol_plusY)
         val close = listOf(0L, 67L, 150L).map { ms ->
-            VolScene("vol-$ms-close-accentoff", "funeOS vol:$ms:close (main.cpp:8386-8392): a tap at (164.1, 56.5) u, between the controls, down at 900 and up at 950 ms, closes the HUD; the shot $ms ms after the up", AT + 950 + ms, knob() + closeAt)
+            VolScene("vol-$ms-close-accentoff", "funeOS vol:$ms:close (main.cpp:8578-8584): a tap at (164.1, 56.5) u, between the controls, down at 900 and up at 950 ms, closes the HUD; the shot $ms ms after the up", AT + 950 + ms, knob() + closeAt)
         }
         val plusAt = tap(AT + 900, Tok.canvasW / 2, TokBoard.v1.vol_plusY)
         val plus = listOf(0L, 50L, 150L, 250L, 400L).map { ms ->
-            VolScene("vol-$ms-plus-accentoff", "funeOS vol:$ms:plus (main.cpp:8405-8408): a tap on the plus, down at 900 and up at 950 ms, steps the volume up; the shot $ms ms after the down", AT + 900 + ms, knob() + plusAt)
+            VolScene("vol-$ms-plus-accentoff", "funeOS vol:$ms:plus (main.cpp:8597-8600): a tap on the plus, down at 900 and up at 950 ms, steps the volume up; the shot $ms ms after the down", AT + 900 + ms, knob() + plusAt)
         }
         val swipe = listOf(0L, 17L, 283L, 867L, 883L, 1083L, 1183L, 1283L).map { ms ->
-            VolScene("vol-300-swipe-164-159-$ms-accentoff", "funeOS vol:300:swipe:164:159:$ms (main.cpp:8417-8434): a down at (164, 159) u at 500 ms, 54 moves 16 ms apart, 5 u down a step for 18 steps then back up, the up 880 ms after the down; the shot $ms ms after the down", SWIPE + ms, knob() + swipe())
+            VolScene("vol-300-swipe-164-159-$ms-accentoff", "funeOS vol:300:swipe:164:159:$ms (main.cpp:8609-8626): a down at (164, 159) u at 500 ms, 54 moves 16 ms apart, 5 u down a step for 18 steps then back up, the up 880 ms after the down; the shot $ms ms after the down", SWIPE + ms, knob() + swipe())
         }
         val cases = listOf("tilt" to tilt, "close" to close, "plus" to plus, "swipe" to swipe)
         for ((case, scenes) in cases) {

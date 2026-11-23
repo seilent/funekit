@@ -138,7 +138,7 @@ class RangeSheetTest {
         val ink = menuInk(measurer, fonts, menu, a105, density, false, covers)
         val plan = menu.plan(ink).also { menu.settle(it) }
         m.edit(row.key, sheet.lift)
-        assertFalse("the row would rise past its own top, so it stays (v0.4.2 lift_focus)", m.lift(px(a105.board.page_contentTop, a105.ppu), menu.panelTop - px(Tok.gutter, a105.ppu), menu.kept))
+        assertFalse("the row would rise past its own top, so it stays (v0.4.3 lift_focus)", m.lift(px(a105.board.page_contentTop, a105.ppu), menu.panelTop - px(Tok.gutter, a105.ppu), menu.kept))
         val o = Overlay(OverKind.Sheet).also { it.open(0) }
         val open = shot {
             page(m, d, c)
@@ -146,14 +146,14 @@ class RangeSheetTest {
         }
         val notes = listOf(
             "720x1280, A105 board, page scale",
-            "funeOS player/ui/settings.cpp build :359-372, :449-454, draw_row :1771-1786, v0.4.2",
-            "funeOS player/ui/app.cpp value_menu :11935-11955, player/ui/overlay.cpp :366-391, player/ui/settings.cpp lift_focus :725-738, v0.4.2",
+            "funeOS player/ui/settings.cpp build :356-369, :448-453, draw_row :1830-1845, v0.4.3",
+            "funeOS player/ui/app.cpp value_menu :12363-12383, player/ui/overlay.cpp :366-391, player/ui/settings.cpp lift_focus :739-752, v0.4.3",
         )
         val tiles = listOf(
             render.tile(FOLDER, "accent-display", "the display pivot at A105 defaults, the accent swatch at hue 350", notes, rows, emptyList(), a105.stdPpu),
             render.tile(FOLDER, "accent-sheet", "the accent value sheet, off then hues 0 to 350, focus and mark on 350", notes, open, emptyList(), a105.stdPpu),
         )
-        render.write(Sheet(FOLDER, "accent", listOf("Kit settings accent row and swatch sheet (funeOS v0.4.2)."), tiles))
+        render.write(Sheet(FOLDER, "accent", listOf("Kit settings accent row and swatch sheet (funeOS v0.4.3)."), tiles))
         render.index(
             FOLDER,
             listOf(
@@ -170,7 +170,7 @@ class RangeSheetTest {
     fun theBalanceHudAtLeftFourAndAHalfAndAtCenter() {
         val notes = listOf(
             "720x1280, A105 board, page scale",
-            "funeOS player/ui/app.cpp half_db :277-281, adjust_cols :15747-15756, player/ui/settings.cpp balance_text :78-84, build :318-340, v0.4.2",
+            "funeOS player/ui/app.cpp half_db :280-284, adjust_cols :16522-16531, player/ui/settings.cpp balance_text :82-88, build :315-337, v0.4.3",
         )
         val tiles = listOf(LEFT_HALVES to "left", 0 to CENTER).map { (b, name) ->
             val m = model(output(b), 0)
@@ -187,8 +187,8 @@ class RangeSheetTest {
             }
             render.tile(FOLDER, "balance-$name", "the balance hud at ${balanceText(b)} over the output pivot", notes, img, emptyList(), a105.stdPpu)
         }
-        assertEquals("v0.4.2 left of center", "l 4.5 db", balanceText(LEFT_HALVES))
-        render.write(Sheet(FOLDER, "balance", listOf("Kit settings balance edit in the adjust HUD (funeOS v0.4.2)."), tiles))
+        assertEquals("v0.4.3 left of center", "l 4.5 db", balanceText(LEFT_HALVES))
+        render.write(Sheet(FOLDER, "balance", listOf("Kit settings balance edit in the adjust HUD (funeOS v0.4.3)."), tiles))
     }
 
     private companion object {

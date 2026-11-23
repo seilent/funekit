@@ -115,14 +115,14 @@ class LyricsSheetTest {
         val k = ink(g, listOf("A plain line that runs long enough to wrap", "", "after a blank line"))
         val m = LyricsModel()
         val plain = shot(g) { npLyricPlain(g, m, k, 0, 1f) }
-        val notes = listOf("720x960, V1 board at 3 px per u", "funeOS player/ui/nowplaying.cpp draw_column :725-879, draw_plain :954-985, v0.4.2")
+        val notes = listOf("720x960, V1 board at 3 px per u", "funeOS player/ui/nowplaying.cpp draw_column :745-899, draw_plain :974-1005, v0.4.3")
         val tiles = listOf(
             render.tile(FOLDER, "column-rest", "line 2 at rest", notes, rest, emptyList(), g.p),
             render.tile(FOLDER, "column-slide-half", "line 2 to 3 at half the slide", notes, mid, emptyList(), g.p),
             render.tile(FOLDER, "column-large", "line 2 at rest, LARGE", notes, big, emptyList(), large.p),
             render.tile(FOLDER, "plain", "plain lyrics at the top", notes, plain, emptyList(), g.p),
         )
-        render.write(Sheet(FOLDER, "column", listOf("Kit lyrics view (funeOS NowPlaying draw_lyrics, v0.4.2)."), tiles))
+        render.write(Sheet(FOLDER, "column", listOf("Kit lyrics view (funeOS NowPlaying draw_lyrics, v0.4.3)."), tiles))
         render.index(FOLDER, listOf("# Kit lyrics view", "", "- `lyrics/column.png`: the column at rest, at half a slide, in LARGE, and plain lyrics, at V1"))
     }
 

@@ -131,7 +131,7 @@ class EqRowsSheetTest {
             kinds.map { (kind, caption, at) -> tile(dev, board, kind, caption, false, at.first, at.second) }
         } + tile(a105, "a105", "eq-parametric-large", "headphones, parametric, band values in two lines", true, 0, null)
         assertEquals("the large band value is type and frequency over gain and q", listOf("ls 105 hz", "+6.4 db q 0.70"), largeBand())
-        render.write(Sheet(FOLDER, "rows", listOf("Kit EQ pane rows on the eq host (funeOS v0.4.2 eqpane.cpp draw_row)."), tiles))
+        render.write(Sheet(FOLDER, "rows", listOf("Kit EQ pane rows on the eq host (funeOS v0.4.3 eqpane.cpp draw_row)."), tiles))
         render.index(
             FOLDER,
             listOf(
@@ -172,8 +172,8 @@ class EqRowsSheetTest {
         const val PEAK_GAIN = 30
         const val PEAK_Q = 71
         const val NOW = 5000L
-        const val NOTE_DRAW = "funeOS player/ui/eqpane.cpp draw_row :599-671, v0.4.2"
-        const val NOTE_TEXT = "funeOS player/ui/eqstore.cpp band text :497-514, v0.4.2; the values are the test's"
+        const val NOTE_DRAW = "funeOS player/ui/eqpane.cpp draw_row :613-685, v0.4.3"
+        const val NOTE_TEXT = "funeOS player/ui/eqstore.cpp band text :497-514, v0.4.3; the values are the test's"
         val OCTAVES = listOf(4, 10, 16, 22, 28, 34, 40, 46, 52, 58)
         val GAINS = listOf(45, 30, 10, 0, -10, -20, 0, 15, 30, 60)
     }

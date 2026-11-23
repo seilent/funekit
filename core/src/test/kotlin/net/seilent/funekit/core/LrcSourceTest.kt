@@ -9,7 +9,7 @@ class LrcSourceTest {
 
     @Test
     fun theSourceNamesTheReleaseAndHashesTheThreeLrcFiles() {
-        assertEquals("from funeOS v0.4.2", lines.first())
+        assertEquals("from funeOS v0.4.3", lines.first())
         assertTrue(lines.none { it.startsWith("commit") })
         val rows = lines.drop(1).map { it.split(' ') }
         assertEquals(listOf("player/lib/lrc.cpp", "player/lib/lrc.h", "player/lib/util.cpp"), rows.map { it[0] })
