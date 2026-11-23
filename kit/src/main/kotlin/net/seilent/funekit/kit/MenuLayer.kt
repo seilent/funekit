@@ -6,6 +6,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -17,6 +18,7 @@ import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -26,6 +28,7 @@ import net.seilent.funekit.Scale
 import net.seilent.funekit.kit.motion.OverKind
 import net.seilent.funekit.kit.motion.Overlay
 import net.seilent.funekit.kit.motion.OverlayGate
+import net.seilent.funekit.kit.motion.rememberOverlayFrame
 import net.seilent.funekit.kit.touch.Arbiter
 import net.seilent.funekit.kit.touch.BlockBelow
 import net.seilent.funekit.kit.touch.Slop
@@ -47,7 +50,8 @@ private fun DrawScope.faded(alpha: Float, paint: Paint, block: DrawScope.() -> U
     drawContext.canvas.restore()
 }
 
-fun DrawScope.menuLayer(menu: Menu, ink: MenuInk, plan: MenuPlan, o: Overlay, s: Scale, now: Long, accent: Color, accentOff: Boolean, paint: Paint) {
+fun DrawScope.menuLayer(menu: Menu, ink: MenuInk, plan: MenuPlan, o: Overlay, s: Scale, now: Long, accent: Color, accentOff: Boolean, paint: Paint, tick: Boolean = true) {
+    if (tick) menu.tick(now, ink, plan, s)
     if (o.kind == OverKind.Sheet) {
         val sh = o.sheet(now)
         drawRect(Ink.bg, Offset.Zero, size, sh.scrim)
@@ -80,6 +84,27 @@ fun MenuOverlay(
     onHold: ((Int) -> Boolean)? = null,
     onScrim: () -> Boolean = { false },
 ) {
+    MenuOverlay(menu, overlay, s, a, now, onPick, onClose, layer, modifier, accent, accentOff, band, onHold, onScrim, seen = { _, _ -> })
+}
+
+@Composable
+internal fun MenuOverlay(
+    menu: Menu,
+    overlay: Overlay,
+    s: Scale,
+    a: Arbiter,
+    now: () -> Long,
+    onPick: (Int) -> Boolean,
+    onClose: () -> Unit,
+    layer: Int,
+    modifier: Modifier,
+    accent: Color,
+    accentOff: Boolean,
+    band: NavGround?,
+    onHold: ((Int) -> Boolean)?,
+    onScrim: () -> Boolean,
+    seen: (State<Long>, DrawScope.() -> Unit) -> Unit,
+) {
     val m = rememberTextMeasurer()
     val fonts = LocalFontFamilyResolver.current
     val density = LocalDensity.current
@@ -95,11 +120,14 @@ fun MenuOverlay(
     val pitch by rememberUpdatedState(plan.pitch)
     val close by rememberUpdatedState(onClose)
     val slop by rememberUpdatedState(a.slop)
+    val frame = rememberOverlayFrame(overlay, now, menu::animating, menu::wakeAt, { menu.version }) { t -> menu.tick(t, ink, plan, s) }
+    val draw: DrawScope.() -> Unit = {
+        menuLayer(menu, ink, plan, overlay, s, frame.value, accent, accentOff, paint, tick = false)
+        if (band != null) navBand(s, band)
+    }
+    SideEffect { seen(frame, draw) }
     Box(modifier.pxSize(s.widthPx, s.heightPx).pointerInput(menu, overlay) { sheetDrag(menu, overlay, { slop }, now, { pitch }, { close() }) }) {
-        Canvas(Modifier.pxSize(s.widthPx, s.heightPx)) {
-            menuLayer(menu, ink, plan, overlay, s, now(), accent, accentOff, paint)
-            if (band != null) navBand(s, band)
-        }
+        Canvas(Modifier.pxSize(s.widthPx, s.heightPx).graphicsLayer(), onDraw = draw)
         val shut = Tap({ gate.down(overlay, now()) }, {}, { if (gate.passes(overlay, false) && !onScrim()) onClose() })
         Box(Modifier.pxAt(Edges(0, 0, s.widthPx, if (band != null) navBand(s).y0 else s.heightPx)).tapTarget(a, shut, layer))
         if (menu.form == MenuForm.Sheet) {
@@ -140,7 +168,7 @@ private suspend fun PointerInputScope.sheetDrag(
         top = { menu.form == MenuForm.Dlg || menu.atTop },
         scrolled = { false },
         close = close,
-        end = { menu.held = false },
+        end = { menu.lift(now()) },
     ) { y0, y ->
         val p = pitch()
         val moved = menu.form == MenuForm.Sheet && p > 0 && menu.scrollTo(first0 + ((y0 - y) / p).toInt(), now())

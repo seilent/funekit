@@ -34,6 +34,15 @@ class FocusTest {
     }
 
     @Test
+    fun aJumpWithNoMotionShowsItsRowAtAFrameBeforeItsStamp() {
+        val f = FocusTrack()
+        f.set(2, 3, STAMP + LATE, false)
+        assertEquals(1f, f.rowAlpha(2, STAMP, 1f, 0.6f), 0f)
+        assertEquals(0.6f, f.rowAlpha(0, STAMP, 1f, 0.6f), 0f)
+        assertFalse(f.animating(STAMP))
+    }
+
+    @Test
     fun aStepDuringTheFadeFadesTheLeavingRowOutFromTheAlphaItReached() {
         val f = FocusTrack()
         f.set(1, 3, 0, true)
@@ -205,6 +214,8 @@ class FocusTest {
     }
 
     private companion object {
+        const val STAMP = 1000L
+        const val LATE = 5L
         const val ALBUM_PITCH = 120
         const val ALBUM_VIEW = 524
         const val ALBUM_ABOVE = 345

@@ -583,8 +583,7 @@ class MusicHost<S : Any> internal constructor(
         }
         queueOf(stack.top)?.fade?.release(t)
         rowsOf(stack.top)?.fade?.release(t)
-        menuHost.menu.held = false
-        menuHost.menu.fade.release(t)
+        menuHost.menu.lift(t)
     }
 
     fun skip(s: Swipe) {

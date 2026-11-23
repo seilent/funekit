@@ -110,6 +110,22 @@ class Menu {
         version++
     }
 
+    fun animating(now: Long): Boolean = focus.animating(now) || glow.moving(now) || fade.fading(now)
+
+    fun wakeAt(now: Long): Long? = listOfNotNull(glow.due(now), fade.wakeAt(now).takeIf { it >= 0 }).minOrNull()
+
+    fun lift(now: Long) {
+        val was = held
+        held = false
+        if (fade.release(now) || was) bump()
+    }
+
+    internal fun tick(now: Long, ink: MenuInk, plan: MenuPlan, s: Scale) {
+        fade.track(thumbBar(ink, plan, s) != null, plan.first != drawnFirst || held, now)
+        if (!held) fade.release(now)
+        drawnFirst = plan.first
+    }
+
     fun open(
         f: MenuForm,
         title: String,
@@ -145,6 +161,8 @@ class Menu {
         focus.attach()
         focus.set(this.lead, items.size, now, false)
         first = 0
+        drawnFirst = 0
+        fade.reset()
         shown = items.size
         free = false
         pressed = -1
@@ -575,9 +593,13 @@ fun DrawScope.menu(menu: Menu, ink: MenuInk, plan: MenuPlan, s: Scale, now: Long
             }
         }
     }
-    val n = menu.items.size
+    menu.thumbBar(ink, plan, s)?.let { thumb(it, menu.fade.at(now)) }
+}
+
+private fun Menu.thumbBar(ink: MenuInk, plan: MenuPlan, s: Scale): ThumbRect? {
+    val n = items.size
     var bar: ThumbRect? = null
-    if (menu.form == MenuForm.Sheet && plan.maxFirst > plan.pin) {
+    if (form == MenuForm.Sheet && plan.maxFirst > plan.pin) {
         var total = 0L
         var above = 0L
         var most = 0L
@@ -587,10 +609,7 @@ fun DrawScope.menu(menu: Menu, ink: MenuInk, plan: MenuPlan, s: Scale, now: Long
             if (i < plan.first) above += h
             if (i < plan.maxFirst) most += h
         }
-        bar = thumbOf(s, plan.top + plan.pinH, menu.bottomPx, total - most, total, above, ink.ppu)
+        bar = thumbOf(s, plan.top + plan.pinH, bottomPx, total - most, total, above, ink.ppu)
     }
-    menu.fade.track(bar != null, plan.first != menu.drawnFirst || menu.held, now)
-    if (!menu.held) menu.fade.release(now)
-    menu.drawnFirst = plan.first
-    bar?.let { thumb(it, menu.fade.at(now)) }
+    return bar
 }

@@ -57,6 +57,16 @@ class ThumbFade {
 
     private val holdEnd: Long get() = seen + hold
 
+    fun reset() {
+        from = 1f
+        t0 = 0L
+        running = false
+        seen = 0L
+        drawn = 0L
+        on = false
+        held = false
+    }
+
     fun show(now: Long) {
         running = false
         seen = now
@@ -79,11 +89,11 @@ class ThumbFade {
         drawn = now
     }
 
-    fun release(now: Long) {
-        if (held) {
-            held = false
-            seen = now
-        }
+    fun release(now: Long): Boolean {
+        if (!held) return false
+        held = false
+        seen = now
+        return true
     }
 
     fun at(now: Long): Float {

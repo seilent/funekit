@@ -469,6 +469,29 @@ class SettingsHostTest {
     }
 
     @Test
+    fun theHostsUpLiftsAHeldValueSheetSoItsThumbFades() {
+        val rows = Rows(pivot(choice("a", TALL)))
+        val app = app(SettingsPage(ID, rows, HeaderLook.Settings))
+        val (_, m) = open(app)
+        tap(app, m, 0)
+        assertEquals("premise: the value sheet is up", OverKind.Sheet, app.stack.overlay?.kind)
+        val v = app.menu.version
+        rule.runOnIdle { app.host.up(rule.mainClock.currentTime, null) }
+        assertEquals("an up with nothing held bumps nothing", v, app.menu.version)
+        val scrolled = rule.runOnIdle {
+            app.menu.held = true
+            app.menu.scrollTo(1, rule.mainClock.currentTime)
+        }
+        assertTrue("premise: the held sheet scrolls", scrolled)
+        frames(2)
+        rule.runOnIdle { app.host.up(rule.mainClock.currentTime, null) }
+        frames(((Tok.scrollbar_hold + Tok.scrollbar_fade) / FRAME_MS).toInt() + FADE_SLACK)
+        val t = rule.mainClock.currentTime
+        assertEquals("the thumb faded out", 0f, app.menu.fade.at(t), 0f)
+        assertFalse("its fade ended in the frame state", app.menu.fade.fading(t))
+    }
+
+    @Test
     fun anEditableRowWithNoWordsOpensNoValueSheet() {
         val rows = Rows(pivot(SettingRow("a", "a", "on", SettingKind.Choice, shows = listOf("on"))))
         val app = app(SettingsPage(ID, rows, HeaderLook.Settings))
@@ -1171,9 +1194,11 @@ class SettingsHostTest {
         private const val FRAME_MS = 16
         private const val HIDE_FRAMES = 2
         private const val HOLD_LEAD = 3
+        private const val FADE_SLACK = 4
         private val ID = SettingsId(SETTINGS)
         private val WORDS = listOf("off", "low", "high")
         private val LATER = listOf("x", "y", "z")
         private val FOUR = listOf("off", "low", "mid", "high")
+        private val TALL = List(24) { "word $it" }
     }
 }

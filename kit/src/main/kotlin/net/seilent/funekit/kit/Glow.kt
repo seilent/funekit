@@ -192,8 +192,8 @@ class Glow(dilate: Float = Tok.pressGlowDilate, blur: Float = Tok.pressGlow, alp
     fun moving(now: Long): Boolean {
         if (key == null) return false
         val rising = now - at < Tok.motion_pressGlow.toLong()
-        if (fadeAt >= 0) return now < fadeAt + back() || (!ended && now < fadeAt + FADE_TAIL * back())
-        if (until >= 0) return rising || (now >= until && !ended && now < until + back())
+        if (fadeAt >= 0) return now < fadeAt + back() || (!ended(now) && now < fadeAt + FADE_TAIL * back())
+        if (until >= 0) return rising || (now >= until && !ended(now) && now < until + back())
         return rising
     }
 

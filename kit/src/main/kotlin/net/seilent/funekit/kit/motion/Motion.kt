@@ -112,12 +112,15 @@ class Overlay(val kind: OverKind, val hud: OverHud? = null, private val commit: 
     private var jumpFrom = JumpLook(0f, 1f, 0f)
     var lead = 0L
     var back: (() -> Boolean)? = null
+    var revision by mutableIntStateOf(0)
+        private set
 
     fun open(now: Long) {
         start = now
         closed = false
         backMs = -1
         risen = -1L
+        revision++
     }
 
     fun rise(now: Long) {
@@ -153,6 +156,7 @@ class Overlay(val kind: OverKind, val hud: OverHud? = null, private val commit: 
         if (kind == OverKind.Jump && e > 0) {
             closed = true
             start = now
+            revision++
             return
         }
         if (e <= 0) {
@@ -178,6 +182,7 @@ class Overlay(val kind: OverKind, val hud: OverHud? = null, private val commit: 
         }
         closed = true
         start = now
+        revision++
     }
 
     fun wakeAt(now: Long): Long? = hud?.wakeAt(now)
@@ -194,6 +199,7 @@ class Overlay(val kind: OverKind, val hud: OverHud? = null, private val commit: 
         if (hud != null) return false
         if (closing) return true
         start = now - dur()
+        revision++
         return false
     }
 

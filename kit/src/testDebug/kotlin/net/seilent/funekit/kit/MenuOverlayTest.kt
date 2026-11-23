@@ -4,6 +4,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -11,11 +12,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Canvas
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
 import net.seilent.funekit.core.Section
 import net.seilent.funekit.Insets
 import net.seilent.funekit.Nav
@@ -27,6 +35,7 @@ import net.seilent.funekit.kit.motion.MoveForms
 import net.seilent.funekit.kit.motion.MoveKind
 import net.seilent.funekit.kit.motion.OverKind
 import net.seilent.funekit.kit.motion.Overlay
+import net.seilent.funekit.kit.motion.rememberOverlayFrame
 import net.seilent.funekit.kit.stack.PageKind
 import net.seilent.funekit.kit.stack.PageStack
 import net.seilent.funekit.kit.stack.PageStackClock
@@ -492,10 +501,374 @@ class MenuOverlayTest {
         assertEquals(1, closes)
     }
 
+    private lateinit var frame: State<Long>
+    private lateinit var draws: DrawScope.() -> Unit
+    private var calls = 0
+    private var lastNow = 0L
+
+    private fun seenNow(): Long {
+        calls++
+        return clock().also { lastNow = it }
+    }
+
+    private fun watch(m: Menu) {
+        rule.mainClock.autoAdvance = false
+        stack = PageStack<String>(MoveForms(), { PageKind.Plain }) { MoveEnds() }.also { it.pages.add("page") }
+        rule.setContent {
+            val a = remember { Arbiter(a105) }
+            PageStackClock(stack) { MoveKind.T4 }
+            Box(Modifier.fillMaxSize().arbiter(a, Swipes(false, false, false, { false }, { _, _ -> }))) {
+                val o = stack.overlay
+                if (o != null) {
+                    MenuOverlay(
+                        m, o, a105, a, ::seenNow, { picks += it; stack.accept(); true }, { closes++; stack.close() }, 1, Modifier, Ink.white, true, null, null, { false },
+                        seen = { f, d ->
+                            frame = f
+                            draws = d
+                        },
+                    )
+                }
+            }
+        }
+        rule.mainClock.advanceTimeBy(32)
+    }
+
+    private fun raise(o: Overlay) {
+        stack.open(o)
+        Snapshot.sendApplyNotifications()
+        repeat(OPEN_FRAMES) { if (stack.overlay == null) rule.mainClock.advanceTimeByFrame() }
+        rule.waitForIdle()
+        assertTrue("premise: the overlay is up", stack.overlay === o)
+    }
+
+    private fun tick(): Long {
+        val was = frame.value
+        rule.runOnUiThread { Snapshot.sendApplyNotifications() }
+        rule.mainClock.advanceTimeByFrame()
+        rule.waitForIdle()
+        return was
+    }
+
+    private fun advances(what: String) {
+        val was = tick()
+        val f = frame.value
+        val t = clock()
+        assertTrue("$what: frame $f after $was at $t", f > was && t - FRAME < f && f <= t)
+        if (stack.moving) assertEquals("$what: the stack's clock", stack.clock, f)
+    }
+
+    private fun drawsAt(what: String) {
+        val reads = mutableListOf<Any>()
+        val was = calls
+        rule.runOnUiThread {
+            Snapshot.observe(readObserver = { reads += it }) {
+                CanvasDrawScope().draw(Density(1f), LayoutDirection.Ltr, Canvas(ImageBitmap(a105.widthPx, a105.heightPx)), Size(a105.widthPx.toFloat(), a105.heightPx.toFloat()), draws)
+            }
+        }
+        assertTrue("$what: the draw reads the frame", reads.any { it === frame })
+        assertEquals("$what: the draw asks no time", was, calls)
+    }
+
+    private fun parks(what: String, n: Int = PARK_FRAMES) {
+        val f = frame.value
+        repeat(n) {
+            tick()
+            assertEquals("$what: parked at frame $it", f, frame.value)
+        }
+    }
+
+    private fun still() {
+        var n = 0
+        while (tick() != frame.value) assertTrue("premise: the loop parks", ++n < STILL_CAP)
+        parks("premise: still", REST_FRAMES)
+    }
+
+    private fun fades(m: Menu, end: Long) {
+        val held = frame.value
+        while (frame.value == held) {
+            assertTrue("the fade wakes by its hold's end $end, at ${clock()}", clock() <= end + WAKE)
+            tick()
+        }
+        assertTrue("the thumb holds until $end, woke at ${frame.value}", frame.value >= end)
+        while (m.fade.fading(frame.value)) advances("the fade")
+        parks("the fade's end")
+        val t = clock()
+        assertEquals("the thumb faded out", 0f, m.fade.at(t), 0f)
+        assertFalse("the fade ended", m.fade.fading(t))
+    }
+
+    private fun three(form: MenuForm): Menu = Menu().also {
+        it.open(form, "play", listOf("play", "play next", "shuffle"), 0)
+        it.frame(px(Tok.statusTop + Tok.statusHeight, a105.stdPpu), 1280)
+    }
+
+    private fun risesEveryFrame(form: MenuForm, kind: OverKind) {
+        watch(three(form))
+        val o = Overlay(kind)
+        raise(o)
+        var n = 0
+        while (o.moving(stack.clock)) {
+            advances("rise frame $n")
+            drawsAt("rise frame $n")
+            n++
+        }
+        assertTrue("premise: the rise runs frames", n > 1)
+    }
+
+    private fun rested(m: Menu): Overlay {
+        watch(m)
+        val o = Overlay(OverKind.Sheet)
+        raise(o)
+        while (o.moving(stack.clock)) tick()
+        return o
+    }
+
+    @Test
+    @Config(qualifiers = A105_SCREEN)
+    fun aSheetsRiseAdvancesItsFrameEveryFrameAndDrawsAtIt() = risesEveryFrame(MenuForm.Sheet, OverKind.Sheet)
+
+    @Test
+    @Config(qualifiers = A105_SCREEN)
+    fun aDialogsPopAdvancesItsFrameEveryFrameAndDrawsAtIt() = risesEveryFrame(MenuForm.Dlg, OverKind.Dlg)
+
+    @Test
+    @Config(qualifiers = A105_SCREEN)
+    fun aPressGlowAtRestAdvancesTheFrameThenItParks() {
+        val m = three(MenuForm.Sheet)
+        rested(m)
+        parks("premise: at rest", REST_FRAMES)
+        rule.onRoot().performTouchInput { down(Offset(360f, item(m, 2))) }
+        assertTrue("premise: the down presses the row", m.pressed == 2 && m.glow.moving(lastNow))
+        while (m.glow.moving(frame.value)) advances("the glow")
+        parks("the glow's end")
+    }
+
+    @Test
+    @Config(qualifiers = A105_SCREEN)
+    fun aFocusStepAtRestAdvancesTheFrameThenItParks() {
+        val m = three(MenuForm.Sheet)
+        rested(m)
+        parks("premise: at rest", REST_FRAMES)
+        var stepped = false
+        rule.runOnUiThread {
+            stepped = m.step(1, clock())
+            Snapshot.sendApplyNotifications()
+        }
+        assertTrue("premise: the step moves the focus", stepped)
+        while (m.focus.animating(frame.value)) advances("the focus fade")
+        parks("the focus fade's end")
+    }
+
+    @Test
+    @Config(qualifiers = A105_SCREEN)
+    fun aDragsThumbHoldsAfterTheUpThenEveryFrameOfItsFadeAdvances() {
+        val m = lines(12)
+        rested(m)
+        rule.onRoot().performTouchInput {
+            down(Offset(360f, 1100f))
+            moveBy(Offset(0f, -161f))
+            moveBy(Offset(0f, -161f))
+        }
+        assertTrue("premise: the drag scrolls and holds", m.first > 0 && m.held)
+        still()
+        rule.onRoot().performTouchInput { up() }
+        assertFalse("premise: the up lifts", m.held)
+        val end = lastNow + Tok.scrollbar_hold.toLong()
+        advances("the lift's wake")
+        fades(m, end)
+    }
+
+    @Test
+    @Config(qualifiers = A105_SCREEN)
+    fun theLoopTracksTheThumbFadeAndAKeyScrollLightsIt() {
+        val m = lines(12)
+        watch(m)
+        val o = Overlay(OverKind.Sheet)
+        raise(o)
+        advances("the first frame")
+        val end = frame.value + Tok.scrollbar_hold.toLong()
+        while (o.moving(stack.clock)) advances("the rise")
+        fades(m, end)
+        var scrolled = false
+        rule.runOnUiThread {
+            scrolled = m.scrollTo(m.first + 1, clock())
+            Snapshot.sendApplyNotifications()
+        }
+        assertTrue("premise: the key scrolls", scrolled)
+        tick()
+        repeat(LIT_FRAMES) {
+            tick()
+            val t = clock()
+            assertTrue("the thumb lights at $t", m.fade.at(t) > 0f && m.fade.fading(t))
+        }
+    }
+
+    @Test
+    @Config(qualifiers = A105_SCREEN)
+    fun theCloseAdvancesEveryFrameUntilTheOverlayIsDropped() {
+        val o = rested(three(MenuForm.Sheet))
+        parks("premise: at rest", REST_FRAMES)
+        stack.close()
+        Snapshot.sendApplyNotifications()
+        repeat(OPEN_FRAMES) { if (!o.closing) tick() }
+        assertTrue("premise: the close's ask ran", o.closing)
+        var n = 0
+        while (stack.overlay != null) {
+            advances("close frame $n")
+            drawsAt("close frame $n")
+            n++
+        }
+        assertTrue("premise: the close runs frames", n > 1)
+    }
+
+    @Test
+    @Config(qualifiers = A105_SCREEN)
+    fun aSheetClosedBeforeItsFirstFrameParksAfterIt() {
+        val m = three(MenuForm.Sheet)
+        val o = Overlay(OverKind.Sheet).also {
+            it.open(-10_000L)
+            it.close(-5_000L)
+        }
+        assertFalse("premise: the close is over", o.moving(0L))
+        rule.mainClock.autoAdvance = false
+        rule.setContent {
+            val a = remember { Arbiter(a105) }
+            Box(Modifier.fillMaxSize().arbiter(a, Swipes(false, false, false, { false }, { _, _ -> }))) {
+                MenuOverlay(
+                    m, o, a105, a, ::seenNow, { true }, {}, 1, Modifier, Ink.white, true, null, null, { false },
+                    seen = { f, d ->
+                        frame = f
+                        draws = d
+                    },
+                )
+            }
+        }
+        tick()
+        parks("a closed sheet")
+    }
+
+    @Test
+    fun aFrameComposedOverARisenOverlayStartsAtItsRise() {
+        val o = Overlay(OverKind.Sheet).also {
+            it.open(0L)
+            it.rise(RISEN)
+        }
+        assertEquals("premise: the overlay rose", RISEN, o.risen)
+        var first = -1L
+        rule.mainClock.autoAdvance = false
+        rule.setContent {
+            val f = rememberOverlayFrame(o, ::clock, { false }, { null })
+            if (first < 0) first = f.value
+        }
+        rule.waitForIdle()
+        assertEquals(RISEN, first)
+    }
+
+    @Test
+    fun aFrameAtRestStepsOnceThenParks() {
+        val o = Overlay(OverKind.Sheet).also { it.open(-10_000L) }
+        var steps = 0
+        rule.mainClock.autoAdvance = false
+        rule.setContent { frame = rememberOverlayFrame(o, ::clock, { false }, { null }, step = { steps++ }) }
+        rule.waitForIdle()
+        tick()
+        assertEquals("the first frame steps once", 1, steps)
+        parks("at rest")
+        assertEquals("a parked frame steps no more", 1, steps)
+    }
+
+    @Test
+    @Config(qualifiers = A105_SCREEN)
+    fun aReentryOverARisenSheetStartsAtTheComposingTimeAndShowsTheRowSetAfterItsRise() {
+        val m = three(MenuForm.Sheet)
+        val o = Overlay(OverKind.Sheet).also {
+            it.open(0L)
+            it.rise(RISEN)
+        }
+        val picked = RISEN + LATE
+        m.focus.set(2, m.items.size, picked, false)
+        rule.mainClock.autoAdvance = false
+        rule.setContent {
+            val a = remember { Arbiter(a105) }
+            Box(Modifier.fillMaxSize().arbiter(a, Swipes(false, false, false, { false }, { _, _ -> }))) {
+                MenuOverlay(
+                    m, o, a105, a, { picked }, { true }, {}, 1, Modifier, Ink.white, true, null, null, { false },
+                    seen = { f, d ->
+                        frame = f
+                        draws = d
+                    },
+                )
+            }
+        }
+        rule.waitForIdle()
+        assertEquals("the first drawn frame is the composing time", picked, frame.value)
+        assertEquals("it shows the row set after the rise", 1f, m.focus.rowAlpha(2, frame.value, 1f, 0f), 0f)
+    }
+
+    @Test
+    fun aWakeAtNotAfterTheFrameFailsPlainly() {
+        val o = Overlay(OverKind.Sheet).also { it.open(-10_000L) }
+        rule.mainClock.autoAdvance = false
+        rule.setContent { frame = rememberOverlayFrame(o, ::clock, { false }, { it }) }
+        rule.waitForIdle()
+        val failed = runCatching { tick() }.exceptionOrNull()
+        assertTrue("a wake at the frame fails plainly: $failed", generateSequence(failed) { it.cause }.any { it is IllegalStateException && it.message == "wakeAt returns a time after now" })
+    }
+
+    @Test
+    fun aGlowsFadeParksTheFrameAtItsEndWithNoDraw() {
+        val g = Glow().also { it.down(0, -10_000L) }
+        val o = Overlay(OverKind.Sheet).also { it.open(-10_000L) }
+        val fade = clock()
+        g.fade(fade)
+        rule.mainClock.autoAdvance = false
+        rule.setContent { frame = rememberOverlayFrame(o, ::clock, g::moving, g::due) }
+        rule.waitForIdle()
+        while (clock() < fade + Tok.motion_press.toLong() + FRAME) tick()
+        parks("a glow's fade")
+    }
+
+    @Test
+    @Config(qualifiers = A105_SCREEN)
+    fun aSecondBarredSheetShowsItsThumbOnOpen() {
+        val m = lines(12)
+        watch(m)
+        val first = Overlay(OverKind.Sheet)
+        raise(first)
+        advances("the first sheet's first frame")
+        val gone = frame.value + (Tok.scrollbar_hold + Tok.scrollbar_fade).toLong()
+        while (clock() < gone + FRAME) tick()
+        assertEquals("premise: the first sheet's thumb faded out", 0f, m.fade.at(clock()), 0f)
+        stack.close()
+        Snapshot.sendApplyNotifications()
+        var n = 0
+        while (stack.overlay != null) {
+            assertTrue("premise: the first sheet closes", ++n < STILL_CAP)
+            tick()
+        }
+        rule.runOnUiThread {
+            m.open(MenuForm.Sheet, "info", List(12) { i -> "line $i" }, clock(), readOnly = true)
+            m.frame(px(Tok.statusTop + Tok.statusHeight, a105.stdPpu), 1280)
+            Snapshot.sendApplyNotifications()
+        }
+        raise(Overlay(OverKind.Sheet))
+        advances("the second sheet's first frame")
+        assertEquals("premise: both sheets open at the same first", 0, m.first)
+        assertEquals("the second sheet shows its thumb", 1f, m.fade.at(frame.value), 0f)
+    }
+
     companion object {
         private const val HOLD_STEP = 50L
         private const val A105_SCREEN = "w720dp-h1280dp-mdpi"
         private const val OPEN_FRAMES = 10
         private const val LAG = 16L
+        private const val FRAME = 16L
+        private const val WAKE = 2 * FRAME
+        private const val PARK_FRAMES = 30
+        private const val REST_FRAMES = 2
+        private const val STILL_CAP = 60
+        private const val LIT_FRAMES = 3
+        private const val RISEN = 1000L
+        private const val LATE = 100L
     }
 }

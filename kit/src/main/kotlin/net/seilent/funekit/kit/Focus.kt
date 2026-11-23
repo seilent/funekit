@@ -9,6 +9,8 @@ import net.seilent.funekit.kit.motion.lerp
 import net.seilent.funekit.kit.touch.RowTrack
 import kotlin.math.max
 
+private const val LONG_AGO = Long.MIN_VALUE shr 1
+
 fun focusAfterScroll(row: Int, count: Int, off: Long, view: Long, pitch: Long, collapse: Long = 0L): Int {
     if (count == 0) return row
     val top = row.toLong() * pitch
@@ -71,12 +73,13 @@ class FocusTrack {
         if (to == row) return
         revision++
         val a = if (animate) Tok.motion_focusAlpha else 0f
+        val at = if (animate) now else LONG_AGO
         val was = into.at((now - intoAt).toFloat())
         prev = row
         out = Leg(was, 0f, 0f, a)
-        outAt = now
+        outAt = at
         into = Leg(0f, 1f, 0f, a)
-        intoAt = now
+        intoAt = at
         row = to
     }
 
