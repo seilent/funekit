@@ -35,9 +35,9 @@ import net.seilent.funekit.kit.pen64
 import net.seilent.funekit.kit.penPx
 import net.seilent.funekit.kit.proj.M3
 import net.seilent.funekit.kit.proj.camTurn
-import net.seilent.funekit.kit.proj.edgeAngle
 import net.seilent.funekit.kit.proj.facing
 import net.seilent.funekit.kit.proj.inverse
+import net.seilent.funekit.kit.proj.t6
 import net.seilent.funekit.kit.proj.turn
 import net.seilent.funekit.kit.quickplay.menuPeek
 import net.seilent.funekit.kit.rolePx
@@ -552,8 +552,22 @@ internal fun carryOf(x: Float, y: Float, c: CarryAt): M3? {
 
 private fun carryPart(s: Float, ox: Float, oy: Float, dx: Float, dy: Float): M3 = M3(1f / s, 0f, ox - (dx + ox) / s, 0f, 1f / s, oy - (dy + oy) / s, 0f, 0f, 1f)
 
-internal fun npFrontUnder(l: Float, r: Float, hinge: Float, edge: Float, eye: Float, d: Float): M3 =
-    M3.translate(Math.round(l).toFloat(), 0f) * turn(edgeAngle(edge, edge + (r - l), hinge, d), hinge, eye, d)
+internal fun npFrontUnder(r: Float, x: Float, hinge: Float, d: Float, eye: Float, cx: Float): M3? {
+    if (!facing(r, hinge, d, cx)) return null
+    return M3.translate(Math.round(x).toFloat(), 0f) * camTurn(r, hinge, eye, d, cx)
+}
+
+internal fun t8PeekEye(h: HomeSide, rect: Edges): Float {
+    val hs = h.scale
+    val sp = hs.stdPpu
+    val w = h.paint.itemWord(0) ?: return ((rect.y0 + rect.y1) / MID).toFloat()
+    val m = t6(1f, sp, hs.widthPx)
+    val y = px(h.paint.baseline(0) - h.off - Tok.capHeight * Roles.homeItem.size, sp).toFloat()
+    val x0 = px(Tok.homeTextX, sp).toFloat()
+    val a = Math.round(m.map(x0, y).y)
+    val b = Math.round(m.map(x0 + penPx(pen64(w.width)), y).y)
+    return ((a + b) / MID + px(Tok.motion_t8PeekEye, sp)).toFloat()
+}
 
 internal fun npPeekRect(menu: Edges, pane: Edges, src: Edges): Edges = Edges(max(max(menu.x0, pane.x1), src.x1), menu.y0, menu.x1, menu.y1)
 
@@ -968,8 +982,11 @@ class MovePaint(private val move: PageMove) {
         val ineye = Math.round(Tok.motion_t8InEye * s.heightPx).toFloat()
         return when {
             m.ends.npForm == NpForm.Front && h != null && h.paint.frontPane() != null -> {
-                val edge = px(Tok.qpEdge + Tok.qpTile + Tok.qpGutter, p) + px(Tok.qpTile, p)
-                npFrontUnder(v.at(Part.NpUnder, Prop.X, now), v.at(Part.NpEdge, Prop.X, now), px(Tok.qpEdge, p).toFloat(), edge.toFloat(), ineye, d)
+                val x1 = px(Tok.qpEdge, p)
+                npFrontUnder(
+                    v.at(Part.NpUnder, Prop.R, now), v.at(Part.NpUnder, Prop.X, now), x1 + whole(Tok.motion_t8QpHinge, p),
+                    max(1f, whole(Tok.motion_t8QpD, p)), Math.round(Tok.motion_t8QpEye * s.heightPx).toFloat(), x1 + whole(Tok.motion_t8QpCam, p),
+                )
             }
             m.to != null -> turn(v.at(Part.NpUnder, Prop.R, now), 0f, ineye, max(1f, whole(Tok.motion_t8InD, p)))
             else -> {
@@ -1028,7 +1045,11 @@ class MovePaint(private val move: PageMove) {
             if (h == null || peekR == null) return
             val r = v.at(Part.NpPeek, Prop.R, now)
             val sh = M3.translate(Math.round(v.at(Part.NpPeek, Prop.X, now)).toFloat(), Math.round(v.at(Part.NpPeek, Prop.Y, now)).toFloat())
-            val t = if (r != 0f) sh * turn(r, peekR.x0.toFloat(), ((peekR.y0 + peekR.y1) / MID).toFloat(), d) else sh
+            val t = when {
+                r == 0f -> sh
+                v.kind == MoveKind.T8 -> sh * turn(r, x1 + whole(Tok.motion_t8PeekHinge, p), t8PeekEye(h, peekR), max(1f, whole(Tok.motion_t8PeekD, p)))
+                else -> sh * turn(r, peekR.x0.toFloat(), ((peekR.y0 + peekR.y1) / MID).toFloat(), d)
+            }
             quadAt(rec, NP_PEEK, v.at(Part.NpPeek, Prop.A, now), t, peekR) { with(h.paint) { frontPeek(Tok.motion_quickplayAlpha, now) } }
         }
         if (v.kind == MoveKind.T8) {

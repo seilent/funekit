@@ -205,23 +205,23 @@ class GenTokensTest {
         Gen.checkFit(vendored, File(vendored, "../fit.txt"))
         val counts = Gen.classes(vendored).values.groupingBy { it }.eachCount()
         assertEquals(
-            mapOf("hr" to 353, "v1c" to 37, "free" to 28, "h" to 9, "step" to 7, "x" to 4, "v1h" to 2, "ppu" to 1, "ppuTop" to 1),
+            mapOf("hr" to 354, "v1c" to 37, "free" to 31, "h" to 9, "step" to 7, "x" to 4, "v1h" to 2, "ppu" to 1, "ppuTop" to 1),
             counts,
         )
         val free = setOf(
             "page.listClipDrop", "npArtistY", "npAlbumY", "npFromBaseline", "npArtTop", "npArt", "lockBtGlyph", "kb.keyH",
-            "overlayAnchorScale", "vol.textY", "motion.t7EyeY", "motion.saverB3In", "motion.saverD3In", "motion.saverF5In",
-            "saverA6Across", "saverA7Across", "saverA8Across", "saverB6Across", "saverF4Across", "saverK3Across",
-            "saverR4Across", "saverJ6Across", "saverL5Across", "npSeekBandX1", "npSeekBandBottom", "large.npLyricPitch",
-            "large.npNextPitch", "large.npAlbumPitch",
+            "overlayAnchorScale", "vol.textY", "motion.t7EyeY", "motion.saverB3In", "motion.saverD3In", "motion.saverD6In",
+            "motion.saverF3In", "motion.saverF5In", "saverA6Across", "saverA7Across", "saverA8Across", "saverB6Across",
+            "saverD4Across", "saverF4Across", "saverK3Across", "saverR4Across", "saverJ6Across", "saverL5Across",
+            "npSeekBandX1", "npSeekBandBottom", "large.npLyricPitch", "large.npNextPitch", "large.npAlbumPitch",
         )
         assertEquals(free, Gen.classes(vendored).filterValues { it == "free" }.keys)
         assertEquals(setOf("u"), Gen.classes(vendored).filterValues { it == "ppu" }.keys)
         assertEquals(setOf("minTextPx"), Gen.classes(vendored).filterValues { it == "ppuTop" }.keys)
-        assertEquals(1659, Gen.tokens(vendored).names.size)
-        assertEquals(442, Gen.tokens(vendored).board.size)
-        assertEquals(28, Gen.glyphs(vendored).list.size)
-        assertEquals("funeOS v0.4.2", Gen.source(vendored).from)
+        assertEquals(1690, Gen.tokens(vendored).names.size)
+        assertEquals(446, Gen.tokens(vendored).board.size)
+        assertEquals(30, Gen.glyphs(vendored).list.size)
+        assertEquals("funeOS v0.4.3", Gen.source(vendored).from)
         assertEquals(null, Gen.source(vendored).commit)
     }
 

@@ -1097,8 +1097,8 @@ class PageMove {
             return
         }
         if (e.npForm == NpForm.Front) {
-            keys(Part.NpUnder, Prop.X, Moves.kT8PaneLeft.scaled(e.pxU), Curves.linear, inAt)
-            keys(Part.NpEdge, Prop.X, Moves.kT8PaneRight.scaled(e.pxU), Curves.linear, inAt)
+            keys(Part.NpUnder, Prop.X, Moves.kT8PaneX.scaled(e.pxU), Curves.linear, inAt)
+            keys(Part.NpUnder, Prop.R, Moves.kT8PaneR, Curves.linear, inAt)
             ramp(Part.NpUnder, Prop.A, 0f, 1f, inAt, ms(Tok.motion_t8InFade), Curves.linear)
             keys(Part.NpPeek, Prop.X, Moves.kT8PeekX.scaled(e.pxU), Curves.linear, inAt)
             keys(Part.NpPeek, Prop.Y, Moves.kT8PeekY.scaled(e.pxU), Curves.linear, inAt)

@@ -31,7 +31,7 @@ class TokFitTest {
                 assertEquals("$file ${r[0]} at", want, read(at, r[0]))
                 seen++
             }
-            assertEquals(438, seen)
+            assertEquals(442, seen)
         }
     }
 
@@ -72,10 +72,10 @@ class TokFitTest {
         assertEquals(
             listOf(
                 "page.listClipDrop", "npArtistY", "npAlbumY", "npFromBaseline", "npArtTop", "npArt", "lockBtGlyph", "kb.keyH",
-                "overlayAnchorScale", "vol.textY", "motion.t7EyeY", "motion.saverB3In", "motion.saverD3In", "motion.saverF5In",
-                "saverA6Across", "saverA7Across", "saverA8Across", "saverB6Across", "saverF4Across", "saverK3Across",
-                "saverR4Across", "saverJ6Across", "saverL5Across", "npSeekBandX1", "npSeekBandBottom", "large.npLyricPitch",
-                "large.npNextPitch", "large.npAlbumPitch",
+                "overlayAnchorScale", "vol.textY", "motion.t7EyeY", "motion.saverB3In", "motion.saverD3In", "motion.saverD6In",
+                "motion.saverF3In", "motion.saverF5In", "saverA6Across", "saverA7Across", "saverA8Across", "saverB6Across",
+                "saverD4Across", "saverF4Across", "saverK3Across", "saverR4Across", "saverJ6Across", "saverL5Across",
+                "npSeekBandX1", "npSeekBandBottom", "large.npLyricPitch", "large.npNextPitch", "large.npAlbumPitch",
             ),
             free,
         )

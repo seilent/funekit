@@ -202,22 +202,32 @@ constexpr Key kT8Rows[] = {{50, F(0.19)},  {67, F(0.43)}, {83, F(0.52)}, {100, F
                            {117, F(0.75)}, {133, F(0.81)}, {250, F(1.0)}};
 constexpr Key kT8Header[] = {{67, F(0.33)}, {83, F(0.63)}, {100, F(0.89)}, {250, F(1.0)}};
 constexpr Key kT8Artist[] = {{50, F(0.19)}, {250, F(1.0)}};
-constexpr Key kT8PaneLeft[] = {{0, F(26.9)},   {17, F(27.8)},  {67, F(27.8)}, {83, F(26.0)},  {117, F(22.5)},
-                               {133, F(20.7)}, {150, F(18.1)}, {184, F(13.7)}, {217, F(11.0)}, {250, F(7.9)},
-                               {284, F(4.0)},  {317, F(1.8)},  {351, 0}};
-constexpr Key kT8PaneRight[] = {{0, F(-82.5)},  {17, F(-65.7)}, {33, F(-46.3)}, {50, F(-28.7)}, {67, F(-14.6)},
-                                {83, F(-4.0)},  {117, F(7.5)},  {133, F(10.1)}, {150, F(11.9)}, {184, F(11.9)},
-                                {217, F(11.0)}, {250, F(8.4)},  {284, F(4.9)},  {317, F(2.2)},  {351, F(0.4)},
-                                {367, F(-0.4)}};
-constexpr Key kT8PeekX[] = {{0, F(-22.1)},  {17, F(-7.1)},  {33, F(8.8)},   {50, F(21.2)},  {67, F(29.1)},
-                            {83, F(34.4)},  {117, F(37.0)}, {133, F(42.3)}, {150, F(33.5)}, {184, F(27.3)},
-                            {217, F(22.9)}, {250, F(15.9)}, {284, F(9.7)},  {317, F(5.3)},  {351, F(1.9)},
-                            {367, F(0.6)},  {384, 0}};
-constexpr Key kT8PeekY[] = {{0, F(-19.4)},  {17, F(-17.6)}, {33, F(-16.8)}, {50, F(-15.0)}, {67, F(-13.2)},
-                            {83, F(-11.5)}, {117, F(-9.7)}, {133, F(-7.9)}, {150, F(-7.1)}, {184, F(-4.4)},
-                            {217, F(-3.5)}, {250, F(-1.8)}, {284, F(-1.3)}, {317, F(-0.6)}, {351, 0}};
-constexpr Key kT8PeekR[] = {{0, F(60.0)}, {17, F(53.13)}, {33, F(45.57)}, {50, F(36.87)}, {67, 0}};
-constexpr Key kT8PeekA[] = {{0, F(0.26)}, {384, F(1.0)}};
+constexpr Key kT8PaneR[] = {{0, F(-63.93)}, {17, F(-60.01)}, {33, F(-54.33)}, {50, F(-48.58)}, {67, F(-42.83)},
+                            {83, F(-37.27)}, {100, F(-32.93)}, {117, F(-28.40)}, {133, F(-24.70)}, {150, F(-20.79)},
+                            {167, F(-17.41)}, {184, F(-14.15)}, {200, F(-11.64)}, {217, F(-10.78)}, {234, F(-9.83)},
+                            {250, F(-7.49)}, {267, F(-6.57)}, {284, F(-4.61)}, {300, F(-3.20)}, {317, F(-2.47)},
+                            {334, F(-1.79)}, {350, F(-0.98)}, {367, 0}};
+constexpr Key kT8PaneX[] = {{0, F(77.0)}, {17, F(73.3)}, {33, F(67.5)}, {50, F(61.0)}, {67, F(54.2)},
+                            {83, F(47.4)}, {100, F(41.9)}, {117, F(36.3)}, {133, F(31.5)}, {150, F(26.4)},
+                            {167, F(22.1)}, {184, F(18.6)}, {200, F(15.7)}, {217, F(15.0)}, {234, F(12.9)},
+                            {250, F(10.5)}, {267, F(8.2)}, {284, F(5.9)}, {300, F(4.3)}, {317, F(3.1)},
+                            {334, F(2.0)}, {350, F(0.8)}, {367, F(0.1)}, {384, 0}};
+constexpr Key kT8PeekX[] = {{0, F(198.6)}, {17, F(168.2)}, {33, F(130.3)}, {50, F(98.0)}, {67, F(74.2)},
+                            {83, F(59.2)}, {100, F(45.9)}, {117, F(36.4)}, {133, F(29.5)}, {150, F(24.5)},
+                            {167, F(20.6)}, {184, F(17.0)}, {200, F(14.2)}, {217, F(11.4)}, {234, F(10.7)},
+                            {250, F(8.9)}, {267, F(6.9)}, {284, F(5.7)}, {300, F(4.6)}, {317, F(4.3)},
+                            {334, F(2.6)}, {350, F(1.7)}, {367, F(0.8)}, {384, 0}};
+constexpr Key kT8PeekY[] = {{0, F(-0.6)}, {17, F(0.9)}, {33, F(-0.4)}, {50, F(-1.3)}, {67, F(0.2)},
+                            {83, F(0.2)}, {100, F(0.1)}, {117, F(0.1)}, {133, F(0.2)}, {150, 0},
+                            {167, F(-0.1)}, {184, F(-0.2)}, {200, F(-0.2)}, {217, 0}, {234, 0},
+                            {250, F(-0.1)}, {267, F(-0.3)}, {284, F(-0.2)}, {300, F(-0.1)}, {317, F(0.3)},
+                            {334, F(0.1)}, {350, 0}, {367, F(0.1)}, {384, 0}};
+constexpr Key kT8PeekR[] = {{0, F(-79.57)}, {17, F(-75.03)}, {33, F(-67.16)}, {50, F(-58.33)}, {67, F(-50.12)},
+                            {83, F(-42.99)}, {100, F(-36.99)}, {117, F(-32.16)}, {133, F(-27.80)}, {150, F(-23.43)},
+                            {167, F(-19.72)}, {184, F(-16.48)}, {200, F(-13.88)}, {217, F(-11.07)}, {234, F(-10.70)},
+                            {250, F(-8.74)}, {267, F(-6.85)}, {284, F(-5.00)}, {300, F(-3.38)}, {317, F(-1.44)},
+                            {334, F(-0.99)}, {350, F(-0.60)}, {367, F(-0.02)}, {384, 0}};
+constexpr Key kT8PeekA[] = {{0, 0}, {1, F(0.26)}, {50, F(0.46)}, {83, F(0.64)}, {117, F(0.78)}, {384, F(1.0)}};
 constexpr fx kT8HomeR = F(-65.6), kT8HomeX = F(-3.46), kT8HomeHinge = F(5.9);
 constexpr int kT8HomeTurn = 349, kT8HomeSlide = 138, kT8HomeFade = 50;
 
@@ -751,10 +761,9 @@ void PageMove::t8_legs(const MoveEnds& e)
     }
     std::vector<Key> k;
     if (e.np_form == NpForm::Front) {
-        px(kT8PaneLeft, nkeys(kT8PaneLeft), k);
+        px(kT8PaneX, nkeys(kT8PaneX), k);
         keys(Part::NpUnder, Prop::X, k.data(), (int)k.size(), Curve::Linear, in);
-        px(kT8PaneRight, nkeys(kT8PaneRight), k);
-        keys(Part::NpEdge, Prop::X, k.data(), (int)k.size(), Curve::Linear, in);
+        keys(Part::NpUnder, Prop::R, kT8PaneR, nkeys(kT8PaneR), Curve::Linear, in);
         ramp(Part::NpUnder, Prop::A, 0, kOne, in, ms(tok::motion_t8InFade), Curve::Linear);
         px(kT8PeekX, nkeys(kT8PeekX), k);
         keys(Part::NpPeek, Prop::X, k.data(), (int)k.size(), Curve::Linear, in);
@@ -1521,14 +1530,17 @@ void PageMove::shift(Part p, int ms, int64_t from)
     finish();
 }
 
-int PageMove::release(Part p, int64_t at)
+int PageMove::release(Part p, int64_t at) { return release(part_bit(p), at); }
+
+int PageMove::release(uint64_t group, int64_t at)
 {
-    if (!held(p))
+    uint64_t rel = group & held_;
+    if (!rel)
         return 0;
-    held_ &= ~part_bit(p);
+    held_ &= ~rel;
     int64_t shown = at - t0_, r = std::max<int64_t>(shown - kTail, 0), first = INT64_MAX, first_a = INT64_MAX;
     for (const Leg& l : legs_)
-        if (l.part == p && !l.pin) {
+        if ((rel & part_bit(l.part)) && !l.pin) {
             first = std::min<int64_t>(first, l.delay);
             if (l.prop == Prop::A)
                 first_a = std::min<int64_t>(first_a, l.delay);
@@ -1537,7 +1549,7 @@ int PageMove::release(Part p, int64_t at)
         first = first_a;
     int d = first == INT64_MAX ? 0 : (int)std::max<int64_t>(0, r - first);
     for (Leg& l : legs_) {
-        if (l.part != p)
+        if (!(rel & part_bit(l.part)))
             continue;
         if (l.pin) {
             int64_t end = l.end(), s = std::max<int64_t>(l.delay, r);
@@ -1547,7 +1559,7 @@ int PageMove::release(Part p, int64_t at)
             l.delay += d;
         }
     }
-    if (p == Part::Content && !cut_)
+    if ((rel & part_bit(Part::Content)) && !cut_)
         for (int q = 0; q < (int)Prop::Count; q++) {
             Leg* z = nullptr;
             for (Leg& l : legs_)
@@ -1561,15 +1573,6 @@ int PageMove::release(Part p, int64_t at)
                 z->dur = (int)(shown + kTail - z->delay);
         }
     finish();
-    return d;
-}
-
-int PageMove::release(uint64_t group, int64_t at)
-{
-    int d = 0;
-    for (int i = 0; i < (int)Part::Count; i++)
-        if (group >> i & 1)
-            d = std::max(d, release((Part)i, at));
     return d;
 }
 

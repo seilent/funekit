@@ -115,7 +115,7 @@ class ScaleSheetTest {
     @Test
     fun s3Extrapolation() {
         val f = "s3"
-        val q = "The 28 free tokens extrapolated along the R1 to A105 line above 426.67 u."
+        val q = "The 31 free tokens extrapolated along the R1 to A105 line above 426.67 u."
         val heights = listOf(a105 to Nav.None, p2160 to Nav.Gesture, d2340 to Nav.None, flip7 to Nav.Gesture)
         val tiles = heights.map { (dev, nav) ->
             tile(f, "nowplaying-${dev.id}", "now playing, phone track variant", dev, nav, Surface.NowPlaying,
@@ -132,7 +132,7 @@ class ScaleSheetTest {
         render.index(f, listOf(
             "# Free token extrapolation", "",
             line(f, "nowplaying", "artist, album, from, art box and seek band at 426.67, 480, 520 and 560 u", q),
-            line(f, "table", "the 28 free tokens at V1, R1, A105 and 480, 520, 560 u", q),
+            line(f, "table", "the 31 free tokens at V1, R1, A105 and 480, 520, 560 u", q),
         ))
     }
 
@@ -382,6 +382,6 @@ class ScaleSheetTest {
         const val COVER_EDGE = 71
         const val COVER_CUTOUT = 839
         const val COVER_NAV = 934
-        const val FREE_TOKENS = 28
+        const val FREE_TOKENS = 31
     }
 }

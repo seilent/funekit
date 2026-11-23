@@ -9,16 +9,11 @@ import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.px
 import kotlin.math.PI
 import kotlin.math.abs
-import kotlin.math.acos
-import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.floor
-import kotlin.math.sign
 import kotlin.math.sin
-import kotlin.math.sqrt
 
 private const val HALF_TURN = 180f
-private const val HALF_PX = 0.5
 private const val EPS = 1e-30f
 
 class M3(
@@ -98,16 +93,6 @@ fun camTurn(deg: Float, hinge: Float, eye: Float, d: Float, cx: Float): M3 {
 }
 
 fun facing(deg: Float, hinge: Float, d: Float, cx: Float): Boolean = cos(rad(deg)) + (cx - hinge) * sin(rad(deg)) / d > 0f
-
-fun edgeAngle(x: Float, to: Float, hinge: Float, d: Float): Float {
-    val xx = (x - hinge).toDouble()
-    val t = (to - hinge).toDouble()
-    if (abs(xx) < HALF_PX || d <= 0f) return 0f
-    val phi = atan2(-t / d, 1.0)
-    val r = sqrt(1 + t * t / (d.toDouble() * d))
-    val edge = Tok.motion_npEdgeOn.toDouble()
-    return ((phi + sign(xx) * acos((t / xx / r).coerceIn(-1.0, 1.0))) * HALF_TURN / PI).coerceIn(-edge, edge).toFloat()
-}
 
 fun Modifier.project(m: () -> M3): Modifier {
     val matrix = Matrix()

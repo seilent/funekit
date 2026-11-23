@@ -1,12 +1,9 @@
 package net.seilent.funekit.kit.proj
 
 import androidx.compose.ui.geometry.Offset
-import net.seilent.funekit.gen.Tok
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.PI
-import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
@@ -117,28 +114,5 @@ class ProjTest {
         assertEquals(true, facing(60f, 0f, 1000f, 0f))
         assertEquals(false, facing(100f, 0f, 1000f, 0f))
         assertEquals(true, facing(100f, 0f, 1000f, 1000f))
-    }
-
-    @Test
-    fun theEdgeAngleTurnsAnEdgeOntoItsTarget() {
-        assertEquals(0f, edgeAngle(100.2f, 300f, 100f, 2304f), 0f)
-        assertEquals(0f, edgeAngle(400f, 300f, 100f, 0f), 0f)
-        for (to in listOf(150f, 250f, 350f)) {
-            val deg = edgeAngle(400f, to, 100f, 2304f)
-            assertEquals("edge to $to", to, turn(deg, 100f, 640f, 2304f).map(400f, 640f).x, 0.5f)
-        }
-    }
-
-    @Test
-    fun theEdgeAngleStopsAtTheEdgeOnAngle() {
-        val edge = 89.5
-        assertEquals(edge, Tok.motion_npEdgeOn.toDouble(), 0.0)
-        val up = Math.toDegrees(atan2(5100.0 / 2304, 1.0) + PI)
-        val down = Math.toDegrees(atan2(-4900.0 / 2304, 1.0) - PI)
-        assertTrue("$up", up > edge)
-        assertTrue("$down", down < -edge)
-        assertEquals(edge, edgeAngle(400f, -5000f, 100f, 2304f).toDouble(), 1e-4)
-        assertEquals(-edge, edgeAngle(0f, 5000f, 100f, 2304f).toDouble(), 1e-4)
-        assertEquals(Math.toDegrees(atan2(-1900.0 / 2304, 1.0)), edgeAngle(400f, 2000f, 100f, 2304f).toDouble(), 1e-3)
     }
 }

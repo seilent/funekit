@@ -7,6 +7,11 @@ textCoverGamma 1.8 ratio
 fontHanEm 0.958 ratio
 fontHanRise 0.026 em
 fontHanMinPx 12 px
+saverCjkEm 0.80 ratio
+saverCjkRise 0.028 em
+saverHalfRise 0.037 em
+saverHangulEm 0.74 ratio
+saverHangulRise 0.103 em
 capHeight 0.70 em
 xHeight 0.476 em
 tracking -0.5 u
@@ -224,6 +229,10 @@ type.volTitle.size 21.4 u
 type.volTitle.style Regular style
 type.volTitle.case mixed case
 type.volTitle.alpha 1.0 alpha
+type.volSeek.size 20.6 u
+type.volSeek.style Bold style
+type.volSeek.case mixed case
+type.volSeek.alpha 1.0 alpha
 type.saverClock.size 50 u
 type.saverClock.style Light style
 type.saverClock.alpha 1.0 alpha
@@ -490,6 +499,9 @@ albcolTrackTail 1 count
 albcolLetter 61 u
 albumRowsGap 12 u
 albumRowsTop 252 u
+albumRingCx0 29.7 u
+albumRingCx1 118.5 u
+albumRingFade 63 u
 settingsPitch 43 u
 settingsLabelBaselineInset 8 u
 settingsSwatch 12 u
@@ -558,6 +570,12 @@ seekHoldMs 400 ms
 seekTickMs 250 ms
 seekTickStepMs 1000 ms
 seekEndMarginMs 1000 ms
+seekRampMs 48 ms
+seekStageMs 710 ms
+seekStepMaxMs 4000 ms
+seekRunInMs 2000 ms
+seekReadoutHold 960 ms
+seekNumberJoin 0.53 ratio
 statusHeight 12 u
 statusTop 10 u
 statusGap 8 u
@@ -667,6 +685,9 @@ vol.textY 290.8 u
 vol.textGap 16.45 u
 vol.textPitch 18.6 u
 vol.textClip 0.8 u
+vol.seekX 8.9 u
+vol.seekRight 9.9 u
+vol.seekDrop 3.1 u
 batteryLowPercent 10 pct
 qpEdge 33.7 u
 qpTile 74.1 u
@@ -811,6 +832,13 @@ motion.t8OutEye 0.5029 ratio
 motion.t8InFade 33 ms
 motion.t8InEye 0.4642 ratio
 motion.t8InD 1155 u
+motion.t8QpHinge -66.2 u
+motion.t8QpD 835.2 u
+motion.t8QpEye 0.5052 ratio
+motion.t8QpCam 143.1 u
+motion.t8PeekHinge -132.9 u
+motion.t8PeekD 1042.6 u
+motion.t8PeekEye 52 u
 motion.t7Fade 333 ms
 motion.t7Rest 350 ms
 motion.t7PlaneAngle 47.6 deg
@@ -867,7 +895,6 @@ motion.t7Detail17Ring2 0.95 alpha
 motion.t7Detail17Label 0.70 alpha
 motion.t7DetailHeadV 630 u_per_s
 motion.t7DetailEnd 83 ms
-motion.npEdgeOn 89.5 deg
 motion.npIn turn mode
 motion.npPace 1 count
 motion.npSlices 2 count
@@ -996,6 +1023,7 @@ motion.volumeTouchClose 70 ms
 motion.volumeTouchScrim 91 ms
 motion.volumeTouchScrimLead 20 ms
 motion.volumePressOff 100 ms
+motion.seekReadoutIn 214 ms
 motion.volumeTiltHold 200 ms
 motion.volumeTiltReturn 100 ms
 motion.volumeTiltTapLevel 0.83 ratio
@@ -1028,6 +1056,7 @@ saverRowE 38 u
 saverSmall 19 u
 saverSmallE 19.7 u
 saverB1Size 170.7 u
+saverD4Size 206.7 u
 saverF2Size 88.5 u
 saverS1Size 33.3 u
 saverS4Size 79.1 u
@@ -1084,7 +1113,7 @@ motion.saverB2Speed -15.7 u_per_s
 motion.saverB2In 7.357 s
 motion.saverB2Whoosh 703.0 u_per_s
 motion.saverB3Speed 21.4 u_per_s
-motion.saverB3In 57.469 s
+motion.saverB3In 57.602 s
 motion.saverB3Whoosh 703.0 u_per_s
 motion.saverB4Speed -14.2 u_per_s
 motion.saverB4In 29.357 s
@@ -1105,7 +1134,7 @@ motion.saverD2Speed -29.7 u_per_s
 motion.saverD2In 32.441 s
 motion.saverD2Whoosh 919.0 u_per_s
 motion.saverD3Speed 26.5 u_per_s
-motion.saverD3In 18.289 s
+motion.saverD3In 18.342 s
 motion.saverD3Whoosh 731.0 u_per_s
 motion.saverD4Speed 20.1 u_per_s
 motion.saverD4In 41.441 s
@@ -1146,7 +1175,7 @@ motion.saverF4Speed 16.9 u_per_s
 motion.saverF4In 27.45 s
 motion.saverF4Whoosh 1618.5 u_per_s
 motion.saverF5Speed 23.2 u_per_s
-motion.saverF5In 35.095 s
+motion.saverF5In 35.217 s
 motion.saverF5Whoosh 1618.5 u_per_s
 motion.saverH1Speed -22.1 u_per_s
 motion.saverH1In 0 s
@@ -1255,7 +1284,7 @@ motion.saverJ5Speed 22.4 u_per_s
 motion.saverJ5In 20.47 s
 motion.saverJ5Whoosh 580.0 u_per_s
 motion.saverJ6Speed 12.9 u_per_s
-motion.saverJ6In 44.2 s
+motion.saverJ6In 33.73 s
 motion.saverJ6Whoosh 580.0 u_per_s
 motion.saverL1Speed 15.1 u_per_s
 motion.saverL1In 0.00 s
@@ -1270,7 +1299,7 @@ motion.saverL4Speed 17.0 u_per_s
 motion.saverL4In 15.85 s
 motion.saverL4Whoosh 580.0 u_per_s
 motion.saverL5Speed 24.5 u_per_s
-motion.saverL5In 18.5 s
+motion.saverL5In 12.63 s
 motion.saverL5Whoosh 580.0 u_per_s
 motion.saverM1Speed -30.3 u_per_s
 motion.saverM1In 0.00 s
@@ -1375,6 +1404,8 @@ saverTouch 2.7 u
 saverE4Touch 10.0 u
 saverTileTouch 2.7 u
 saverInkCap 22.7 u
+saverInkCapCjk 3.3 u
+saverF2FootGlyph ] glyph
 saverPackGap 0.25 u
 saverF1Trail -886.3 u
 saverF2Trail 690.4 u
@@ -1457,15 +1488,15 @@ saverB7Across 168.1 u
 saverD1Across 86.1 u
 saverD2Across -25.9 u
 saverD3Across -12.5 u
-saverD4Across -47.7 u
+saverD4Across -53.3 u
 saverD5Across 188.8 u
 saverD6Across 156.1 u
 saverE1Across 231.3 u
 saverE2Across 259.3 u
 saverE3Across 81 u
 saverE5Across 67.9 u
-saverF1Across -27.2 u
-saverF2Across 38.8 u
+saverF1Across -30.1 u
+saverF2Across 35.1 u
 saverF3Across 154.8 u
 saverF4Across 118.1 u
 saverF5Across 50.3 u

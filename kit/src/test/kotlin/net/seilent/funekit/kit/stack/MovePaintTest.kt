@@ -275,10 +275,13 @@ class MovePaintTest {
         var pane: Edges? = null
         var peekA = -1f
         var peekX = 0f
+        var word: Word? = null
         val where = mutableListOf<Pair<String, String?>>()
         override val quickplay = true
 
         override fun frontPane(): Edges? = pane
+
+        override fun itemWord(item: Int): Word? = if (item == 0) word else null
 
         override fun DrawScope.front(now: Long) {
             where += "front" to track?.inQuad
@@ -1180,28 +1183,94 @@ class MovePaintTest {
         assertEquals(0.79f, rec.quads[2].a, 1e-3f)
     }
 
-    @Test
-    fun aT8ToTheQuickplayFrontTurnsTheThirdColumnEdgeOntoItsRightKey() {
-        val r = Run()
+    private fun frontRun(off: Float = 0f, word: Word? = null): Run {
+        val r = Run(off = { off })
         r.homePaint.pane = Edges(0, 0, 400, 1280)
+        r.homePaint.word = word
         r.paint.npForm = NpForm.Front
         r.stack.pages.add("np")
         r.stack.back { MoveKind.T8 }
         r.stack.frame(0L)
+        return r
+    }
+
+    @Test
+    fun aT8ToTheQuickplayFrontTurnsThePaneInOnItsCamera() {
+        val r = frontRun()
         val at = 284L
         val rec = r.draw(at)
         assertEquals(listOf(NP_PEEK, NP_PANE), rec.quads.map { it.name })
         val q = rec.quad(NP_PANE)
         assertEquals(17f / 33f, q.a, 1e-3f)
         assertEquals(listOf(101, 0, 551, 1280), requireNotNull(q.src).let { listOf(it.x0, it.y0, it.x1, it.y1) })
-        val l = 27.8 * 3
-        val rk = -65.7 * 3
-        assertEquals(l, r.move.at(Part.NpUnder, Prop.X, at).toDouble(), 1e-3)
-        assertEquals(rk, r.move.at(Part.NpEdge, Prop.X, at).toDouble(), 1e-3)
-        val o = q.t.map(551f, 594f)
-        assertEquals(Math.round(l) + 551 + (rk - l), o.x.toDouble(), 0.5)
-        assertEquals(594.0, o.y.toDouble(), 0.05)
+        assertEquals(-66.2f, Tok.motion_t8QpHinge, 0f)
+        assertEquals(835.2f, Tok.motion_t8QpD, 0f)
+        assertEquals(0.5052f, Tok.motion_t8QpEye, 0f)
+        assertEquals(143.1f, Tok.motion_t8QpCam, 0f)
+        val deg = -60.01
+        val slide = Math.round(73.3 * 3).toDouble()
+        assertEquals(deg, r.move.at(Part.NpUnder, Prop.R, at).toDouble(), 1e-3)
+        assertEquals(slide, Math.round(r.move.at(Part.NpUnder, Prop.X, at)).toDouble(), 0.0)
+        val hinge = 101.0 - 199
+        val cam = 101.0 + 429
+        for ((x, y) in listOf(101.0 to 0.0, 551.0 to 0.0, 326.0 to 640.0, 551.0 to 1280.0)) {
+            val o = q.t.map(x.toFloat(), y.toFloat())
+            val (bx, by) = ay(o.x - slide, o.y.toDouble(), deg, hinge, 647.0, 2506.0, cam)
+            assertEquals("pane x ($x, $y)", x, bx, 0.05)
+            assertEquals("pane y ($x, $y)", y, by, 0.05)
+        }
         assertEquals(listOf("frontPeek" to NP_PEEK, "front" to NP_PANE), r.homePaint.where)
+    }
+
+    private fun t8PeekEyeAt(off: Double, w: Double): Double {
+        val y = Math.round((Tok.homeFirstBaseline - off - Tok.capHeight * Roles.homeItem.size) * 3).toDouble()
+        val x = Math.round(Tok.homeTextX * 3.0).toDouble()
+        fun menuY(at: Double): Long {
+            val (_, ty) = turnAt(at, y, Tok.motion_quickplayAngle.toDouble(), Math.floor(720 * Tok.motion_quickplayScale.toDouble()), 0.0, 1656.0)
+            return Math.round(Tok.motion_quickplayMenuY * 3 + Tok.motion_quickplayScale * ty)
+        }
+        return ((menuY(x) + menuY(x + w)) / 2 + Math.round(Tok.motion_t8PeekEye * 3)).toDouble()
+    }
+
+    private fun assertT8PeekTurn(r: Run, at: Long, eye: Double) {
+        val rec = r.draw(at)
+        val q = rec.quad(NP_PEEK)
+        assertEquals(listOf(551, 398, 720, 986), requireNotNull(q.src).let { listOf(it.x0, it.y0, it.x1, it.y1) })
+        assertEquals(-132.9f, Tok.motion_t8PeekHinge, 0f)
+        assertEquals(1042.6f, Tok.motion_t8PeekD, 0f)
+        assertEquals(52f, Tok.motion_t8PeekEye, 0f)
+        val deg = r.move.at(Part.NpPeek, Prop.R, at).toDouble()
+        assertEquals(-75.03, deg, 1e-3)
+        val dx = Math.round(r.move.at(Part.NpPeek, Prop.X, at)).toDouble()
+        val dy = Math.round(r.move.at(Part.NpPeek, Prop.Y, at)).toDouble()
+        for ((x, y) in listOf(551.0 to 398.0, 640.0 to 300.0, 720.0 to 986.0)) {
+            val (wx, wy) = turnAt(x, y, deg, 101.0 - 399, eye, 3128.0)
+            val o = q.t.map(x.toFloat(), y.toFloat())
+            assertEquals("peek x ($x, $y)", dx + wx, o.x.toDouble(), 0.05)
+            assertEquals("peek y ($x, $y)", dy + wy, o.y.toDouble(), 0.05)
+        }
+    }
+
+    @Test
+    fun aT8PeekTurnsAboutItsHingeAtTheFirstHomeWord() {
+        val w = 120f
+        val eye = t8PeekEyeAt(0.0, w.toDouble())
+        assertEquals(652.0, eye, 0.0)
+        assertT8PeekTurn(frontRun(word = Word("music", emptyList(), w, 0f, w, 0f, 0f)), 284L, eye)
+    }
+
+    @Test
+    fun aT8PeekWithNoHomeItemsTurnsAboutThePeekRectMid() {
+        assertT8PeekTurn(frontRun(), 284L, (398.0 + 986) / 2)
+    }
+
+    @Test
+    fun aT8PeekEyeFollowsAScrolledHome() {
+        val w = 120f
+        val eye = t8PeekEyeAt(20.0, w.toDouble())
+        assertEquals(625.0, eye, 0.0)
+        assertTrue(eye < t8PeekEyeAt(0.0, w.toDouble()))
+        assertT8PeekTurn(frontRun(off = 20f, word = Word("music", emptyList(), w, 0f, w, 0f, 0f)), 284L, eye)
     }
 
     @Test

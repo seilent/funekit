@@ -24,6 +24,8 @@ const GlyphPath kGlyphs[] = {
     {"back", false, "M 28 16 L 5 16 M 14 7 L 5 16 L 14 25"},
     {"play", true, "M 9 5 L 27 16 L 9 27 Z"},
     {"pause", true, "M 7 5 H 13 V 27 H 7 Z M 19 5 H 25 V 27 H 19 Z"},
+    {"seekForward", true, "M 0.7 6.65 L 16 16 L 0.7 25.35 Z M 16 6.65 L 31.3 16 L 16 25.35 Z"},
+    {"seekBack", true, "M 31.3 6.65 L 16 16 L 31.3 25.35 Z M 16 6.65 L 0.7 16 L 16 25.35 Z"},
     {"pauseWide", true, "M 6.43 5 H 12.43 V 27 H 6.43 Z M 19.57 5 H 25.57 V 27 H 19.57 Z"},
     {"next", true, "M 5 5 L 21 16 L 5 27 Z M 23 5 H 27 V 27 H 23 Z"},
     {"previous", true, "M 27 5 L 11 16 L 27 27 Z M 5 5 H 9 V 27 H 5 Z"},

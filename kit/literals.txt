@@ -28,7 +28,6 @@ kit/src/main/kotlin/net/seilent/funekit/kit/motion/Curves.kt POW15 1.5 fos playe
 kit/src/main/kotlin/net/seilent/funekit/kit/motion/Curves.kt BACK 111515.0 fos player/core/curves.cpp:186 bezierPop overshoot s = 111515 / 65536 (funeOS core/curves.cpp BezierPop)
 kit/src/main/kotlin/net/seilent/funekit/kit/motion/Motion.kt PRESS_STEPS 16f fos player/core/press.h:9 F3 press scale drawn in 16 steps of its depth (funeOS core/press.h kPressSteps)
 kit/src/main/kotlin/net/seilent/funekit/kit/proj/Proj.kt HALF_TURN 180f fos player/core/curves.cpp:214-229 degrees to radians (funeOS core/curves.cpp sin_deg, cos_deg)
-kit/src/main/kotlin/net/seilent/funekit/kit/proj/Proj.kt HALF_PX 0.5 fos player/ui/app.cpp:29491 an edge less than half a px from the hinge takes no angle (funeOS ui/app.cpp edge_angle)
 kit/src/main/kotlin/net/seilent/funekit/kit/proj/Proj.kt EPS 1e-30f fos player/gfx/xform.cpp:25 a matrix whose determinant is near 0 has no inverse, funeOS 1e-300 in double, the float floor here (funeOS gfx/xform.cpp mat3_invert)
 kit/src/main/kotlin/net/seilent/funekit/kit/proj/Tilt.kt HALF_TURN 180.0 fos player/ui/tilt.h:16 the plate turn at full reach in degrees to radians (funeOS ui/tilt.h plate_pose)
 kit/src/main/kotlin/net/seilent/funekit/kit/proj/Tilt.kt N 3 fos player/gfx/xform.cpp:13-15 the tilt matrix is a 3 x 3 row major product (funeOS gfx/xform.cpp mat3_mul)

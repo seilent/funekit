@@ -88,6 +88,7 @@ saverRowE hr
 saverSmall hr
 saverSmallE hr
 saverB1Size hr
+saverD4Size hr
 saverF2Size hr
 saverS1Size hr
 saverS4Size hr
@@ -156,6 +157,7 @@ motion.saverD4Whoosh hr
 motion.saverD5Speed hr
 motion.saverD5Whoosh hr
 motion.saverD6Speed hr
+motion.saverD6In free
 motion.saverD6Whoosh hr
 motion.saverE1Speed hr
 motion.saverE1Whoosh hr
@@ -172,6 +174,7 @@ motion.saverF1Whoosh hr
 motion.saverF2Speed hr
 motion.saverF2Whoosh hr
 motion.saverF3Speed hr
+motion.saverF3In free
 motion.saverF3Whoosh hr
 motion.saverF4Speed hr
 motion.saverF4Whoosh hr
@@ -326,6 +329,7 @@ saverTouch hr
 saverE4Touch hr
 saverTileTouch hr
 saverInkCap hr
+saverInkCapCjk hr
 saverPackGap hr
 saverF1Trail hr
 saverF2Trail hr
@@ -358,7 +362,7 @@ saverB7Across hr
 saverD1Across hr
 saverD2Across hr
 saverD3Across hr
-saverD4Across hr
+saverD4Across free
 saverD5Across hr
 saverD6Across hr
 saverE1Across hr
