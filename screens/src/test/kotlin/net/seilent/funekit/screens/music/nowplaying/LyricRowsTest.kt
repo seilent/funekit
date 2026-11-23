@@ -10,6 +10,7 @@ import net.seilent.funekit.Window
 import net.seilent.funekit.fx
 import net.seilent.funekit.fxInt
 import net.seilent.funekit.fxMul
+import net.seilent.funekit.fxProgress
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.gen.TokBoard
 import net.seilent.funekit.kit.Word
@@ -239,7 +240,7 @@ class LyricRowsTest {
     )
 
     private fun slideFrames(): List<Long> =
-        (0..Tok.motion_lyricSlide.toInt() + FRAME step FRAME).map { e -> fx(Curves.expOut6.at((e / Tok.motion_lyricSlide).coerceIn(0f, 1f))) }
+        (0..Tok.motion_lyricSlide.toInt() + FRAME step FRAME).map { e -> Curves.expOut6.fx(fxProgress(e.toLong(), Tok.motion_lyricSlide.toLong())) }
 
     private val boards = listOf("v1" to TokBoard.v1, "r1" to TokBoard.r1, "a105" to TokBoard.a105)
 

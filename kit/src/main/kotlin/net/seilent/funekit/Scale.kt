@@ -101,6 +101,8 @@ fun fxDiv(a: Long, b: Long): Long = (a shl FX_BITS) / b
 
 fun fxMul(a: Long, b: Long): Long = a * b shr FX_BITS
 
+fun fxProgress(e: Long, d: Long): Long = if (d > 0) fxDiv(e, d).coerceIn(0L, fxInt(1)) else fxInt(1)
+
 fun fxOfPx(px: Float, ppu: Long): Long = fxDiv((px.toDouble() * FX).roundToLong(), ppu)
 
 fun px64(u: Long, ppu: Long): Int = (((u * ppu shr FX_BITS) + (1L shl (FX_BITS - 1))) shr FX_BITS).toInt()

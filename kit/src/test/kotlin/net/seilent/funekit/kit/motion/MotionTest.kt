@@ -136,6 +136,17 @@ class MotionTest {
     }
 
     @Test
+    fun decelIsTheFuneOsTable() {
+        for (i in 0..SEG) {
+            val t = i.toDouble() / SEG
+            val y = if (i == 0 || i == SEG) t else bezier(DECEL_X1, DECEL_Y1, DECEL_X2, DECEL_Y2, t)
+            val q = y * FX
+            val want = (if (q < 0) q - 0.5 else q + 0.5).toLong()
+            assertEquals("entry $i", want, Curves.decel.fx(i * (FX.toLong() / SEG)))
+        }
+    }
+
+    @Test
     fun expOut6IsTheFuneOsTable() {
         for (i in 0..SEG) {
             val t = i.toDouble() / SEG
@@ -394,6 +405,10 @@ class MotionTest {
     private companion object {
         const val SETTLED = 10000f
         const val SEG = 512
+        const val DECEL_X1 = 0.1
+        const val DECEL_Y1 = 0.9
+        const val DECEL_X2 = 0.2
+        const val DECEL_Y2 = 1.0
         const val FX = 65536f
         const val CEXP_SCALE = 1024.0
         const val CEXP_TERMS = 12

@@ -8,9 +8,9 @@ import androidx.compose.runtime.setValue
 import kotlinx.coroutines.withContext
 import net.seilent.funekit.api.Lyrics
 import net.seilent.funekit.core.Lrc
-import net.seilent.funekit.fx
 import net.seilent.funekit.fxInt
 import net.seilent.funekit.fxMul
+import net.seilent.funekit.fxProgress
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.ThumbFade
 import net.seilent.funekit.kit.motion.Curves
@@ -23,8 +23,6 @@ private const val MIRROR = 2L
 private const val WAKE_SLACK_MS = 25L
 internal const val SPEED_PCT = 100
 private val ONE = fxInt(1)
-
-private fun progress(e: Long, d: Long): Float = if (d > 0) (e.toFloat() / d).coerceIn(0f, 1f) else 1f
 
 class LyricAt(val shown: Long?, val playing: Long?, val pos: Long, val variant: Boolean, val running: Boolean, val speedPct: Int = SPEED_PCT) {
     init {
@@ -51,7 +49,7 @@ private class Dim {
         val e = t - start
         if (dur <= 0 || e >= dur) return to
         if (e <= 0) return from
-        return from + fxMul(to - from, fx(Curves.decel.at(progress(e, dur))))
+        return from + fxMul(to - from, Curves.decel.fx(fxProgress(e, dur)))
     }
 
     fun at(now: Long): Long = value(if (back < 0) now else MIRROR * back - now)
@@ -278,7 +276,7 @@ class LyricsModel {
             slideGen = gen
         }
         val moving = slide && line >= 0
-        val p = if (moving) fx(Curves.expOut6.at(progress(now - slideAt, slideD))) else ONE
+        val p = if (moving) Curves.expOut6.fx(fxProgress(now - slideAt, slideD)) else ONE
         return LyricView.Column(if (moving) slideFrom else line, line, p)
     }
 

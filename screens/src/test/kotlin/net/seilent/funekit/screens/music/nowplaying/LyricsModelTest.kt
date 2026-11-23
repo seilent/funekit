@@ -2,11 +2,8 @@ package net.seilent.funekit.screens.music.nowplaying
 
 import net.seilent.funekit.api.LyricCopy
 import net.seilent.funekit.api.Lyrics
-import net.seilent.funekit.fx
 import net.seilent.funekit.fxInt
-import net.seilent.funekit.fxMul
 import net.seilent.funekit.gen.Tok
-import net.seilent.funekit.kit.motion.Curves
 import net.seilent.funekit.kit.motion.VariantMotion
 import net.seilent.funekit.kit.touch.RowSpec
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,6 +17,9 @@ import kotlin.coroutines.EmptyCoroutineContext
 
 private const val DURATION = 180000L
 private const val EXP_OUT6_HALF = 62428L
+private const val SLIDE_P = 37816L
+private const val SHADE_P = 21081L
+private const val SHADE_E = 16L
 
 class LyricsModelTest {
     private val text = "[00:01.00]one\n[00:02.00]two\n[00:03.00]three"
@@ -117,7 +117,7 @@ class LyricsModelTest {
         val m = loaded()
         m.view(10_000, at(1100))
         val v = m.view(10_016, at(2050))
-        assertEquals(LyricView.Column(0, 1, v.let { (it as LyricView.Column).p }), v)
+        assertEquals("the slide step in fixed point", LyricView.Column(0, 1, SLIDE_P), v)
         assertTrue(m.sliding(10_016))
         assertEquals(10_016 - 50L, m.slideAt)
         assertEquals(Tok.motion_lyricSlide.toLong(), m.slideD)
@@ -244,7 +244,7 @@ class LyricsModelTest {
         val f = Tok.motion_variantFade.toLong()
         val m = loaded()
         m.toggle(1000)
-        assertEquals(fxMul(fxInt(1), fx(Curves.decel.at(0.5f))), m.dim(1000 + f / 2))
+        assertEquals("the shade step in fixed point", SHADE_P, m.dim(1000 + SHADE_E))
         assertTrue(m.dimming(1000 + f / 2))
         assertFalse(m.dimming(1000 + f))
     }
