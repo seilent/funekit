@@ -405,6 +405,8 @@ class NpPaint(
     private val art: () -> ImageBitmap?,
     private val accent: Color,
     private val hideFocus: () -> Boolean = { true },
+    private val status: () -> StatusInk? = { null },
+    private val accentOff: Boolean = false,
 ) : PagePaint {
     override val nowPlaying: Boolean = true
 
@@ -452,7 +454,7 @@ class NpPaint(
             npHalf(h) {
                 val draw: DrawScope.() -> Unit = {
                     val f = npFrame(m, h.g, now, hideFocus())
-                    npParts(h.g, f, k.shownInk(now), k.shownTime(now), art(), null, accent, true, m.variant, rec, shown)
+                    npParts(h.g, f, k.shownInk(now), k.shownTime(now), art(), status(), accent, accentOff, m.variant, rec, shown)
                 }
                 if (r == null) draw() else clipRect(r.x0.toFloat(), r.y0.toFloat(), r.x1.toFloat(), r.y1.toFloat(), block = draw)
             }

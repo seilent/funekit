@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -78,6 +79,7 @@ import net.seilent.funekit.kit.pen64
 import net.seilent.funekit.kit.pxAt
 import net.seilent.funekit.kit.pxSize
 import net.seilent.funekit.kit.rememberChrome
+import net.seilent.funekit.kit.StatusInk
 import net.seilent.funekit.kit.rememberStatusInk
 import net.seilent.funekit.kit.roleStyle
 import net.seilent.funekit.kit.stack.MovePaint
@@ -288,6 +290,7 @@ class MusicHost<S : Any> internal constructor(
     private var phone: PhoneSession? = null
     private var appPop: (Turn<S>) -> MoveKind = { MoveKind.T4n }
     private var npHides = true
+    private var npStatusShown: StatusInk? = null
     private var npPrimed: Long? = null
     internal var jumpOwner: S? by mutableStateOf(null)
     internal var colFireAt: S? by mutableStateOf(null)
@@ -551,7 +554,7 @@ class MusicHost<S : Any> internal constructor(
     }
 
     fun side(s: S): PagePaint? {
-        if (entryOf(s)?.page == MusicPage.NowPlaying) return NpPaint(npGeo, np, npHalves.zip(npHalfInks), { np.art }, env.accent) { npHides }
+        if (entryOf(s)?.page == MusicPage.NowPlaying) return NpPaint(npGeo, np, npHalves.zip(npHalfInks), { np.art }, env.accent, hideFocus = { npHides }, status = { npStatusShown }, accentOff = env.accentOff)
         return types.side(modelOf(s))
     }
 
@@ -1538,6 +1541,7 @@ class MusicHost<S : Any> internal constructor(
         NpBackdropFeed()
         val npStatusScale = npHalves.holding(NpPart.Status).g.s
         val npStatusInk = rememberStatusInk(status, npStatusScale, npStatus(npStatusScale))
+        SideEffect { npStatusShown = npStatusInk }
         val rest = stack.phase == Phase.Rest
         for ((sc, sh) in pages) {
             val e = entryOf(sc) ?: continue

@@ -13,14 +13,29 @@ import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.font.createFontFamilyResolver
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
+import net.seilent.funekit.Fonts
 import net.seilent.funekit.Insets
 import net.seilent.funekit.Nav
+import net.seilent.funekit.Roles
 import net.seilent.funekit.Surface
 import net.seilent.funekit.Window
+import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.gen.TokBoard
 import net.seilent.funekit.kit.Chrome
 import net.seilent.funekit.kit.Edges
+import net.seilent.funekit.kit.Ink
 import net.seilent.funekit.kit.Word
+import net.seilent.funekit.kit.roleStyle
+import net.seilent.funekit.kit.word
+import net.seilent.funekit.api.PlayerState
+import net.seilent.funekit.px
+import net.seilent.funekit.kit.StatusText
+import net.seilent.funekit.kit.StatusState
+import net.seilent.funekit.kit.statusRow
+import net.seilent.funekit.kit.statusLine
+import net.seilent.funekit.kit.StatusInk
+import net.seilent.funekit.kit.Play
+import net.seilent.funekit.kit.npStatus
 import net.seilent.funekit.kit.motion.MoveForms
 import net.seilent.funekit.kit.motion.MoveKind
 import net.seilent.funekit.kit.motion.NpForm
@@ -41,6 +56,7 @@ import net.seilent.funekit.api.Kind
 import net.seilent.funekit.api.Row
 import net.seilent.funekit.screens.posture.Fold
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -228,5 +244,90 @@ class NpMoveTest {
         val ring = paint.npRing()
         assertEquals(up.x + up.g.ringRect.x0, ring.x0)
         assertEquals(up.y + up.g.ringRect.y0, ring.y0)
+    }
+
+    private fun statusInk(battery: Int): StatusInk {
+        val box = npStatus(s)
+        val line = statusLine(s, box)
+        val density = Density(1f)
+        val fonts = createFontFamilyResolver(RuntimeEnvironment.getApplication())
+        val style = roleStyle(Roles.time, s, density, Ink.white, Tok.alpha_full).merge(Fonts.style(Roles.time, line.textPx, density, Roles.time.tracking * s.ppu))
+        val percent = TextMeasurer(fonts, density, LayoutDirection.Ltr).word("$battery%", Roles.time, style, fonts, density, null)
+        return StatusInk(StatusState("", battery, false, Play.Playing, false, -1, -1), StatusText(null, percent, null), line, s, box)
+    }
+
+    private fun npPaint(status: StatusInk?, accentOff: Boolean = false): NpPaint {
+        val g = NpLayout(s)
+        val density = Density(1f)
+        val fonts = createFontFamilyResolver(RuntimeEnvironment.getApplication())
+        val m = NowPlayingModel()
+        m.feed(PlayerState(queueSize = 1, index = 0, track = 1, playing = true))
+        m.sync(NpShown.of(listOf(Row(1, Kind.Song, "Song", "Artist", null, durationMs = 180000))), 0)
+        m.resetFocus(0)
+        val inks = NpInks(NpMeasure(g, TextMeasurer(fonts, density, LayoutDirection.Ltr), fonts, density, null), m)
+        return NpPaint(g, m, listOf(npFlat(g) to inks), { null }, Color.Red, status = { status }, accentOff = accentOff)
+    }
+
+    private fun npRun(k: MoveKind, paint: PagePaint): Run {
+        val move = PageMove()
+        val mp = MovePaint(move)
+        mp.npForm = NpForm.Page
+        val np = PageSide(s, paint)
+        val page = PageSide(s, Fill(Color.Blue))
+        val t = if (k == MoveKind.T7) Turn(k, "page", "np", false) else Turn(k, "np", "page", true)
+        val e = mp.ends(t, HomeSide(s, Home(null), 0f), if (k == MoveKind.T7) page else np, if (k == MoveKind.T7) np else page, forms)
+        move.start(k, 0, e, forms)
+        return Run(move, mp)
+    }
+
+    private fun band(b: Bitmap): List<Int> {
+        val box = npStatus(s)
+        val x0 = px(box.left, s.ppu)
+        return (px(box.top, s.ppu) until px(box.top + box.height, s.ppu)).flatMap { y -> (x0 until s.widthPx).map { x -> b.getPixel(x, y) } }
+    }
+
+    private fun drawWith(r: Run, now: Long, over: DrawScope.() -> Unit): Bitmap {
+        val img = ImageBitmap(720, 1280)
+        CanvasDrawScope().draw(Density(1f), LayoutDirection.Ltr, Canvas(img), Size(720f, 1280f)) {
+            drawRect(Color.Black, Offset.Zero, size)
+            with(r.paint) { drawMove(now, null) }
+            over()
+        }
+        return img.asAndroidBitmap()
+    }
+
+    @Test
+    fun theStatusRowStepsInOnTheNowPlayingPlaneAtTheT7StatusStep() {
+        val ink = statusInk(HALF_BATTERY)
+        val rowed = npRun(MoveKind.T7, npPaint(ink))
+        val bare = npRun(MoveKind.T7, npPaint(null))
+        assertEquals("no status row before the step", band(draw(bare, STEP_MS - 1)), band(draw(rowed, STEP_MS - 1)))
+        assertNotEquals("the status row at the step", band(draw(bare, STEP_MS)), band(draw(rowed, STEP_MS)))
+        assertEquals("at rest the band is the row drawn alone", band(drawWith(bare, REST_MS) { statusRow(ink, Color.Red, false, 1f) }), band(draw(rowed, REST_MS)))
+    }
+
+    @Test
+    fun t8TurnsTheStatusRowOutWithNowPlaying() {
+        val rowed = npRun(MoveKind.T8, npPaint(statusInk(HALF_BATTERY)))
+        val bare = npRun(MoveKind.T8, npPaint(null))
+        assertFalse("the row leaves with now playing", draw(bare, OUT_MS).sameAs(draw(rowed, OUT_MS)))
+        assertTrue("the row is gone with now playing", draw(bare, GONE_MS).sameAs(draw(rowed, GONE_MS)))
+    }
+
+    @Test
+    fun aLowBatteryWithTheAccentOnDrawsTheOutline() {
+        val ink = statusInk(LOW_BATTERY)
+        val on = npRun(MoveKind.T7, npPaint(ink))
+        val off = npRun(MoveKind.T7, npPaint(ink, accentOff = true))
+        assertNotEquals("the accent on draws the low battery in the accent", band(draw(off, REST_MS)), band(draw(on, REST_MS)))
+    }
+
+    private companion object {
+        const val HALF_BATTERY = 50
+        const val LOW_BATTERY = 5
+        const val STEP_MS = 617L
+        const val REST_MS = 1000L
+        const val OUT_MS = 100L
+        const val GONE_MS = 217L
     }
 }
