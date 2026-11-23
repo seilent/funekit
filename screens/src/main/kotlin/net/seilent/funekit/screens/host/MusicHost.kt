@@ -714,7 +714,6 @@ class MusicHost<S : Any> internal constructor(
         require(src.hud === rangeHud) { "a row adjust shows on the host's hud" }
         if (!src.open(now())) return false
         val o = Overlay(OverKind.Adjust, src.hud)
-        o.back = { true }
         stack.open(o)
         m.edit(src.key, false)
         edit = o to m
@@ -1885,7 +1884,7 @@ class MusicHost<S : Any> internal constructor(
 
     private fun fieldRaise(r: FieldRun) {
         fieldSync(r)
-        stack.swapMenu(r.over) { _ -> fieldCells(r) }
+        stack.swapMenu(r.over, rise = true) { _ -> fieldCells(r) }
     }
 
     private fun fieldTap(r: FieldRun, h: AdjustHit) {

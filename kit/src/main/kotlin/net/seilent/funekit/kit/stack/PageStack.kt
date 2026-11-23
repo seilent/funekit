@@ -84,6 +84,7 @@ class PageStack<P : Any>(
     private var moveEnds = MoveEnds()
     private var seq = 0
     private var openSeq = -1
+    private var handedOff = false
     private var cutSeq = -1
     private var swapHeld = false
     private var waiting = false
@@ -187,6 +188,10 @@ class PageStack<P : Any>(
         o.open(now)
         overlay = o
         openSeq = ++seq
+        if (handedOff) {
+            handedOff = false
+            if (o.back == null) o.back = { true }
+        }
         snapshot(hides, covers)
         onOpen(now)
     }
@@ -216,6 +221,7 @@ class PageStack<P : Any>(
             if (closes && !only.closing) closing(only, now)
             only.drop()
             dropOverlay(show = closes)
+            if (!closes) handedOff = true
         }
     }
 
@@ -239,12 +245,13 @@ class PageStack<P : Any>(
         drop(page)
     }
 
-    fun swapMenu(only: Overlay? = null, swap: (Long) -> Unit) = ask { now ->
+    fun swapMenu(only: Overlay? = null, rise: Boolean = false, swap: (Long) -> Unit) = ask { now ->
         val o = overlay
         if (o == null || o.kind != OverKind.Sheet) return@ask
         if (only != null && (o !== only || o.closing)) return@ask
         swap(now)
         o.open(now)
+        if (!rise) openSeq = -1
     }
 
     private fun snapshot(hide: Boolean, covers: Boolean) {
@@ -277,11 +284,16 @@ class PageStack<P : Any>(
         onMain("PageStack.edgeBack")
         val o = overlay
         ask { now ->
-            if (overlay !== o || o?.closing == true) return@ask
-            val b = o?.back
-            if (o != null && b != null && (o.moving(now) || b())) return@ask
-            back(now, false, popKind)
+            if (overlay !== o) return@ask
+            if (o == null) back(now, false, popKind) else overlayBack(o, now, popKind)
         }
+    }
+
+    private fun overlayBack(o: Overlay, now: Long, popKind: (Turn<P>) -> MoveKind) {
+        if (o.kind != OverKind.Sheet && o.kind != OverKind.Dlg && o.kind != OverKind.Jump) return
+        if (o.closing || o.moving(now)) return
+        if (o.back?.invoke() == true) return
+        back(now, false, popKind)
     }
 
     private fun back(now: Long, device: Boolean, popKind: (Turn<P>) -> MoveKind) {
@@ -343,6 +355,7 @@ class PageStack<P : Any>(
             h != null && h.seq == seq && holdReversible(now) && o != null -> closeOverlay(o, now)
             h != null && h.seq == seq && holdReversible(now) -> reverse(now)
             h != null && h.dev -> touch(now)
+            o != null -> overlayBack(o, now, popKind)
             else -> landBack(now, popKind)
         }
     }
@@ -772,6 +785,7 @@ class PageStack<P : Any>(
             if (gate?.replay(now) == true) replayDue = true
         }
         while (asks.isNotEmpty()) asks.removeFirst()(now)
+        handedOff = false
         opens(now)
         if (phase == Phase.Exit && now >= move.swapAt) {
             if (moveHeld(now)) swapHeld = true else swap(now)

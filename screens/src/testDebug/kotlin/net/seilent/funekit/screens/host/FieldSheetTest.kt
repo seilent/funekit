@@ -18,6 +18,7 @@ import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.MenuForm
 import net.seilent.funekit.kit.motion.MoveKind
 import net.seilent.funekit.kit.motion.OverKind
+import net.seilent.funekit.kit.touch.Gesture
 import net.seilent.funekit.px
 import net.seilent.funekit.scale
 import net.seilent.funekit.screens.music.MusicPage
@@ -60,10 +61,10 @@ class FieldSheetTest {
 
     private fun pivots(vararg names: String) = names.map { SettingPivot(it, listOf(SettingRow(it, it, WORDS[0], SettingKind.Choice, values = WORDS, words = WORDS, at = 0))) }
 
-    private fun app(rows: Rows = Rows(pivots(OUT, SYS))): Pair<TestApp, SettingsModel> {
+    private fun app(rows: Rows = Rows(pivots(OUT, SYS)), root: Boolean = false): Pair<TestApp, SettingsModel> {
         val app = TestApp(page, page, null, StillLevel) { rule.mainClock.currentTime }.also {
             it.settingsList = listOf(SettingsPage(ID, rows, HeaderLook.Settings))
-            it.compose(rule)
+            it.compose(rule, root)
             rule.waitForIdle()
             rule.mainClock.autoAdvance = false
         }
@@ -155,6 +156,47 @@ class FieldSheetTest {
         frames(OPEN_FRAMES)
         assertTrue("the hud shows once the sheet settles", f.hud.shown)
         assertEquals("the edit cell is the field's item", GAIN, app.menu.edit)
+    }
+
+    @Test
+    fun aBandSwipeBegunInTheRiseAndLiftedOnTheSettledSheetDropsTheLiveField() {
+        val (app, _) = app(root = true)
+        val f = BandFields().also { it.noHud = true }
+        open(app, f, CUT_FRAMES)
+        pick(app, GAIN, 1)
+        val o = requireNotNull(app.stack.overlay)
+        assertTrue("premise: the sheet rises", o.moving(rule.mainClock.currentTime))
+        val downAt = rule.mainClock.currentTime
+        rule.onRoot().performTouchInput {
+            down(Offset(EDGE_X, page.heightPx / BAND_Y))
+            moveTo(Offset(page.widthPx / 2f, page.heightPx / BAND_Y))
+        }
+        var n = 0
+        while (o.moving(rule.mainClock.currentTime) && n < OPEN_FRAMES) {
+            frames(1)
+            n++
+        }
+        val upAt = rule.mainClock.currentTime
+        assertFalse("premise: the up comes after the rise", o.moving(upAt))
+        assertTrue("premise: the up comes inside the key hold, ${upAt - downAt} ms", upAt - downAt < Tok.input_keyHoldMs.toLong())
+        rule.onRoot().performTouchInput { up() }
+        frames(OPEN_FRAMES)
+        assertEquals("the sheet stays up", OverKind.Sheet, app.stack.overlay?.kind)
+        assertEquals("drop $GAIN", f.calls.last())
+    }
+
+    @Test
+    fun aBandDownDuringTheReturnFromTheHudIsHeld() {
+        val (app, _) = app()
+        val f = BandFields()
+        hudUp(app, f, GAIN)
+        val o = app.stack.overlay
+        tap(2f, 2f)
+        frames(2)
+        assertFalse("premise: the hud goes", f.hud.shown)
+        assertTrue("premise: the sheet rises again", o != null && !o.closing && o.moving(rule.mainClock.currentTime))
+        val held = rule.runOnIdle { app.stack.hold(rule.mainClock.currentTime, false, Gesture.Edge.Left).also { app.stack.touch() } }
+        assertEquals("a band down during the return from the HUD is held", true, held)
     }
 
     @Test
@@ -555,6 +597,8 @@ class FieldSheetTest {
         private const val Q = 3
         private const val HOUR = 3
         private const val ALBUM = 20L
+        private const val EDGE_X = 1f
+        private const val BAND_Y = 4f
         private val ID = SettingsId(SETTINGS)
         private val WORDS = listOf("off", "on")
     }

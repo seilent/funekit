@@ -35,6 +35,7 @@ import net.seilent.funekit.screens.settings.RowPivot
 import net.seilent.funekit.screens.settings.SettingSheet
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -389,6 +390,29 @@ class EqHostTest {
         rule.runOnIdle { app.stack.close() }
         frames(2 * OPEN_FRAMES)
         assertEquals("the entry's close drops the lift", before, m.pane.px)
+    }
+
+    @Test
+    fun anEdgeBackOverAHandedOffEntryDoesNothing() {
+        val app = app()
+        val (_, m) = open(app, BT)
+        val acts = rule.runOnIdle { app.host.actsOf(m) }
+        assertTrue(rule.runOnIdle { acts.sheet(sheet(), { true }) })
+        frames(OPEN_FRAMES)
+        val entry = Overlay(OverKind.Sheet)
+        rule.runOnIdle {
+            acts.handOff()
+            app.stack.open(entry)
+        }
+        frames(OPEN_FRAMES)
+        assertSame("premise: the entry is up", entry, app.stack.overlay)
+        assertFalse("premise: the entry is settled", entry.moving(now()))
+        rule.runOnIdle { app.stack.edgeBack(app.host.popKind) }
+        frames(CUT_FRAMES)
+        assertEquals("an edge back over a handed off entry does nothing", false, entry.closing)
+        frames(OPEN_FRAMES)
+        assertSame(entry, app.stack.overlay)
+        assertNotNull(entry.back)
     }
 
     @Test
