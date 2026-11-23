@@ -4,6 +4,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -179,23 +180,27 @@ fun HomeLayer(
         },
         onCut = cut,
     )
-    fun itemTap(i: Int) = Tap(
-        onPress = {
-            menu.down(i, now())
-            poke()
-        },
-        onCancel = {
-            menu.cancel(now())
-            poke()
-        },
-        onTap = {
-            menu.tap(now())
-            menu.into(geo.offU(touch.state.firstVisibleItemScrollOffset), geo)
-            poke()
-            onSelect(ink.keys[i])
-        },
-        onCut = cut,
-    )
+    fun itemTap(i: Int): Tap {
+        var pressed: HomeEntry? = null
+        return Tap(
+            onPress = {
+                pressed = ink.keys[i]
+                menu.down(i, now())
+                poke()
+            },
+            onCancel = {
+                menu.cancel(now())
+                poke()
+            },
+            onTap = {
+                menu.tap(now())
+                menu.into(geo.offU(touch.state.firstVisibleItemScrollOffset), geo)
+                poke()
+                pressed?.let(onSelect)
+            },
+            onCut = cut,
+        )
+    }
     PageLayer(visible, !visible) { covered ->
         val rest = rememberLook(menu, geo, ink, covered = covered) { menu.restAt(frame(), ringLit) }
         FuneList(a, touch, Modifier.pxSize(s.widthPx, s.heightPx), if (live) 0 else HIDDEN) {
@@ -281,7 +286,18 @@ fun panMenuLook(t: Float): HomeLook {
 fun panRingLook(peek: Float): HomeLook = HomeLook(0f, -1, 0f, 0f, ring = peek, mark = 0f)
 
 @Composable
-fun rememberHomeMenu(count: Int): HomeMenu = remember(count) { HomeMenu(count) }
+fun rememberHomeMenu(words: List<String>, now: () -> Long): HomeMenu {
+    val was = remember { arrayOfNulls<Pair<List<String>, HomeMenu>>(1) }
+    val menu = remember(words) {
+        HomeMenu(words.size).also { m ->
+            val (old, om) = was[0] ?: return@also
+            val f = words.indexOf(old.getOrNull(om.focus.row))
+            if (f >= 0) m.focus.set(f, words.size, now(), false)
+        }
+    }
+    SideEffect { was[0] = words to menu }
+    return menu
+}
 
 internal suspend fun qpLoads(src: QpSource, qp: QuickplayState, tiles: Int, log: (String) -> Unit, land: (QpData) -> Unit) {
     src.changes.collectLatest {
@@ -345,6 +361,7 @@ class HomeState internal constructor(
     internal var source by mutableStateOf(source)
     internal var frame by mutableLongStateOf(0L)
     private var peekDown = false
+    private var held: List<HomeEntry>? = null
 
     val quickplay: QuickplayState get() = qp
 
@@ -354,7 +371,10 @@ class HomeState internal constructor(
 
     val pan: QpPan get() = qp.pan
 
-    fun starting(t: Turn<*>) = homeStarting(t, menu, homeTouch)
+    fun starting(t: Turn<*>) {
+        held = entries
+        homeStarting(t, menu, homeTouch)
+    }
 
     fun cancel() = homeTouch.cancel()
 
@@ -374,9 +394,9 @@ class HomeState internal constructor(
 
     fun panning(now: Long): Boolean = qp.pan.moving(now)
 
-    fun has(word: String): Boolean = entries.any { it.word == word }
+    fun has(word: String): Boolean = (held ?: entries).any { it.word == word }
 
-    fun item(word: String): Int = inks.keys.indexOfFirst { it.word == word }
+    fun item(word: String): Int = (held ?: entries).indexOfFirst { it.word == word }
 
     fun back() = leave()
 
@@ -447,6 +467,10 @@ class HomeState internal constructor(
 
     fun paint(ringLit: Boolean): HomePaint = LauncherHomePaint(geo, inks, menu, ringLit, qpLayout, qpWords, qp, qpBox, qpTouch, ::off)
 
+    internal fun landed() {
+        held = null
+    }
+
     private fun inPeek(o: Offset): Boolean = o.x >= peekBox.x0 && o.x < peekBox.x1 && o.y >= peekBox.y0 && o.y < peekBox.y1
 
     private fun panLayers(front: Boolean) = qpPanStart(front, geo, menu, homeTouch, qp, qpTouch, qpLayout, toast)
@@ -470,6 +494,7 @@ class HomeState internal constructor(
         toast: Toast,
         log: (String) -> Unit,
     ) {
+        if (menu !== this.menu) this.homeTouch.cancel()
         this.entries = entries
         this.scale = scale
         this.inks = ink
@@ -505,11 +530,13 @@ fun rememberHomeState(
     density: Density,
     log: (String) -> Unit,
 ): HomeState {
+    require(entries.distinctBy { it.word }.size == entries.size) { "a home entry is listed once" }
     val context = LocalContext.current
+    val words = remember(entries) { entries.map { it.word } }
     val qp = remember(source) { QuickplayState().also { it.waiting = source != null } }
     val ink = remember(entries, sub, scale, density, fonts) { homeInk(measurer, fonts, scale, density, entries, sub) }
     val geo = remember(scale, entries.size) { HomeGeo(scale, entries.size) }
-    val menu = rememberHomeMenu(entries.size)
+    val menu = rememberHomeMenu(words, now)
     val homeTouch = rememberListTouch(Kind.List, scale, edge = Edge.Lead)
     val qpSet = remember(qp.data) { qpTiles(qp.data) }
     val qpWords = remember(scale, density, fonts) { qpInk(measurer, fonts, scale, density) }
@@ -609,6 +636,7 @@ fun <S : Any> HomeLayer(
     val pan = qp.pan
     val homeLive = atHome && rest && !pan.front
     val frontLive = atHome && rest && pan.front
+    LaunchedEffect(stack.turn) { if (stack.turn == null) state.landed() }
     fun qpHold(tile: QpTile): Boolean {
         if (tile.section == QP_PLAYING) return false
         val q = tile.item

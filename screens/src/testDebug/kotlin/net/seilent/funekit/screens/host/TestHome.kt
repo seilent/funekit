@@ -15,6 +15,7 @@ import net.seilent.funekit.Scale
 import net.seilent.funekit.kit.Covers
 import net.seilent.funekit.kit.Toast
 import net.seilent.funekit.kit.home.HomeEntry
+import net.seilent.funekit.kit.home.HomeMenu
 import net.seilent.funekit.kit.touch.Arbiter
 import net.seilent.funekit.screens.music.MusicSource
 
@@ -26,6 +27,7 @@ class TestHome(home: Scale, entries: List<HomeEntry>, source: QpSource?) {
     var state: HomeState? = null
         private set
     val picks = mutableListOf<HomeEntry>()
+    val menus = mutableListOf<HomeMenu>()
     private val wake = Channel<Unit>(Channel.CONFLATED)
 
     fun poke() {
@@ -36,6 +38,7 @@ class TestHome(home: Scale, entries: List<HomeEntry>, source: QpSource?) {
     internal fun State(toast: Toast, covers: Covers, m: TextMeasurer, fonts: FontFamily.Resolver, density: Density, now: () -> Long, poke: () -> Unit, log: (String) -> Unit): HomeState {
         val s = rememberHomeState(entries, { it.sub }, home, source, now, poke, toast, covers, m, fonts, this.density ?: density, log)
         state = s
+        if (menus.lastOrNull() !== s.menu) menus += s.menu
         return s
     }
 

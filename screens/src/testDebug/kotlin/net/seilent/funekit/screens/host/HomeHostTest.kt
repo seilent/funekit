@@ -39,6 +39,8 @@ import net.seilent.funekit.fake.FakeSet
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.MenuForm
 import net.seilent.funekit.kit.home.HomeEntry
+import net.seilent.funekit.kit.home.HomeGeo
+import net.seilent.funekit.kit.home.HomeMenu
 import net.seilent.funekit.kit.motion.MoveKind
 import net.seilent.funekit.kit.motion.NpForm
 import net.seilent.funekit.kit.motion.OverKind
@@ -51,6 +53,7 @@ import net.seilent.funekit.kit.quickplay.peekHit
 import net.seilent.funekit.kit.quickplay.qpTiles
 import net.seilent.funekit.kit.stack.Phase
 import net.seilent.funekit.scale
+import net.seilent.funekit.screens.music.MusicPage
 import net.seilent.funekit.screens.music.MusicSource
 import net.seilent.funekit.screens.music.nowplaying.NowPlayingModel
 import net.seilent.funekit.screens.music.overlay.UNPIN
@@ -127,8 +130,8 @@ class HomeHostTest {
         }
     }
 
-    private fun launcher(qp: QpSource?, src: MusicSource = music) {
-        rig = TestHome(home, entries, qp)
+    private fun launcher(qp: QpSource?, src: MusicSource = music, listed: List<HomeEntry> = entries) {
+        rig = TestHome(home, listed, qp)
         app = TestApp(a105Page, np, src, StillLevel) { SystemClock.uptimeMillis() }
         app.homeHost = rig
         app.compose(rule, root = true)
@@ -506,6 +509,93 @@ class HomeHostTest {
         assertEquals(data, qp.data)
     }
 
+    private fun itemAt(i: Int): Offset {
+        val e = HomeGeo(home, entries.size).itemHit(i)
+        return Offset((e.x0 + e.x1) / 2f, (e.y0 + e.y1) / 2f)
+    }
+
+    private fun pressItem(i: Int): HomeMenu {
+        launcher(qpSource(QpData.EMPTY))
+        val menu = state.menu
+        rule.onRoot().performTouchInput { down(itemAt(i)) }
+        frame()
+        assertTrue("premise: item $i is pressed", menu.items.held && menu.items.on.item == i)
+        return menu
+    }
+
+    private fun lift() {
+        rule.onRoot().performTouchInput { up() }
+        settle()
+    }
+
+    @Test
+    fun aSubChangeKeepsTheMenuFocusAndPressWithNoEnter() {
+        val menu = pressItem(ITEM)
+        rule.runOnUiThread { rig.entries = entries.mapIndexed { k, e -> if (k == ITEM) e.copy(sub = "changed") else e } }
+        frames(HOLD)
+        assertSame(menu, state.menu)
+        assertEquals("the sub change enters no menu", 1, rig.menus.size)
+        assertEquals(ITEM, menu.focus.row)
+        assertTrue("the press stays in flight", menu.items.held && menu.items.on.item == ITEM)
+        lift()
+    }
+
+    @Test
+    fun aSubChangeMidPressSelectsTheEntryPressedAtTheDown() {
+        pressItem(ITEM)
+        rule.runOnUiThread { rig.entries = entries.mapIndexed { k, e -> if (k == ITEM) e.copy(sub = "changed") else e } }
+        frames(HOLD)
+        lift()
+        assertSame(entries[ITEM], rig.picks.single())
+    }
+
+    @Test
+    fun aWordChangeMidPressSelectsNothing() {
+        pressItem(ITEM)
+        rule.runOnUiThread { rig.entries = entries.dropLast(1) + Entry("radio", "stations") }
+        frames(HOLD)
+        lift()
+        assertTrue("a word change cuts the press, ${rig.picks}", rig.picks.isEmpty())
+    }
+
+    @Test
+    fun aShrinkUnderThePressedLastItemSelectsNothing() {
+        val last = entries.size - 1
+        pressItem(last)
+        rule.runOnUiThread { rig.entries = entries.dropLast(1) }
+        frames(HOLD)
+        lift()
+        assertTrue("the shrink cuts the press, ${rig.picks}", rig.picks.isEmpty())
+        assertEquals("the pressed word is gone, so the new menu keeps its first row", 0, state.menu.focus.row)
+    }
+
+    @Test
+    fun aMoveKeepsHasAndItemFromItsStart() {
+        launcher(qpSource(QpData.EMPTY))
+        assertEquals(2, app.homeItem("history"))
+        rule.runOnUiThread {
+            stack.push(TestScreen.Music(MusicEntry(stack.entry(), MusicPage.Hub)), MoveKind.T2)
+            Snapshot.sendApplyNotifications()
+        }
+        frame()
+        assertTrue("premise: the push moves", stack.moving)
+        rule.runOnUiThread { rig.entries = listOf(entries[2], entries[0], entries[3]) }
+        frame()
+        assertTrue(app.homeHas("playlists"))
+        assertEquals(2, app.homeItem("history"))
+        until("the push lands") { stack.phase == Phase.Rest }
+        frame()
+        assertFalse(app.homeHas("playlists"))
+        assertEquals(0, app.homeItem("history"))
+    }
+
+    @Test
+    fun twoEntriesWithOneWordAreRefused() {
+        val failed = runCatching { launcher(qpSource(QpData.EMPTY), listed = entries + Entry("music", "again")) }.exceptionOrNull()
+        assertTrue("the listing fails, $failed", failed is IllegalArgumentException)
+        assertEquals("a home entry is listed once", failed?.message)
+    }
+
     private fun blank() = Offset(a105Page.widthPx - BLANK, a105Page.heightPx - BLANK)
 
     companion object {
@@ -520,5 +610,6 @@ class HomeHostTest {
         private const val UNFOLD_W = 1080
         private const val UNFOLD_H = 1280
         private const val DENSITY = 2f
+        private const val ITEM = 1
     }
 }
