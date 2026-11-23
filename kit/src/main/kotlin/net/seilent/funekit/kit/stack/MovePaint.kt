@@ -128,6 +128,7 @@ interface PagePaint {
     fun hideRow(row: Int) {}
 
     val nowPlaying: Boolean get() = false
+    val ownStatus: Boolean get() = false
     val queue: Boolean get() = false
     val albumCol: Boolean get() = false
 
@@ -1148,7 +1149,21 @@ class MovePaint(private val move: PageMove) {
     private fun DrawScope.leaving(rec: DrawRecord?, dx: Float, block: DrawScope.() -> Unit) =
         if (dx == 0f) block() else clipped(rec, 0f, 0f, size.width, size.height) { shifted(rec, dx, 0f, block) }
 
+    private fun npRowAlpha(m: MoveCtx, np: PageSide, now: Long): Float = when {
+        !np.paint.ownStatus -> 0f
+        move.kind == MoveKind.T7 -> move.at(Part.NpStatus, Prop.A, now)
+        move.kind == MoveKind.T8 -> move.at(Part.NpOut, Prop.A, now)
+        np === m.from -> move.at(Part.Leave, Prop.A, now)
+        else -> move.at(Part.Content, Prop.A, now)
+    }
+
     private fun DrawScope.statusOf(st: MoveStatus, m: MoveCtx, now: Long) {
+        val np = listOfNotNull(m.from, m.to).firstOrNull { it.paint.nowPlaying }
+        if (np != null) {
+            val a = 1f - npRowAlpha(m, np, now)
+            if (a > 0f) statusRow(if (m.from == null || m.to == null) st.home else st.page, st.accent, st.accentOff, a)
+            return
+        }
         val one = m.home == null || (m.from != null && m.to != null) || st.home.sameRow(st.page)
         val h = if (one) 0f else move.at(Part.Home, Prop.A, now)
         if (h > 0f) statusRow(st.home, st.accent, st.accentOff, h)

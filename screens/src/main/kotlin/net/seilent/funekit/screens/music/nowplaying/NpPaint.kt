@@ -409,6 +409,7 @@ class NpPaint(
     private val accentOff: Boolean = false,
 ) : PagePaint {
     override val nowPlaying: Boolean = true
+    override val ownStatus: Boolean get() = status() != null
 
     override val chrome: Chrome? = null
     override val header: Word? = null

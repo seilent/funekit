@@ -95,6 +95,40 @@ class MoveStatusTest {
         }
     }
 
+    private class NpSide(own: Boolean) : PagePaint by Blank() {
+        override val nowPlaying = true
+        override val ownStatus = own
+    }
+
+    private class QueueSide : PagePaint by Blank() {
+        override val queue = true
+    }
+
+    private class NpRun(home: Scale, page: Scale, np: Scale, pages: List<String>, kind: MoveKind, to: String?, own: Boolean = true) {
+        val move = PageMove()
+        val paint = MovePaint(move)
+
+        init {
+            val forms = MoveForms.board(page.board)
+            fun side(n: String) = when (n) {
+                NP -> PageSide(np, NpSide(own))
+                QUEUE -> PageSide(page, QueueSide())
+                else -> PageSide(page, Blank())
+            }
+            val stack = PageStack<String>(forms, { PageKind.Plain }, move = move) { t ->
+                paint.ends(t, HomeSide(home, NoHome(), 0f), t.from?.let(::side), t.to?.let(::side), forms)
+            }
+            stack.pages.addAll(pages)
+            if (to != null) stack.push(to, kind) else stack.back { kind }
+            stack.frame(0L)
+        }
+    }
+
+    private fun npScale(d: Dev): Scale = scale(d.window(Nav.None), Nav.None, Surface.NowPlaying, false)
+
+    private fun pageRow(r: NpRun, st: MoveStatus?, t: Long): Float =
+        most(draw(Phones.p2160Page) { with(r.paint) { drawMove(t, null, st) } }, PAGE_X0, PAGE_X1, PAGE_Y0, PAGE_Y1) / FULL
+
     private fun ink(s: Scale) = StatusInk(state, StatusText(null, null, null), statusLine(s), s, pageStatus())
 
     private fun scales(d: Dev): Pair<Scale, Scale> {
@@ -176,7 +210,63 @@ class MoveStatusTest {
         assertTrue(moved.sameAs(rest))
     }
 
+    @Test
+    fun aMoveWithNowPlayingAsASideDrawsTheAppRowAtTheComplementOfNowPlayingsRow() {
+        val (home, page) = scales(Phones.p2160Page)
+        val np = npScale(Phones.p2160Page)
+        val st = MoveStatus(ink(home), ink(page), Ink.white, true)
+        val t7 = NpRun(home, page, np, listOf(PAGE), MoveKind.T7, NP)
+        assertEquals("the page row holds before now playing's row steps in", 1f, pageRow(t7, st, T7_BEFORE), ROW_SLACK)
+        assertEquals("no page row once now playing's row steps in", 0f, pageRow(t7, st, T7_STEP), 0f)
+        val t8 = NpRun(home, page, np, listOf(PAGE, NP), MoveKind.T8, null)
+        assertEquals("no page row while now playing's row leaves whole", 0f, pageRow(t8, st, T8_HELD), 0f)
+        assertEquals("the page row against now playing's faint row", T8_FAINT_ROW, pageRow(t8, st, T8_FAINT), ROW_SLACK)
+        assertEquals("the page row once now playing's row is gone", 1f, pageRow(t8, st, T8_GONE), ROW_SLACK)
+        val queue = NpRun(home, page, np, listOf(NP), MoveKind.T3, QUEUE)
+        for (t in 0L until WALK step FRAME) {
+            assertEquals("one row leaving now playing at $t", 1f - queue.move.at(Part.Leave, Prop.A, t), pageRow(queue, st, t), ROW_SLACK)
+        }
+        val into = NpRun(home, page, np, listOf(NP, QUEUE), MoveKind.T4, null)
+        for (t in 0L until WALK step FRAME) {
+            assertEquals("one row back on now playing from the queue at $t", 1f - into.move.at(Part.Content, Prop.A, t), pageRow(into, st, t), ROW_SLACK)
+        }
+        val bare = NpRun(home, page, np, listOf(PAGE), MoveKind.T7, NP, own = false)
+        for (t in 0L until WALK step FRAME) assertEquals("with no now playing row the page row holds at $t", 1f, pageRow(bare, st, t), ROW_SLACK)
+        assertEquals("a null status draws no row", 0f, pageRow(t7, null, T7_BEFORE), 0f)
+    }
+
+    @Test
+    fun aT8ToHomeDrawsTheHomeRow() {
+        val (home, page) = scales(Phones.p2160Page)
+        val h = ink(home)
+        val p = ink(page)
+        assertFalse("premise: the home and page rows differ", h.sameRow(p))
+        val r = NpRun(home, page, npScale(Phones.p2160Page), listOf(NP), MoveKind.T8, null)
+        val b = draw(Phones.p2160Page) { with(r.paint) { drawMove(T8_GONE, null, MoveStatus(h, p, Ink.white, true)) } }
+        assertEquals("the home row's ink", FULL, most(b, HOME_X0, HOME_X1, HOME_Y0, HOME_Y1).toFloat(), SLACK)
+        assertEquals("none of the page row's", 0, most(b, PAGE_X0, PAGE_X1, PAGE_Y0, PAGE_Y1))
+    }
+
     companion object {
+        private const val NP = "np"
+        private const val PAGE = "page"
+        private const val QUEUE = "queue"
+        private const val PAGE_X0 = 1008
+        private const val PAGE_X1 = 1033
+        private const val PAGE_Y0 = 30
+        private const val PAGE_Y1 = 66
+        private const val HOME_X0 = 954
+        private const val HOME_X1 = 997
+        private const val HOME_Y0 = 45
+        private const val HOME_Y1 = 99
+        private const val T7_BEFORE = 300L
+        private const val T7_STEP = 617L
+        private const val T8_HELD = 100L
+        private const val T8_FAINT = 210L
+        private const val T8_FAINT_ROW = 0.7f
+        private const val T8_GONE = 230L
+        private const val WALK = 1200L
+        private const val ROW_SLACK = 2f / 255f
         private const val ALPHA_SHIFT = 24
         private const val FULL = 255f
         private const val HALF = 0.5f
