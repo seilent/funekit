@@ -164,6 +164,8 @@ class ArtistModel(entry: Long, val id: Long) : PivotPage(entry, MusicPage.Artist
         private set
     var onRings by mutableStateOf(true)
     var ring by mutableIntStateOf(RING_PLAY)
+    private var wasOnRings = true
+    private var wasRing = -1
     val rings = PressSlots()
     val fade = ThumbFade()
     var switchFade = 1f
@@ -303,13 +305,20 @@ class ArtistModel(entry: Long, val id: Long) : PivotPage(entry, MusicPage.Artist
     }
 
     fun ringDown(i: Int, now: Long) {
+        keepRings()
         onRings = true
         ring = i
         rings.down(i, now)
     }
 
     fun listDown() {
+        keepRings()
         onRings = false
+    }
+
+    private fun keepRings() {
+        wasOnRings = onRings
+        wasRing = ring
     }
 
     fun albumRow(album: Long): Int {
@@ -403,10 +412,25 @@ class ArtistModel(entry: Long, val id: Long) : PivotPage(entry, MusicPage.Artist
         drags++
     }
 
+    override fun unpress(now: Long) {
+        if (wasRing >= 0) {
+            onRings = wasOnRings
+            ring = wasRing
+            wasRing = -1
+        }
+        pane.focus.unpress(pane.count, now)
+    }
+
+    override fun dropUnpress() {
+        wasRing = -1
+        panes.forEach { it.focus.dropUnpress() }
+    }
+
     override fun dragX(now: Long, ppu: Float): Int = if (switching(now)) 0 else motion.dx(now, ppu)
 
     fun afterScroll(now: Long) {
         val pn = pane
+        pn.focus.dropUnpress()
         if (pn.count == 0) return
         val r = focusAfterScroll(pn.focus.row, pn.track)
         if (r != pn.focus.row) pn.focus.set(r, pn.count, now, false)

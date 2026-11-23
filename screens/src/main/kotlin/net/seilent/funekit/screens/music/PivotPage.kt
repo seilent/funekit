@@ -34,6 +34,10 @@ abstract class PivotPage(entry: Long, page: PageId) : PageModel(entry, page) {
     abstract fun haltList()
 
     abstract fun poke()
+
+    open fun unpress(now: Long) {}
+
+    open fun dropUnpress() {}
 }
 
 fun pivotSwitchEnd(): Long = (Tok.motion_pivotOut + max(Tok.motion_pivotRows, Tok.motion_pivotRowFade)).toLong()
@@ -73,6 +77,7 @@ fun pivotPan(m: PivotPage, chrome: Chrome, ppu: () -> Float, now: () -> Long, ok
     override fun begin(x: Float, origin: Float, down: Offset): Boolean {
         if (!ok()) return false
         from = origin
+        m.unpress(now())
         drag(x)
         return true
     }

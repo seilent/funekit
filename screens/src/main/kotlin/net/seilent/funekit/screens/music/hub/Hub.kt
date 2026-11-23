@@ -243,6 +243,7 @@ class HubPane(val pivot: Int, first: Listing = hubListing(pivot, 0L)) {
     var counted: HubMap? = null
     val focus = FocusTrack().also { it.attach() }
     var col by mutableIntStateOf(0)
+    private var keptCol = 0
     val press = PressSlots()
     val glow = GlowPair()
     val thumbs = mutableStateMapOf<Long, List<ArtRef?>>()
@@ -296,7 +297,21 @@ class HubPane(val pivot: Int, first: Listing = hubListing(pivot, 0L)) {
         this.col = col.coerceIn(0, max(0, m.cells(r) - 1))
     }
 
+    fun focusDown(row: Int, col: Int, now: Long) {
+        val r = focus.row
+        val c = this.col
+        setFocus(row, col, now, true)
+        focus.setUnpress(r)
+        keptCol = c
+    }
+
+    fun unpress(now: Long) {
+        val m = map ?: return
+        if (focus.unpress(m.count, now)) col = min(keptCol, max(0, m.cells(focus.row) - 1))
+    }
+
     fun afterScroll(now: Long) {
+        focus.dropUnpress()
         val m = map ?: return
         val r = focusAfterScroll(focus.row, track)
         if (r == focus.row) return
@@ -549,6 +564,10 @@ class HubModel(entry: Long, page: MusicPage = MusicPage.Hub, private val st: Hub
         motion.release(now)
         drags++
     }
+
+    override fun unpress(now: Long) = pane.unpress(now)
+
+    override fun dropUnpress() = panes.forEach { it.focus.dropUnpress() }
 
     override fun dragX(now: Long, ppu: Float): Int = if (switching(now)) 0 else motion.dx(now, ppu)
 

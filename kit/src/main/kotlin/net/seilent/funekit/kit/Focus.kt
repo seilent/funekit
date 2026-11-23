@@ -52,11 +52,13 @@ class FocusTrack {
     private var intoAt = 0L
     private var out = Leg(0f, 0f, 0f, 0f)
     private var outAt = 0L
+    private var kept = -1
 
     fun attach() {
         revision++
         row = 0
         prev = -1
+        kept = -1
         into = Leg(1f, 1f, 0f, 0f)
         out = Leg(0f, 0f, 0f, 0f)
     }
@@ -68,6 +70,7 @@ class FocusTrack {
     }
 
     fun set(r: Int, count: Int, now: Long, animate: Boolean) {
+        kept = -1
         if (count == 0) return
         val to = r.coerceIn(0, count - 1)
         if (to == row) return
@@ -81,6 +84,23 @@ class FocusTrack {
         into = Leg(0f, 1f, 0f, a)
         intoAt = at
         row = to
+    }
+
+    fun setUnpress(r: Int) {
+        kept = r
+    }
+
+    fun dropUnpress() {
+        kept = -1
+    }
+
+    fun unpress(count: Int, now: Long): Boolean {
+        if (kept < 0) return false
+        set(kept, count, now, false)
+        into = Leg(1f, 1f, 0f, 0f)
+        out = Leg(0f, 0f, 0f, 0f)
+        revision++
+        return count > 0
     }
 
     fun afterScroll(count: Int, off: Long, view: Long, pitch: Long, now: Long) =

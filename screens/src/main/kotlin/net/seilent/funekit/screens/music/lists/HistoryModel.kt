@@ -193,6 +193,12 @@ class HistoryModel(entry: Long) : PivotPage(entry, MusicPage.History) {
         motion.release(now)
     }
 
+    override fun unpress(now: Long) {
+        pane.focus.unpress(count(pivot), now)
+    }
+
+    override fun dropUnpress() = panes.forEach { it.focus.dropUnpress() }
+
     override fun dragX(now: Long, ppu: Float): Int = if (switching(now)) 0 else motion.dx(now, ppu)
 
     override fun state(): List<Any>? {

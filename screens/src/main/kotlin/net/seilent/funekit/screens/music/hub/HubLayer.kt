@@ -608,7 +608,7 @@ fun HubLayer(
                         val inside = map != null && c >= 0 && c < map.cells(r) && (!gridRow || y < g.cellH)
                         if (inside && !m.onLabel(p, r)) {
                             valid = true
-                            pn.setFocus(r, c, at, true)
+                            pn.focusDown(r, c, at)
                             val model = if (gridRow) null else m.rowModel(p, r)
                             val d = abs(o.x / s.ppu - Tok.rowPlayRingX)
                             pn.ring = hubCollection(m.role(p)) && model?.ring == true && d + d <= Tok.rowPlayRing

@@ -75,6 +75,7 @@ import net.seilent.funekit.screens.music.pivots
 import net.seilent.funekit.screens.music.testFake
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
@@ -453,6 +454,74 @@ class HubTouchTest {
         apply()
         rule.mainClock.advanceTimeBy(SETTLE)
         assertEquals("premise: the pan released with no switch", HUB_SONGS, m.pivot)
+    }
+
+    @Test
+    fun aPivotSwipeFromARowPutsBackTheFocusFromBeforeItsDown() {
+        val m = launched(HUB_SONGS)
+        val pn = m.panes[HUB_SONGS]
+        val was = pn.focus.row
+        val r = pn.track.rowAt(Math.round(PAN_Y) - TOP)
+        assertNotEquals("premise: the down is off the focused row", was, r)
+        rule.mainClock.autoAdvance = false
+        rule.onRoot().performTouchInput { down(Offset(PAN_X0, PAN_Y)) }
+        apply()
+        assertEquals("premise: the down moves the focus", r, pn.focus.row)
+        rule.onRoot().performTouchInput {
+            moveTo(Offset(PAN_X0 - PAN_STEP, PAN_Y))
+            moveTo(Offset(PAN_X0 - PAN_DRAG, PAN_Y))
+        }
+        apply()
+        assertTrue("premise: the pan took the gesture", m.motion.dragging)
+        assertEquals("the take puts back the focus from before the down", was, pn.focus.row)
+        assertFalse("with no fade left", pn.focus.animating(SystemClock.uptimeMillis()))
+        rule.onRoot().performTouchInput {
+            moveTo(Offset(PAN_X0 - PAN_BACK, PAN_Y))
+            up()
+        }
+        apply()
+        rule.mainClock.advanceTimeBy(SETTLE)
+        assertEquals("premise: the pan released with no switch", HUB_SONGS, m.pivot)
+        assertEquals("the return lands on it", was, pn.focus.row)
+    }
+
+    @Test
+    fun aTapUpKeepsTheNewFocus() {
+        val m = launched(HUB_SONGS)
+        val pn = m.panes[HUB_SONGS]
+        val r = pn.track.rowAt(Math.round(PAN_Y) - TOP)
+        assertNotEquals("premise: the down is off the focused row", pn.focus.row, r)
+        rule.mainClock.autoAdvance = false
+        rule.onRoot().performTouchInput {
+            down(Offset(PAN_X0, PAN_Y))
+            up()
+        }
+        apply()
+        assertEquals("the tap keeps the focus its down set", r, pn.focus.row)
+        rule.runOnUiThread { m.unpress(SystemClock.uptimeMillis()) }
+        assertEquals("the up dropped the kept focus, so a take puts nothing back", r, pn.focus.row)
+    }
+
+    @Test
+    fun aVerticalDragDropsTheKeptFocus() {
+        val m = launched(HUB_SONGS)
+        val pn = m.panes[HUB_SONGS]
+        val r = pn.track.rowAt(Math.round(PAN_Y) - TOP)
+        assertNotEquals("premise: the down is off the focused row", pn.focus.row, r)
+        rule.mainClock.autoAdvance = false
+        rule.onRoot().performTouchInput { down(Offset(PAN_X0, PAN_Y)) }
+        apply()
+        assertEquals("premise: the down moves the focus", r, pn.focus.row)
+        rule.onRoot().performTouchInput {
+            moveTo(Offset(PAN_X0, PAN_Y - PAN_DRAG))
+            moveTo(Offset(PAN_X0, PAN_Y - PAN_DRAG - PAN_STEP))
+        }
+        apply()
+        assertEquals("premise: the row stays in view", r, pn.focus.row)
+        rule.runOnUiThread { m.unpress(SystemClock.uptimeMillis()) }
+        assertEquals("the drag dropped the kept focus", r, pn.focus.row)
+        rule.onRoot().performTouchInput { up() }
+        apply()
     }
 
     @Test

@@ -305,7 +305,9 @@ fun ArtistLayer(
                         if (r < pn.count && pn.row(r) != null) {
                             valid = true
                             m.listDown()
+                            val was = pn.focus.row
                             pn.focus.set(r, pn.count, at, true)
+                            pn.focus.setUnpress(was)
                             pn.press.down(r, at)
                             pn.glow.arm(r, at)
                             m.poke()

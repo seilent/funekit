@@ -409,6 +409,35 @@ class SettingsHostTest {
     }
 
     @Test
+    fun aSettingsPivotSwipePutsBackTheRowFocus() {
+        val app = app(SettingsPage(ID, Rows(listOf(SettingPivot(OUT, listOf(choice("a"), choice("b"), choice("c"))), SettingPivot(SYS, listOf(choice("d"))))), HeaderLook.Settings), root = true)
+        val (_, m) = open(app)
+        val p = m.pivot
+        assertEquals("premise: the top row has the focus", 0, m.focusRow(p))
+        val x = page.widthPx / 2f
+        val y = px(page.board.page_contentTop, page.ppu) + m.tops(p)[1] - m.pane.px + m.heights(p)[1] / 2f
+        val step = Tok.touchSlop * page.touchPpu * 3 / 2 / PAN_STEPS
+        rule.onRoot().performTouchInput { down(Offset(x, y)) }
+        frames(1)
+        assertEquals("premise: the down moves the focus to row 1", 1, m.pane.focus.row)
+        repeat(PAN_STEPS) {
+            rule.onRoot().performTouchInput { moveBy(Offset(-step, 0f)) }
+            frames(1)
+        }
+        assertTrue("premise: the pan took the gesture", m.motion.dragging)
+        assertEquals("the take puts back row 0", 0, m.pane.focus.row)
+        assertEquals("and its key", 0, m.focusRow(p))
+        assertFalse("with no fade left", m.pane.focus.animating(rule.mainClock.currentTime))
+        rule.onRoot().performTouchInput {
+            moveTo(Offset(x - step, y))
+            up()
+        }
+        frames(OPEN_FRAMES)
+        assertEquals("premise: no switch", p, m.pivot)
+        assertEquals("the return lands on row 0", 0, m.focusRow(p))
+    }
+
+    @Test
     fun aSidewaysDragOnAPageWithNoPivotsLeavesItsRowsInPlace() {
         val id = SettingsId(PAGE)
         val app = app(SettingsPage(id, Rows(listOf(SettingPivot("", listOf(choice("a"), choice("b"))))), HeaderLook.Page), root = true)

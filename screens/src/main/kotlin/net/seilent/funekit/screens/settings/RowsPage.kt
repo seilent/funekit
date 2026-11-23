@@ -220,7 +220,9 @@ abstract class RowsPage<R : Any>(entry: Long, page: PageId) : PivotPage(entry, p
         if (r !in rows.indices) return
         lit.up()
         glow.clear()
+        val was = pane.focus.row
         setFocus(pane, rows, r, now, true)
+        pane.focus.setUnpress(was)
         if (!pressLook(rows[r])) {
             lit.drop()
             return
@@ -253,6 +255,7 @@ abstract class RowsPage<R : Any>(entry: Long, page: PageId) : PivotPage(entry, p
 
     fun afterScroll(off: Int, now: Long) {
         val pn = pane
+        pn.focus.dropUnpress()
         pn.px = off
         val rows = rows(pivot)
         val f = focusRow(pivot)
@@ -328,6 +331,16 @@ abstract class RowsPage<R : Any>(entry: Long, page: PageId) : PivotPage(entry, p
         motion.release(now)
         drags++
     }
+
+    override fun unpress(now: Long) {
+        val pn = pane
+        val rows = rows(pivot)
+        if (!pn.focus.unpress(rows.size, now)) return
+        focusEnd = now
+        pn.key = keyOf(rows[pn.focus.row])
+    }
+
+    override fun dropUnpress() = panes.values.forEach { it.focus.dropUnpress() }
 
     override fun dragX(now: Long, ppu: Float): Int = if (switching(now)) 0 else motion.dx(now, ppu)
 

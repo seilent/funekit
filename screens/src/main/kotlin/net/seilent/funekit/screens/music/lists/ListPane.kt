@@ -127,6 +127,7 @@ class ListPane(val wake: Channel<Unit> = Channel(Channel.CONFLATED)) {
     }
 
     fun afterScroll(off: Int, size: Int, now: Long) {
+        focus.dropUnpress()
         if (size == 0) return
         val r = focusAfterScroll(focus.row, size, off.toLong(), view.toLong(), pitch.toLong())
         if (r != focus.row) focus.set(r, size, now, false)
@@ -160,7 +161,9 @@ class ListPane(val wake: Channel<Unit> = Channel(Channel.CONFLATED)) {
     }
 
     fun down(r: Int, size: Int, at: Long) {
+        val was = focus.row
         focus.set(r, size, at, true)
+        focus.setUnpress(was)
         press.down(r, at)
         glow.arm(r, at)
     }

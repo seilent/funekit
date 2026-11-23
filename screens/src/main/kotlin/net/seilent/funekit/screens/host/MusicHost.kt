@@ -600,6 +600,7 @@ class MusicHost<S : Any> internal constructor(
         queueOf(stack.top)?.fade?.release(t)
         rowsOf(stack.top)?.fade?.release(t)
         menuHost.menu.lift(t)
+        for (e in models.entries) (models[e] as? PivotPage)?.dropUnpress()
     }
 
     fun skip(s: Swipe) {
