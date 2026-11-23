@@ -97,6 +97,8 @@ class AlbumGeo(val s: Scale, val rings: Boolean = true) {
     val artistBase: Int = px(Tok.npTextTop, s.stdPpu)
     val albumBase: Int = px(Tok.npAlbumBaseline, s.stdPpu)
     val pivotTop: Int = min(px(s.board.pivotTop, s.stdPpu), s.heightPx)
+    private val linesTop: Int = artistBase - Metrics.ascent(rolePx(Roles.npArtist, s, s.stdPpu))
+    private val linesBottom: Int = albumBase + Metrics.descent(rolePx(Roles.npAlbum, s, s.stdPpu))
     private val rise: Long = max(1L, kept(fx(Tok.albumArtTop) - fx(Tok.npAlbumBaseline)) - fxDiv(fxInt(Metrics.descent(rolePx(Roles.npAlbum, s, s.stdPpu))), ppu64))
 
     fun spec(): RowSpec = RowSpec(pitch, view, above, collapse = true)
@@ -139,7 +141,7 @@ class AlbumGeo(val s: Scale, val rings: Boolean = true) {
 
     fun band(liftPx: Int): Int = max(0, top - liftPx - rowsTopPx(liftPx))
 
-    val ringBand: Edges get() = Edges(0, rowsTopPx(above), s.widthPx, top)
+    val headBand: Edges get() = Edges(0, max(px(Tok.headerBand, s.stdPpu), min(linesTop, artRect(above).y0)), s.widthPx, top)
 
     fun ringAlpha(liftPx: Int): Int = if (!rings) 0 else (A256 * (fade - (liftU(liftPx) - fadeStart).coerceIn(0L, fade)) / fade).toInt()
 
@@ -148,6 +150,11 @@ class AlbumGeo(val s: Scale, val rings: Boolean = true) {
         val half = (Tok.detailBlockRing + Tok.detailRingGap) / ArtistGeo.RING_HALF
         val sx = x / s.stdPpu
         return ALBUM_RING_X.indices.lastOrNull { sx >= ALBUM_RING_X[it] - half && sx < ALBUM_RING_X[it] + half } ?: -1
+    }
+
+    fun headAt(x: Float, y: Float, liftPx: Int): Boolean {
+        val a = artRect(liftPx)
+        return (x >= a.x0 && x < a.x1 && y >= a.y0 && y < a.y1) || (x >= textClip(liftPx) && x < clipRight && y >= linesTop && y < linesBottom)
     }
 
     fun thumb(t: RowTrack): ThumbRect? {
@@ -219,6 +226,12 @@ class AlbumModel(entry: Long, val id: Long) : PageModel(entry, MusicPage.Album(i
         return SheetTarget(SheetKind.Song, r.title, Listing.AlbumTracks(id), gen, i, r.id, Kind.Song, r.id, from = SheetFrom.Album)
     }
 
+    fun albumTarget(): SheetTarget? {
+        val h = head ?: return null
+        if (gone || gen < 0) return null
+        return SheetTarget(SheetKind.Album, h.title, Listing.AlbumTracks(id), gen, pin = Kind.Album, id = id, from = SheetFrom.Album)
+    }
+
     fun rowModel(i: Int): RowModel? {
         val r = row(i) ?: return null
         return RowModel(primary = r.title, number = (i + 1).toString(), trailing = r.durationMs?.takeIf { it > 0 }?.let(::npTime).orEmpty(), accent = playing == r.id)
@@ -240,6 +253,8 @@ class AlbumModel(entry: Long, val id: Long) : PageModel(entry, MusicPage.Album(i
     fun ringA(liftPx: Int): Float = if (count == 0) 0f else (geo?.ringAlpha(liftPx) ?: 0) / A256.toFloat()
 
     fun ringAt(x: Float, y: Float): Int = if (count == 0) -1 else geo?.ringAt(x, y, track.lift, track.q) ?: -1
+
+    fun headAt(x: Float, y: Float): Boolean = geo?.headAt(x, y, track.lift) == true
 
     fun ringDown(i: Int, now: Long) {
         onRings = true

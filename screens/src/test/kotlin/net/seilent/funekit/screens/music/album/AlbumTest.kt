@@ -10,6 +10,7 @@ import org.junit.Assert.assertNull
 import kotlinx.coroutines.runBlocking
 import net.seilent.funekit.Insets
 import net.seilent.funekit.Nav
+import net.seilent.funekit.Roles
 import net.seilent.funekit.Scale
 import net.seilent.funekit.Surface
 import net.seilent.funekit.Window
@@ -17,9 +18,11 @@ import net.seilent.funekit.fxU
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.Chrome
 import net.seilent.funekit.kit.Ink
+import net.seilent.funekit.kit.Metrics
 import net.seilent.funekit.kit.Rows
 import net.seilent.funekit.kit.Word
 import net.seilent.funekit.kit.motion.Part
+import net.seilent.funekit.kit.rolePx
 import net.seilent.funekit.kit.scrollInto
 import net.seilent.funekit.kit.stack.WordSide
 import net.seilent.funekit.kit.stack.bandsOrRest
@@ -121,8 +124,6 @@ class AlbumTest {
         val m = loaded(fake(FakeSet.Main), COBALT)
         val g = m.geo!!
         assertEquals(listOf(756, 942, 150, 89, 356, 831), listOf(g.ringTop, g.top, g.ring, g.ringCx(0), g.ringCx(1), g.ringCy(0)))
-        val b = g.ringBand
-        assertEquals(listOf(0, 411, 720, 942), listOf(b.x0, b.y0, b.x1, b.y1))
         val y = g.ringCy(0).toFloat()
         for ((x, want) in listOf(1 to 0, 66 to 0, 68 to -1, 80 to -1, 82 to 1, 155 to 1, 157 to -1, 230 to -1)) {
             assertEquals("x $x u", want, m.ringAt(px(x.toFloat(), a105.stdPpu).toFloat(), y))
@@ -133,6 +134,30 @@ class AlbumTest {
         val look = m.look(0, 0L, true)
         assertEquals("the rows dim while the rings hold the focus", Tok.type_listPrimary_alphaDim, look.alpha)
         assertFalse(look.focused)
+    }
+
+    @Test
+    fun theHeadIsTheArtAndTheLinesAboveTheRings() {
+        val m = loaded(fake(FakeSet.Main), COBALT)
+        val g = m.geo!!
+        val b = g.headBand
+        assertEquals("the band starts at the header band bottom, 70 u", listOf(0, 210, 720, 942), listOf(b.x0, b.y0, b.x1, b.y1))
+        val rest = listOf(47 to 400, 48 to 400, 395 to 719, 396 to 400, 200 to 720, 400 to 342, 400 to 343, 48 to 198, 47 to 300, 671 to 300, 672 to 300)
+        assertEquals(listOf(false, true, true, false, false, true, false, true, false, true, false), rest.map { (x, y) -> g.headAt(x.toFloat(), y.toFloat(), 0) })
+        val docked = listOf(48 to 216, 206 to 374, 207 to 300, 230 to 300, 231 to 300, 100 to 375)
+        assertEquals(listOf(true, true, false, false, true, false), docked.map { (x, y) -> g.headAt(x.toFloat(), y.toFloat(), g.above) })
+    }
+
+    @Test
+    fun theHeadBandStartsAtTheHeaderBandBottom() {
+        val reach = listOf(a105, page(A105_W, A105_H, true)).map { s ->
+            val g = AlbumGeo(s)
+            val header = px(Tok.headerBand, s.stdPpu)
+            val lines = px(Tok.npTextTop, s.stdPpu) - Metrics.ascent(rolePx(Roles.npArtist, s, s.stdPpu))
+            assertTrue("large ${s.large}: the head band starts below the header band", g.headBand.y0 >= header)
+            minOf(lines, g.artRect(g.above).y0) < header
+        }
+        assertTrue("premise: the head reaches into the header band at one size, $reach", reach.any { it })
     }
 
     @Test

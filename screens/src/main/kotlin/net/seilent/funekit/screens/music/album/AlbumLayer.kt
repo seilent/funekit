@@ -287,9 +287,10 @@ fun AlbumLayer(
         }
     }
 
-    fun ringTap(): Tap {
+    fun headTap(): Tap {
         var started = false
         var i = -1
+        var head = false
         return Tap(
             onPress = { started = false },
             onCancel = {
@@ -307,10 +308,21 @@ fun AlbumLayer(
                 }
                 m.poke()
             },
+            onLong = {
+                val target = if (i >= 0 || head) m.albumTarget() else null
+                if (target != null && onSheet(target)) {
+                    m.rings.reset()
+                    m.poke()
+                    true
+                } else {
+                    false
+                }
+            },
             onAt = { o ->
                 if (!started) {
                     started = true
                     i = m.ringAt(o.x, o.y)
+                    head = i < 0 && m.headAt(o.x, o.y)
                     if (i >= 0) m.ringDown(i, now())
                     m.poke()
                 }
@@ -382,7 +394,7 @@ fun AlbumLayer(
             val (looks, lift, q) = ringRow.value
             with(draw) { rings(looks, lift, q, null, "album") }
         }
-        if (live) Box(Modifier.pxAt(geo.ringBand).tapTarget(a, ringTap()))
+        if (live) Box(Modifier.pxAt(geo.headBand).tapTarget(a, headTap()))
         val count = m.count
         val bar = listThumbOf(geo.s, geo.top, geo.bottom, count, geo.pitch, 0L)
         val len by remember(geo, m, count) { derivedStateOf { geo.thumb(m.track)?.let { it.y1 - it.y0 } } }
