@@ -95,6 +95,9 @@ class LyricsModel {
         private set
     var mode by mutableStateOf(false)
         private set
+    var want by mutableStateOf(false)
+        private set
+    internal var hand: Long? = null
     var phoneLyrics by mutableStateOf(false)
     var phoneMode by mutableStateOf(false)
         private set
@@ -170,10 +173,31 @@ class LyricsModel {
         lines = shifted
         plain = p.plain
         pending = false
+        if (track == hand && lines.isEmpty() && plain.isEmpty()) hand = null
         if (same) retimed() else changed()
     }
 
     private fun keeps(track: Long): Boolean = track == this.track && !pending
+
+    fun read(shown: Long?, phone: Boolean): Boolean = !phone && shown != null && keeps(shown)
+
+    fun timed(shown: Long?, phone: Boolean): Boolean = read(shown, phone) && lines.isNotEmpty()
+
+    fun target(shown: Long?, phone: Boolean): Boolean = want && timed(shown, phone)
+
+    internal fun wanted(on: Boolean): Boolean {
+        if (want == on) return false
+        want = on
+        return true
+    }
+
+    internal fun open(shown: Long?, variant: Boolean) {
+        hand = null
+        mode = target(shown, variant)
+        lineTrack = null
+        cut()
+        land(variant)
+    }
 
     suspend fun read(l: Lyrics, track: Long, on: CoroutineContext) {
         if (!keeps(track)) begin(track)
@@ -315,11 +339,19 @@ class LyricsModel {
         }
     }
 
+    internal fun close() {
+        hand = null
+        mode = false
+        lineTrack = null
+        cut()
+        land()
+    }
+
     internal fun seed(on: Boolean) {
         if (seeded) return
         seeded = true
-        mode = on
-        land()
+        want = on
+        open(track, false)
     }
 
     fun land(variant: Boolean = false) {

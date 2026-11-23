@@ -31,12 +31,15 @@ import net.seilent.funekit.api.Kind
 import net.seilent.funekit.api.Library
 import net.seilent.funekit.api.LibraryView
 import net.seilent.funekit.api.Listing
+import net.seilent.funekit.api.LyricCopy
+import net.seilent.funekit.api.Lyrics
 import net.seilent.funekit.api.Player
 import net.seilent.funekit.api.Row
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.MenuForm
 import net.seilent.funekit.kit.np.NpLayout
 import net.seilent.funekit.kit.motion.MoveKind
+import net.seilent.funekit.kit.motion.NpForm
 import net.seilent.funekit.kit.motion.OverKind
 import net.seilent.funekit.kit.motion.Overlay
 import net.seilent.funekit.kit.stack.Phase
@@ -81,6 +84,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.ByteArrayOutputStream
+import java.io.IOException
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -782,8 +786,8 @@ class HostTest {
                 m.lyrics.begin(1)
                 m.lyrics.load(1, "[00:01.00]one\n[00:02.00]two", 0)
                 if (mode) {
-                    m.lyrics.toggle(0)
-                    m.lyrics.land()
+                    m.lyrics.wanted(true)
+                    m.lyrics.open(1, false)
                 }
                 it.host.resetNp(listOf(TestScreen.Music(MusicEntry(it.stack.entry(), MusicPage.Hub))))
             }
@@ -1427,7 +1431,8 @@ class HostTest {
         rule.runOnIdle { app.host.showLyrics(true) }
         frames(OPEN_FRAMES)
         rule.runOnIdle {
-            assertTrue("the own mode is set", m.lyrics.mode)
+            assertTrue("the own mode is wanted", m.lyrics.want)
+            assertFalse("the own shown mode stays off", m.lyrics.mode)
             assertFalse("the phone mode stays", m.lyrics.phoneMode)
             assertTrue("no mode call reaches the app", pl.sets.isEmpty())
             assertFalse(m.lyrics.fading(rule.mainClock.currentTime))
@@ -1837,7 +1842,12 @@ class HostTest {
         }
         val ts = runBlocking { f.library.view().page(Listing.Songs, 0, ART_SONGS).rows.filter { it.art != null }.map { it.id }.take(2) }
         runBlocking { f.player.play(ts, 0, 0) }
-        val src = MusicSource(lib, f.player, f.quickplay, f.favorites, f.playlists, f.lyrics)
+        val lyrics = object : Lyrics by f.lyrics {
+            override suspend fun lyrics(track: Long): String? = LRC
+
+            override suspend fun copy(track: Long): LyricCopy? = LyricCopy(LRC, null)
+        }
+        val src = MusicSource(lib, f.player, f.quickplay, f.favorites, f.playlists, lyrics)
         return TestApp(page, np, src, Level(START, null)) { rule.mainClock.currentTime }.also {
             it.lyricsOn = true
             it.modeAtStart = true
@@ -1846,6 +1856,7 @@ class HostTest {
             it.compose(rule)
             rule.waitForIdle()
             rule.mainClock.autoAdvance = false
+            rule.waitUntil(WAIT_MS) { rule.runOnIdle { it.music.np.lyrics.timed(it.music.np.shown.track, false) } }
             rule.runOnIdle { it.host.resetNp(listOf(TestScreen.Music(MusicEntry(it.stack.entry(), MusicPage.Hub)))) }
             frames(OPEN_FRAMES)
         } to f
@@ -2300,6 +2311,268 @@ class HostTest {
         assertEquals("in a split the status row draws above the scrim in its half", half, halfOver)
     }
 
+    private fun hub(app: TestApp) = TestScreen.Music(MusicEntry(app.stack.entry(), MusicPage.Hub))
+
+    private fun reopen(app: TestApp, text: String?) {
+        rule.runOnIdle {
+            app.music.np.lyrics.load(1, text, 0)
+            app.host.resetNp(listOf(hub(app)))
+        }
+        frames(OPEN_FRAMES)
+    }
+
+    @Test
+    fun aPlainTrackOpensOnTheCoverWithTheModeWanted() {
+        val app = lyricsApp(Edit())
+        val l = app.music.np.lyrics
+        reopen(app, PLAIN)
+        assertFalse("a plain track opens on the cover", l.mode)
+        assertFalse("with no fade", rule.runOnIdle { l.fading(rule.mainClock.currentTime) })
+        assertTrue("the mode stays wanted", l.want)
+    }
+
+    @Test
+    fun aTrackWithNoLyricsOpensOnTheCover() {
+        val app = lyricsApp(Edit())
+        val l = app.music.np.lyrics
+        reopen(app, null)
+        assertFalse("a track with no lyrics opens on the cover", l.mode)
+        assertFalse("with no fade", rule.runOnIdle { l.fading(rule.mainClock.currentTime) })
+        assertTrue("the mode stays wanted", l.want)
+    }
+
+    @Test
+    fun aReopenCutsToTheTarget() {
+        val app = lyricsApp(Edit())
+        val l = app.music.np.lyrics
+        rule.runOnIdle { l.toggle(rule.mainClock.currentTime) }
+        frames(CUT_FRAMES)
+        assertFalse("premise: the fade leaves the lyrics", l.mode)
+        reopen(app, LRC)
+        assertTrue("the reopen cuts to the timed lines", l.mode)
+        assertFalse("with no fade", rule.runOnIdle { l.fading(rule.mainClock.currentTime) })
+    }
+
+    @Test
+    fun theMarkOnAPlainTrackEntersForThatTrackOnly() {
+        val app = lyricsApp(Edit(), mode = false)
+        val l = app.music.np.lyrics
+        rule.runOnIdle { l.load(1, PLAIN, 0) }
+        frames(CUT_FRAMES)
+        rule.runOnIdle { app.host.npTap(NpAct.Lyrics) }
+        frames(OPEN_FRAMES)
+        assertTrue("the mark enters the plain lyrics", l.mode)
+        assertEquals("the entry is for this track", 1L, l.hand)
+        assertTrue("the entry wants the mode", l.want)
+        reopen(app, PLAIN)
+        assertNull("a reopen ends the entry", l.hand)
+        assertFalse("the plain track opens on the cover again", l.mode)
+    }
+
+    @Test
+    fun aHandEntryLeavesWhenItsLyricsGoAndKeepsTheModeWanted() {
+        val app = lyricsApp(Edit(), mode = false)
+        val l = app.music.np.lyrics
+        rule.runOnIdle { l.load(1, PLAIN, 0) }
+        frames(CUT_FRAMES)
+        rule.runOnIdle { app.host.npTap(NpAct.Lyrics) }
+        frames(OPEN_FRAMES)
+        assertEquals("premise: a hand entry", 1L, l.hand)
+        rule.runOnIdle { l.load(1, null, 0) }
+        frames(CUT_FRAMES)
+        assertNull("the entry ends when its lyrics go", l.hand)
+        assertTrue("the mode stays wanted", l.want)
+    }
+
+    @Test
+    fun aCloseTurnsTheShownModeOffAtItsLandingAndClearsTheHand() {
+        val app = lyricsApp(Edit())
+        val l = app.music.np.lyrics
+        rule.runOnIdle {
+            l.hand = 1L
+            app.stack.leave({ app.host.isNp(it) }, app.host.popKind)
+        }
+        frames(CUT_FRAMES)
+        assertTrue("premise: the close runs", app.stack.phase != Phase.Rest)
+        assertTrue("the shown mode holds through the close", l.mode)
+        frames(2 * OPEN_FRAMES)
+        assertEquals("premise: the close has landed", Phase.Rest, app.stack.phase)
+        assertFalse("premise: now playing is gone", app.stack.pages.any { app.host.isNp(it) })
+        assertFalse("the close turns the shown mode off at its landing", l.mode)
+        assertNull("the close ends the entry", l.hand)
+    }
+
+    @Test
+    fun showLyricsWithNoLyricsWantsTheModeAndShowsTheCover() {
+        val app = lyricsApp(Edit(), mode = false)
+        val l = app.music.np.lyrics
+        rule.runOnIdle { l.load(1, null, 0) }
+        frames(CUT_FRAMES)
+        rule.runOnIdle { app.host.showLyrics(true) }
+        frames(CUT_FRAMES)
+        assertEquals("the key reports the wanted mode", listOf(true), app.modeChanges)
+        assertFalse("the cover stays", l.mode)
+        assertEquals(MODE_ON, app.toast.artist)
+        rule.runOnIdle { app.host.openVolume(rule.mainClock.currentTime) }
+        frames(OPEN_FRAMES)
+        assertEquals("premise: the plate is up", OverKind.Volume, app.stack.overlay?.kind)
+        rule.runOnIdle { app.host.npTap(NpAct.Lyrics) }
+        frames(CUT_FRAMES)
+        assertNull("the key dismisses the plate first", app.stack.overlay)
+        frames(TOAST_FRAMES)
+        assertEquals(MODE_OFF, app.toast.artist)
+        rule.runOnIdle {
+            l.load(1, LRC, 0)
+            app.host.showLyrics(true)
+        }
+        frames(OPEN_FRAMES)
+        rule.runOnIdle {
+            l.toggle(rule.mainClock.currentTime)
+            l.load(1, null, 0)
+        }
+        frames(CUT_FRAMES)
+        assertTrue("premise: the fade back runs on a track with no lyrics", rule.runOnIdle { l.fading(rule.mainClock.currentTime) && !l.mode })
+        rule.runOnIdle { app.host.showLyrics(true) }
+        frames(CUT_FRAMES)
+        assertFalse("the key lands the fade and keeps the cover", l.mode)
+        assertFalse("no fade runs after it", rule.runOnIdle { l.fading(rule.mainClock.currentTime) })
+        frames(TOAST_FRAMES)
+        assertEquals("and toasts", MODE_ON, app.toast.artist)
+    }
+
+    @Test
+    fun backInLyricsTurnsTheWantOff() {
+        val app = lyricsApp(Edit())
+        val l = app.music.np.lyrics
+        assertTrue("premise: the mode is wanted", l.want)
+        rule.runOnIdle { app.host.npBack() }
+        frames(OPEN_FRAMES)
+        assertFalse("back in lyrics turns the want off", l.want)
+        assertEquals(listOf(false), app.modeChanges)
+        rule.runOnIdle { app.host.showLyrics(true) }
+        frames(CUT_FRAMES)
+        assertTrue("premise: the key runs the fade back in", rule.runOnIdle { l.fading(rule.mainClock.currentTime) && l.mode })
+        rule.runOnIdle { app.host.npBack() }
+        frames(CUT_FRAMES)
+        assertFalse("back during the fade in turns the want off", l.want)
+        assertEquals(listOf(false, true, false), app.modeChanges)
+    }
+
+    @Test
+    fun aPlayOpenOpensOnThePlayedTracksLyrics() {
+        val (app, _) = followApp(ArtGate(), listOf(LRC, PLAIN), root = true)
+        val l = app.music.np.lyrics
+        rule.runOnIdle { app.host.resetNp(listOf(hub(app))) }
+        frames(OPEN_FRAMES)
+        assertTrue("premise: the timed track shows its lyrics", rule.runOnIdle { l.mode })
+        rule.runOnIdle { app.host.npTap(NpAct.Queue) }
+        frames(OPEN_FRAMES)
+        assertFalse("premise: the queue is over now playing", app.host.isNp(app.stack.top!!))
+        rule.runOnIdle { app.host.playOpen(NpForm.Page, keep = true, cut = false) { s -> s.player.next(); true } }
+        frames(OPEN_FRAMES)
+        landed(app)
+        assertTrue("premise: the play pops back to now playing", app.host.isNp(app.stack.top!!))
+        assertFalse("the play opens on the played track, a plain track's cover", rule.runOnIdle { l.mode })
+        assertFalse("with no fade", rule.runOnIdle { l.fading(rule.mainClock.currentTime) })
+    }
+
+    @Test
+    fun aResetDuringTheCloseOpensTheNewPageInItsLyrics() {
+        val app = lyricsApp(Edit())
+        val l = app.music.np.lyrics
+        rule.runOnIdle { app.stack.leave({ app.host.isNp(it) }, app.host.popKind) }
+        frames(CUT_FRAMES)
+        assertTrue("premise: the close runs", app.stack.phase != Phase.Rest)
+        rule.runOnIdle { app.host.resetNp(listOf(hub(app))) }
+        frames(OPEN_FRAMES)
+        assertTrue("premise: now playing is the top again", app.host.isNp(app.stack.top!!))
+        assertTrue("the reset opens the new page in its lyrics", l.mode)
+        assertFalse("with no fade", rule.runOnIdle { l.fading(rule.mainClock.currentTime) })
+    }
+
+    @Test
+    fun showLyricsInLyricsWithAPendingReadWantsTheModeAndStays() {
+        val app = lyricsApp(Edit(), mode = false)
+        val l = app.music.np.lyrics
+        rule.runOnIdle { l.begin(1) }
+        frames(CUT_FRAMES)
+        rule.runOnIdle { l.toggle(rule.mainClock.currentTime) }
+        frames(FADE_FRAMES)
+        assertTrue("premise: the lyrics show unwanted while the read is pending", rule.runOnIdle { l.mode && !l.want && l.pending })
+        rule.runOnIdle { app.host.showLyrics(true) }
+        frames(CUT_FRAMES)
+        assertTrue("the key keeps the lyrics", l.mode)
+        assertTrue("and wants the mode", l.want)
+        assertEquals(listOf(true), app.modeChanges)
+    }
+
+    @Test
+    fun aBackInThePhoneVariantReportsNoOwnMode() {
+        val pl = Copy()
+        val app = phoneApp(pl)
+        val l = app.music.np.lyrics
+        rule.runOnIdle { l.wanted(true) }
+        rule.runOnIdle { app.host.npTap(NpAct.Lyrics) }
+        frames(FADE_FRAMES)
+        assertTrue("premise: the phone lyrics show", l.phoneMode)
+        rule.runOnIdle { app.host.npBack() }
+        frames(FADE_FRAMES)
+        assertTrue("a back in the variant reports no own mode", app.modeChanges.isEmpty())
+        assertTrue("and keeps the own mode wanted", l.want)
+    }
+
+    @Test
+    fun aResetUnderNowPlayingInLyricsKeepsTheMode() {
+        val app = lyricsApp(Edit())
+        val l = app.music.np.lyrics
+        rule.runOnIdle { app.host.resetNp(listOf(hub(app))) }
+        frames(OPEN_FRAMES)
+        assertTrue("a reset keeps the lyrics", l.mode)
+        assertFalse("with no fade", rule.runOnIdle { l.fading(rule.mainClock.currentTime) })
+    }
+
+    private class ArtGate {
+        var hold: CompletableDeferred<Unit>? = null
+        var fails = false
+    }
+
+    private fun followApp(gate: ArtGate, texts: List<String?>, root: Boolean = false): Pair<TestApp, Fake> {
+        val f = testFake(FakeSet.Demo)
+        val cover = png(Color.BLUE)
+        fun painted(v: LibraryView): LibraryView = object : LibraryView by v {
+            override suspend fun art(ref: ArtRef, maxSide: Int): ByteArray {
+                gate.hold?.await()
+                if (gate.fails) throw IOException("art read failed")
+                return cover
+            }
+        }
+        val lib = object : Library by f.library {
+            override fun view(): LibraryView = painted(f.library.view())
+
+            override fun view(generation: Long): LibraryView = painted(f.library.view(generation))
+        }
+        val ts = runBlocking { f.library.view().page(Listing.Songs, 0, ART_SONGS).rows.filter { it.art != null }.map { it.id }.take(texts.size) }
+        val byTrack = ts.zip(texts).toMap()
+        val lyrics = object : Lyrics by f.lyrics {
+            override suspend fun lyrics(track: Long): String? = byTrack[track]
+
+            override suspend fun copy(track: Long): LyricCopy? = byTrack[track]?.let { LyricCopy(it, null) }
+        }
+        runBlocking { f.player.play(ts, 0, 0) }
+        val src = MusicSource(lib, f.player, f.quickplay, f.favorites, f.playlists, lyrics)
+        return TestApp(page, np, src, Level(START, null)) { rule.mainClock.currentTime }.also {
+            it.lyricsOn = true
+            it.modeAtStart = true
+            it.music.np.workContext = Dispatchers.Unconfined
+            it.compose(rule, root)
+            rule.waitForIdle()
+            rule.mainClock.autoAdvance = false
+            rule.runOnIdle { it.host.resetNp(listOf(hub(it))) }
+            frames(OPEN_FRAMES)
+            frames(FADE_FRAMES)
+        } to f
+    }
+
     @Test
     fun twoKeysInOneIdleBlockOpenOnePlateAndStepTwice() {
         val level = Level(START, null)
@@ -2371,6 +2644,9 @@ class HostTest {
         private const val TITLE_DX = 20f
         private const val HALF_BATTERY = 50
         private const val LOW_BATTERY = 20
+        private const val PLAIN = "a plain line"
+        private const val MODE_ON = "lyrics mode on"
+        private const val MODE_OFF = "lyrics mode off"
         private const val TITLE_DY = 4f
     }
 }

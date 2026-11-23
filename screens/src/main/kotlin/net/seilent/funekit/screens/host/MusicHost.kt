@@ -205,6 +205,8 @@ import net.seilent.funekit.screens.settings.valueSheet
 private const val OVER = 1
 private const val LEAD_MS = 17L
 private const val MS_PER_S = 1000f
+private const val MODE_ON = "lyrics mode on"
+private const val MODE_OFF = "lyrics mode off"
 
 data class Shown(val visible: Boolean, val frozen: Boolean)
 
@@ -490,6 +492,7 @@ class MusicHost<S : Any> internal constructor(
     fun enter(s: S) {
         val e = entryOf(s)
         if (e != null) {
+            if (e.page == MusicPage.NowPlaying) np.lyrics.open(np.shown.track, np.variant)
             types.enter(models.enter(e.entry, e.page), e)
             return
         }
@@ -523,6 +526,7 @@ class MusicHost<S : Any> internal constructor(
     }
 
     fun drop(s: S) {
+        if (isNp(s) && stack.pages.none(::isNp)) np.lyrics.close()
         if (fieldRun?.owner == s) fieldEnd()
         pageEntry(s)?.let { models.drop(it) }
     }
@@ -908,6 +912,7 @@ class MusicHost<S : Any> internal constructor(
         val t = now()
         movePaint.npForm = form
         np.resetFocus(t)
+        np.lyrics.open(np.shown.track, np.variant)
         env.poke()
         val h = stack.popToNp(kept, t, NowPlayingModel.HOLD_CAP)
         opened = h
@@ -940,7 +945,12 @@ class MusicHost<S : Any> internal constructor(
         if (h != null) opened = h
         scope.launch(FailFast) {
             val ok = quiet { play(s) } == true && s.player.state.value.let { it.track != null || it.service != null }
-            if (ok) h?.done() else h?.fail()
+            if (ok) {
+                h?.done()
+                if (h != null) np.lyrics.open(s.player.state.value.track, np.variant)
+            } else {
+                h?.fail()
+            }
         }
         return true
     }
@@ -1723,45 +1733,71 @@ class MusicHost<S : Any> internal constructor(
             if (l.on(np.variant)) {
                 np.keyed(t)
                 l.reverse(t, np.variant)
-                syncMode()
+                syncMode(false)
                 return true
             }
             l.land(np.variant)
         }
         if (!l.shown(np.variant)) return false
         np.keyed(t)
+        l.hand = null
         l.toggle(t, np.variant)
-        syncMode()
+        syncMode(false)
         return true
     }
 
-    private fun syncMode() {
+    private fun syncMode(want: Boolean) {
         val pl = app.phoneLyrics
         if (np.variant && pl != null) {
             pl.setMode(np.lyrics.phoneMode)
             np.lyrics.echo(pl.mode.value, true)
             return
         }
-        app.lyricsModeChanged(np.lyrics.mode)
+        if (np.lyrics.wanted(want)) app.lyricsModeChanged(want)
     }
 
-    private fun lyricsToggle() {
+    private fun lyricsToggle(to: Boolean? = null) {
         val l = np.lyrics
         val t = now()
         np.keyed(t)
-        if (l.fading(t)) l.reverse(t, np.variant) else l.toggle(t, np.variant)
-        syncMode()
+        if (np.variant && l.phoneLyrics) {
+            if (l.fading(t)) l.reverse(t, true) else l.toggle(t, true)
+            syncMode(l.want)
+            return
+        }
+        val shown = np.shown.track
+        if (l.fading(t) && !l.mode && !l.has(shown)) l.land()
+        if (stack.overlay === volumeOverlay) stack.cutOverlay(volumeOverlay)
+        var want = to ?: !l.want
+        when {
+            l.fading(t) -> {
+                l.reverse(t)
+                want = l.mode
+                if (want) l.hand = if (l.timed(shown, false)) null else l.track
+            }
+            l.mode -> {
+                l.toggle(t)
+                l.hand = null
+                want = false
+            }
+            l.has(shown) -> {
+                l.toggle(t)
+                l.hand = if (l.timed(shown, false)) null else l.track
+                want = true
+            }
+            else -> toast.show(t, if (want) MODE_ON else MODE_OFF, "")
+        }
+        syncMode(want)
     }
 
     fun showLyrics(on: Boolean) {
         val l = np.lyrics
-        if (!np.lyricsView || l.mode == on) return
-        if (np.variant && l.phoneLyrics) {
-            l.turn(on, false)
-            app.lyricsModeChanged(on)
-        } else {
-            lyricsToggle()
+        if (!np.lyricsView) return
+        if (np.variant || l.mode == on) {
+            if (l.wanted(on)) app.lyricsModeChanged(on)
+            return
         }
+        lyricsToggle(on)
     }
 
     val fieldSheet: FieldSheet? get() = fieldRun?.sheet
