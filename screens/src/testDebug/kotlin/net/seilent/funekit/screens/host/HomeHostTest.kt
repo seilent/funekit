@@ -724,6 +724,76 @@ class HomeHostTest {
         assertFalse(qp.pan.shown)
     }
 
+    private fun shown(): HomeShown {
+        val o = stack.overlay?.kind
+        return state.shown(stack.top == null, stack.phase == Phase.Rest, o == OverKind.Sheet || o == OverKind.Dlg)
+    }
+
+    @Test
+    fun aPanShowsThePanCanvasAndTheFrontAddsTheFront() {
+        launcher(qpSource(songData(songs(TILES))))
+        val rest = shown()
+        assertTrue("home at rest shows the home layer", rest.home)
+        assertFalse(rest.pan)
+        assertFalse(rest.front)
+        tapPeek()
+        frame()
+        assertTrue("premise: the pan runs toward the front", state.pan.front && !state.pan.still)
+        val moving = shown()
+        assertFalse(moving.home)
+        assertTrue("a pan shows the pan canvas", moving.pan)
+        assertFalse("a moving pan adds no front", moving.front)
+        settle()
+        assertTrue("premise: quickplay is in front", state.pan.front && state.pan.still)
+        val front = shown()
+        assertFalse(front.home)
+        assertTrue(front.pan)
+        assertTrue("the settled pan adds the front", front.front)
+        assertFalse(front.frontFrozen)
+    }
+
+    @Test
+    fun aSheetOverTheQuickplayFrontFreezesTheFrontAndKeepsItShown() {
+        front(songData(songs(TILES)))
+        assertFalse("the front at rest is live", shown().frontFrozen)
+        val sheet = Overlay(OverKind.Sheet)
+        rule.runOnUiThread { stack.open(sheet) }
+        until("premise: the sheet opens") { stack.overlay === sheet }
+        val opening = shown()
+        assertTrue("the front stays shown under the opening sheet", opening.front)
+        assertTrue("the opening sheet freezes the front", opening.frontFrozen)
+        settle()
+        assertSame("premise: the sheet stays open", sheet, stack.overlay)
+        val open = shown()
+        assertTrue(open.front)
+        assertTrue("the open sheet keeps the front frozen", open.frontFrozen)
+        rule.runOnUiThread { stack.close() }
+        until("premise: the sheet closes") { stack.overlay == null }
+        val closed = shown()
+        assertTrue(closed.front)
+        assertFalse("the closed sheet leaves the front live", closed.frontFrozen)
+    }
+
+    @Test
+    fun aDialogOverAMusicPageLeavesTheFrontUnfrozen() {
+        front(songData(songs(TILES)))
+        rule.runOnUiThread {
+            stack.push(TestScreen.Music(MusicEntry(stack.entry(), MusicPage.Hub)), MoveKind.T2)
+            Snapshot.sendApplyNotifications()
+        }
+        until("premise: the push lands") { stack.phase == Phase.Rest && stack.top != null }
+        assertTrue("premise: the pane stays in front under the page", state.pan.front)
+        val dialog = Overlay(OverKind.Dlg)
+        rule.runOnUiThread { stack.open(dialog) }
+        until("premise: the dialog opens") { stack.overlay === dialog }
+        val opening = shown()
+        assertFalse("no front over a music page", opening.front)
+        assertFalse("a dialog over a music page leaves the front unfrozen", opening.frontFrozen)
+        settle()
+        assertSame("premise: the dialog stays open", dialog, stack.overlay)
+        assertFalse(shown().frontFrozen)
+    }
+
     private fun drawn(s: HomeState): IntArray {
         val l = s.qpLayout
         val img = ImageBitmap(l.s.widthPx, l.s.heightPx)
