@@ -31,6 +31,7 @@ import net.seilent.funekit.kit.overlay.volumeInk
 import net.seilent.funekit.kit.overlay.volumePlate
 import net.seilent.funekit.kit.roleStyle
 import net.seilent.funekit.kit.statusLine
+import net.seilent.funekit.kit.statusRow
 import net.seilent.funekit.kit.toast
 import net.seilent.funekit.kit.toastSurface
 import net.seilent.funekit.kit.word
@@ -44,6 +45,7 @@ import net.seilent.funekit.screens.music.nowplaying.NpMeasure
 import net.seilent.funekit.screens.music.nowplaying.NpShown
 import net.seilent.funekit.screens.music.nowplaying.npFrame
 import net.seilent.funekit.screens.music.nowplaying.npPage
+import net.seilent.funekit.screens.music.nowplaying.npStatusAlpha
 import net.seilent.funekit.screens.music.nowplaying.npTimes
 import net.seilent.funekit.screens.music.pivots
 import net.seilent.funekit.sheet.Dev
@@ -123,6 +125,7 @@ class VolumeSheetTest {
         return sc.tile(FOLDER, dev, kind, h.s, listOf(note, NO_REF), rec) {
             page(h, at)
             volumePlate(h.hud, v, ink, glow, at)
+            h.m?.let { statusRow(status(h.s), sc.accent, false, npStatusAlpha(it, at)) }
         }
     }
 

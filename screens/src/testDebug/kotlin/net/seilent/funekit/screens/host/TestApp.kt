@@ -103,6 +103,7 @@ class TestApp(page: Scale, np: Scale, src: MusicSource?, private val level: Volu
     var source by mutableStateOf(src)
     var np by mutableStateOf(np)
     var split by mutableStateOf<NpSplit?>(null)
+    var status by mutableStateOf(StatusState("", -1, false, Play.None, false, -1, -1))
     var accentOff by mutableStateOf(true)
     var settingsList by mutableStateOf<List<SettingsPage>>(emptyList())
     var eqList by mutableStateOf<List<EqPage>>(emptyList())
@@ -270,7 +271,6 @@ class TestApp(page: Scale, np: Scale, src: MusicSource?, private val level: Volu
         }
         h.StackClock { MoveKind.T4n }
         if (hs != null) BackHandler(enabled = stack.top == null && hs.front) { hs.back() }
-        val status = StatusState("", -1, false, Play.None, false, -1, -1)
         if (!root) {
             Box(Modifier.pxSize(page.widthPx, page.heightPx).arbiter(a, Swipes(false, false, false, { false }, { _, _ -> }))) {
                 h.MusicPages(emptyMap(), status)

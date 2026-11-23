@@ -16,7 +16,9 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.referentialEqualityPolicy
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -37,6 +39,7 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import net.seilent.funekit.Case
@@ -81,6 +84,7 @@ import net.seilent.funekit.kit.pxSize
 import net.seilent.funekit.kit.rememberChrome
 import net.seilent.funekit.kit.StatusInk
 import net.seilent.funekit.kit.rememberStatusInk
+import net.seilent.funekit.kit.statusRow
 import net.seilent.funekit.kit.roleStyle
 import net.seilent.funekit.kit.stack.MovePaint
 import net.seilent.funekit.kit.stack.MoveStatus
@@ -142,6 +146,8 @@ import net.seilent.funekit.screens.music.nowplaying.NpPicture
 import net.seilent.funekit.screens.music.nowplaying.NpSplit
 import net.seilent.funekit.screens.music.nowplaying.OffsetSheet
 import net.seilent.funekit.screens.music.nowplaying.holding
+import net.seilent.funekit.screens.music.nowplaying.npHalf
+import net.seilent.funekit.screens.music.nowplaying.npStatusAlpha
 import net.seilent.funekit.screens.music.nowplaying.npFlat
 import net.seilent.funekit.screens.music.nowplaying.npNanosAt
 import net.seilent.funekit.screens.music.overlay.ADD_TO_PLAYLIST
@@ -290,7 +296,7 @@ class MusicHost<S : Any> internal constructor(
     private var phone: PhoneSession? = null
     private var appPop: (Turn<S>) -> MoveKind = { MoveKind.T4n }
     private var npHides = true
-    private var npStatusShown: StatusInk? = null
+    private var npStatusShown: StatusInk? by mutableStateOf(null, referentialEqualityPolicy())
     private var npPrimed: Long? = null
     internal var jumpOwner: S? by mutableStateOf(null)
     internal var colFireAt: S? by mutableStateOf(null)
@@ -2031,6 +2037,24 @@ class MusicHost<S : Any> internal constructor(
     }
 
     @Composable
+    private fun NpStrip(ink: StatusInk) {
+        val s = env.np
+        val h = npHalves.holding(NpPart.Status)
+        var at by remember { mutableLongStateOf(now()) }
+        LaunchedEffect(np) {
+            while (true) {
+                withFrameMillis { at = it }
+                if (!np.idleDone(at)) continue
+                val seen = np.revision
+                snapshotFlow { np.revision }.first { it != seen }
+            }
+        }
+        Canvas(Modifier.offset { IntOffset(env.page.left - s.left, 0) }.pxSize(s.widthPx, s.heightPx)) {
+            npHalf(h) { statusRow(ink, env.accent, env.accentOff, npStatusAlpha(np, at)) }
+        }
+    }
+
+    @Composable
     fun VolumeHost() {
         if (stack.overlay?.kind != OverKind.Volume) return
         val s = env.np
@@ -2087,6 +2111,8 @@ class MusicHost<S : Any> internal constructor(
             },
         ) {
             VolumeLayer(hud, s)
+            val strip = npStatusShown
+            if (strip != null && stack.top?.let(::isNp) == true) NpStrip(strip)
             if (blocks) Box(Modifier.pxAt(Edges(0, 0, s.widthPx, px(s.h - Tok.gesture_bottom, s.ppu))).tapTarget(env.a, solo, OVER + 1))
         }
     }

@@ -42,6 +42,13 @@ import net.seilent.funekit.kit.motion.Overlay
 import net.seilent.funekit.kit.stack.Phase
 import net.seilent.funekit.kit.touch.Swipe
 import net.seilent.funekit.px
+import net.seilent.funekit.kit.Play
+import net.seilent.funekit.kit.StatusState
+import net.seilent.funekit.kit.npStatus
+import net.seilent.funekit.screens.music.nowplaying.NpHalf
+import net.seilent.funekit.screens.music.nowplaying.NpSplit
+import net.seilent.funekit.screens.music.nowplaying.npFlat
+import net.seilent.funekit.screens.posture.Fold
 import net.seilent.funekit.scale
 import net.seilent.funekit.fake.Fake
 import net.seilent.funekit.fake.FakeSet
@@ -61,6 +68,7 @@ import net.seilent.funekit.screens.music.nowplaying.PhoneTrack
 import net.seilent.funekit.screens.music.testFake
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
@@ -2233,6 +2241,65 @@ class HostTest {
         assertFalse("the drag's end still ends the seek", m.seeking)
     }
 
+    private fun rowInk(rest: Bitmap, plate: Bitmap, h: NpHalf = npFlat(NpLayout(np))): Pair<List<Int>, List<Int>> {
+        val s = h.g.s
+        val box = npStatus(s)
+        val ox = np.left - page.left + h.x
+        val oy = h.y - h.dy
+        val shown = mutableListOf<Int>()
+        val over = mutableListOf<Int>()
+        for (y in oy until oy + px(box.top + box.height, s.ppu)) for (x in ox + px(box.left, s.ppu) until ox + s.widthPx) {
+            val c = rest.getPixel(x, y)
+            if (c != Color.WHITE) continue
+            shown += c
+            over += plate.getPixel(x, y)
+        }
+        return shown to over
+    }
+
+    private fun plateOver(app: TestApp, h: NpHalf = npFlat(NpLayout(np))): Pair<List<Int>, List<Int>> {
+        val rest = shot()
+        rule.runOnIdle { app.host.openVolume(rule.mainClock.currentTime) }
+        frames(OPEN_FRAMES)
+        assertEquals("premise: the plate is up", OverKind.Volume, app.stack.overlay?.kind)
+        val plate = shot()
+        rule.runOnIdle { app.stack.close() }
+        frames(OPEN_FRAMES)
+        return rowInk(rest, plate, h)
+    }
+
+    @Test
+    fun theStatusRowDrawsAboveTheVolumePlatesScrim() {
+        val app = npApp(root = true)
+        rule.runOnIdle { app.status = StatusState("", HALF_BATTERY, false, Play.Playing, false, -1, -1) }
+        frames(CUT_FRAMES)
+        val (flat, flatOver) = plateOver(app)
+        assertTrue("premise: the status row inks", flat.isNotEmpty())
+        assertEquals("the status row draws undimmed above the plate's scrim", flat, flatOver)
+        val halfState = StatusState("", HALF_BATTERY, false, Play.Playing, false, -1, -1)
+        val halfRest = shot()
+        rule.runOnIdle { app.status = StatusState("", LOW_BATTERY, false, Play.Playing, false, -1, -1) }
+        frames(CUT_FRAMES)
+        val (fuller, lowRest) = rowInk(halfRest, shot())
+        assertNotEquals("premise: the half row inks where the low row does not", fuller, lowRest)
+        rule.runOnIdle { app.host.openVolume(rule.mainClock.currentTime) }
+        frames(OPEN_FRAMES)
+        rule.runOnIdle { app.status = halfState }
+        frames(CUT_FRAMES)
+        val (stepped, steppedOver) = rowInk(halfRest, shot())
+        rule.runOnIdle { app.stack.close() }
+        frames(OPEN_FRAMES)
+        assertTrue("premise: the stepped row inks", stepped.isNotEmpty())
+        assertEquals("the strip above the plate takes a status step", stepped, steppedOver)
+        val split = NpSplit.of(window, Nav.None, false, Fold(H / 2, H / 2), np.left)
+        assertNotNull("premise: the fold splits now playing", split)
+        rule.runOnUiThread { app.split = split }
+        frames(OPEN_FRAMES)
+        val (half, halfOver) = plateOver(app, split!!.upper)
+        assertTrue("premise: the split status row inks", half.isNotEmpty())
+        assertEquals("in a split the status row draws above the scrim in its half", half, halfOver)
+    }
+
     @Test
     fun twoKeysInOneIdleBlockOpenOnePlateAndStepTwice() {
         val level = Level(START, null)
@@ -2302,6 +2369,8 @@ class HostTest {
         private const val RING_Y = 398f
         private const val LRC = "[00:01.00]one\n[00:02.00]two"
         private const val TITLE_DX = 20f
+        private const val HALF_BATTERY = 50
+        private const val LOW_BATTERY = 20
         private const val TITLE_DY = 4f
     }
 }
