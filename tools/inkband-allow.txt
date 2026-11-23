@@ -378,13 +378,13 @@ r1/press-0-volexit-down no funeOS reference in the set
 r1/press-0-volexit-held no funeOS reference in the set
 r1/press-0-volexit-up no funeOS reference in the set
 r1/track-toast-500 no funeOS reference in the set
-v1/eq-parametric v0.4.2 eq: and eqrows: not captured
-v1/eq-graphic v0.4.2 eq: and eqrows: not captured
-v1/eq-preamp-edit v0.4.2 eq: and eqrows: not captured
-r1/eq-parametric v0.4.2 eq: and eqrows: not captured
-r1/eq-graphic v0.4.2 eq: and eqrows: not captured
-r1/eq-preamp-edit v0.4.2 eq: and eqrows: not captured
-a105/eq-parametric v0.4.2 eq: and eqrows: not captured
-a105/eq-graphic v0.4.2 eq: and eqrows: not captured
-a105/eq-preamp-edit v0.4.2 eq: and eqrows: not captured
-a105/eq-parametric-large v0.4.2 eq: and eqrows: not captured
+v1/eq-parametric no funeOS reference in the set: the v0.4.3 EQ shots are eq-500 and eqrows kinds, none of them this scene
+v1/eq-graphic no funeOS reference in the set: the v0.4.3 EQ shots are eq-500 and eqrows kinds, none of them this scene
+v1/eq-preamp-edit no funeOS reference in the set: the v0.4.3 EQ shots are eq-500 and eqrows kinds, none of them this scene
+r1/eq-parametric no funeOS reference in the set: the v0.4.3 EQ shots are eq-500 and eqrows kinds, none of them this scene
+r1/eq-graphic no funeOS reference in the set: the v0.4.3 EQ shots are eq-500 and eqrows kinds, none of them this scene
+r1/eq-preamp-edit no funeOS reference in the set: the v0.4.3 EQ shots are eq-500 and eqrows kinds, none of them this scene
+a105/eq-parametric no funeOS reference in the set: the v0.4.3 EQ shots are eq-500 and eqrows kinds, none of them this scene
+a105/eq-graphic no funeOS reference in the set: the v0.4.3 EQ shots are eq-500 and eqrows kinds, none of them this scene
+a105/eq-preamp-edit no funeOS reference in the set: the v0.4.3 EQ shots are eq-500 and eqrows kinds, none of them this scene
+a105/eq-parametric-large no funeOS reference in the set: the v0.4.3 EQ shots are eq-500 and eqrows kinds, none of them this scene
