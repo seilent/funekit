@@ -271,6 +271,7 @@ fun NpLyrics(m: LyricsModel, np: NowPlayingModel, g: NpLayout, covers: Covers?, 
         LyricsInk(t, g, measurer, fonts, density, covers, m.lines.map { it.text }, shown.title, shown.next, m.plain)
     }
     val inkNow by rememberUpdatedState(ink)
+    DisposableEffect(m) { onDispose { m.unseen() } }
     LaunchedEffect(m, np, touch) {
         while (true) {
             withFrameMillis { at ->
@@ -285,7 +286,7 @@ fun NpLyrics(m: LyricsModel, np: NowPlayingModel, g: NpLayout, covers: Covers?, 
             }
             if (m.moving(frame)) continue
             val seen = m.revision to np.revision
-            val due = m.wakeAt(lyricAt(np, frame), frame)
+            val due = m.rest(lyricAt(np, frame), frame)
             val wait = suspend { snapshotFlow { m.revision to np.revision }.first { it != seen } }
             if (due < 0) wait() else withTimeoutOrNull(max(1L, due - frame)) { wait() }
         }

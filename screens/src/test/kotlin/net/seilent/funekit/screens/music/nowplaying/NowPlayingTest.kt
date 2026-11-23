@@ -1,9 +1,14 @@
 package net.seilent.funekit.screens.music.nowplaying
 
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.snapshots.Snapshot
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.yield
 import net.seilent.funekit.Insets
 import net.seilent.funekit.Nav
 import net.seilent.funekit.Surface
@@ -733,6 +738,20 @@ class NowPlayingTest {
         assertFalse(m.lyricsShown())
         m.down(a105, 80f, 200f, 10)
         assertEquals(NpAct.Controls, m.tap(a105, 20))
+    }
+
+    @Test
+    fun lyricsShownIsSnapshotStateForTheApp() = runBlocking {
+        val m = NowPlayingModel()
+        val seen = mutableListOf<Boolean>()
+        val watch = launch(start = CoroutineStart.UNDISPATCHED) { snapshotFlow { m.lyricsShown() }.collect { seen += it } }
+        for (step in listOf({ m.lyricsView = true }, { m.lyrics.toggle(0) }, { m.lyricsView = false })) {
+            step()
+            Snapshot.sendApplyNotifications()
+            repeat(2) { yield() }
+        }
+        watch.cancel()
+        assertEquals(listOf(false, true, false), seen)
     }
 
     private class Text(private val text: String?) : Lyrics {

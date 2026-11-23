@@ -3,6 +3,7 @@ package net.seilent.funekit.screens.music.nowplaying
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -22,6 +23,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 import net.seilent.funekit.fxU
 import net.seilent.funekit.kit.Covers
+import net.seilent.funekit.kit.Edges
 import net.seilent.funekit.kit.StatusInk
 import net.seilent.funekit.kit.np.NpLayout
 import net.seilent.funekit.kit.pxSize
@@ -33,6 +35,12 @@ import net.seilent.funekit.kit.touch.Tap
 import net.seilent.funekit.kit.touch.tapTarget
 
 private const val HIDDEN = -1
+
+private fun seekEdges(h: NpHalf): Edges {
+    val r = h.g.seekBand
+    val top = h.y - h.dy
+    return Edges(h.x + r.x0, maxOf(h.y, top + r.y0), h.x + r.x1, minOf(h.y + h.clip, top + r.y1))
+}
 
 class NpTouch(private val m: NowPlayingModel, private val halves: List<NpHalf>, private val act: (NpAct) -> Unit, private val seek: (Long) -> Unit) {
     private var fresh = false
@@ -131,6 +139,13 @@ fun NowPlayingLayer(
     val act by rememberUpdatedState(onAct)
     val seek by rememberUpdatedState(onSeek)
     val touch = remember(m, halves) { NpTouch(m, halves, { act(it) }, { seek(it) }) }
+    val liveNow by rememberUpdatedState(live)
+    val halvesNow by rememberUpdatedState(halves)
+    val owner = remember { Any() }
+    LaunchedEffect(m, owner) {
+        snapshotFlow { if (liveNow && !m.lyricsShown() && m.seekShown()) seekEdges(halvesNow.holding(NpPart.Times)) else null }.collect { m.band(owner, it) }
+    }
+    DisposableEffect(m, owner) { onDispose { m.band(owner, null) } }
     PageLayer(visible, frozen, Modifier.pxSize(s.widthPx, s.heightPx)) { covered ->
         if (backdrop != null) {
             NpBackdropLayer(backdrop, now, dim = { t -> fxU(m.lyrics.dim(t)) }, dimming = { t -> m.lyrics.dimming(t) }, watch = { m.lyrics.revision })

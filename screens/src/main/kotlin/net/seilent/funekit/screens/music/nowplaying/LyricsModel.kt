@@ -2,6 +2,7 @@ package net.seilent.funekit.screens.music.nowplaying
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.withContext
@@ -109,6 +110,10 @@ class LyricsModel {
         private set
     var slideD = 0L
         private set
+    var nextDue by mutableLongStateOf(-1L)
+        private set
+    var slideEnd by mutableLongStateOf(-1L)
+        private set
     private var slide = false
 
     val plainTrack = RowTrack(1, 0)
@@ -129,9 +134,14 @@ class LyricsModel {
         revision++
     }
 
+    private fun cut() {
+        slide = false
+        slideEnd = -1
+    }
+
     private fun changed() {
         gen++
-        slide = false
+        cut()
         plainTrack.at(0)
         bump()
     }
@@ -192,7 +202,7 @@ class LyricsModel {
 
     private fun retimed() {
         lineTrack = null
-        slide = false
+        cut()
         gen++
         bump()
     }
@@ -230,11 +240,11 @@ class LyricsModel {
     }
 
     fun step(now: Long, at: LyricAt) {
-        if (slide && now - slideAt >= slideD) slide = false
+        if (slide && now - slideAt >= slideD) cut()
         val fresh = at.shown != lineTrack
         val line = index(at)
         if (!fresh && line == lineShown) return
-        slide = false
+        cut()
         val drawn = !fresh && !pending && track != null && track == slideTrack && gen == slideGen
         if (drawn && line >= 0 && line == lineShown + 1) {
             val stamp = lines[line].ms
@@ -246,10 +256,12 @@ class LyricsModel {
                 slideAt = now - late
                 slideD = d
                 slide = true
+                slideEnd = slideAt + slideD
             }
         }
         lineTrack = at.shown
         lineShown = line
+        nextDue = due(at, now, now)
         bump()
     }
 
@@ -274,7 +286,7 @@ class LyricsModel {
     internal fun turn(on: Boolean, variant: Boolean) {
         if (variant && phoneLyrics) phoneMode = on else mode = on
         lineTrack = null
-        slide = false
+        cut()
         bump()
     }
 
@@ -282,7 +294,7 @@ class LyricsModel {
         if (on == phoneMode) return
         phoneMode = on
         lineTrack = null
-        slide = false
+        cut()
         if (variant) land(true) else bump()
     }
 
@@ -347,6 +359,16 @@ class LyricsModel {
         val d = due(at, now, now)
         val f = plainFade.wakeAt(now)
         return if (d < 0) f else if (f < 0) d else minOf(d, f)
+    }
+
+    fun rest(at: LyricAt, now: Long): Long {
+        nextDue = due(at, now, now)
+        return wakeAt(at, now)
+    }
+
+    fun unseen() {
+        nextDue = -1
+        cut()
     }
 }
 

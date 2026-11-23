@@ -1,5 +1,6 @@
 package net.seilent.funekit.screens.music.nowplaying
 
+import androidx.compose.runtime.SnapshotMutationPolicy
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -7,6 +8,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
 import kotlinx.coroutines.Dispatchers
 import net.seilent.funekit.gen.Tok
+import net.seilent.funekit.kit.Edges
 import net.seilent.funekit.kit.motion.Curves
 import net.seilent.funekit.kit.motion.Press
 import net.seilent.funekit.kit.np.NP_BACK
@@ -47,6 +49,10 @@ private fun progress(e: Long, d: Long): Float = if (d > 0) (e.toFloat() / d).coe
 
 private fun lerp(a: Float, b: Float, t: Float): Float = a + (b - a) * t
 
+private val sameEdges = object : SnapshotMutationPolicy<Edges?> {
+    override fun equivalent(a: Edges?, b: Edges?): Boolean = if (a == null || b == null) a === b else a.same(b)
+}
+
 class NowPlayingModel {
     var shown by mutableStateOf(NpShown.None)
         private set
@@ -71,6 +77,9 @@ class NowPlayingModel {
         private set
     var phoneShuffle by mutableStateOf(false)
     var phoneRepeat by mutableStateOf(false)
+    var seekBand by mutableStateOf<Edges?>(null, sameEdges)
+        private set
+    private var bandOwner: Any? = null
 
     val variant: Boolean get() = phone != null
     val lyrics = LyricsModel()
@@ -331,7 +340,14 @@ class NowPlayingModel {
         bump()
     }
 
-    private fun seekable(g: NpLayout, x: Float, y: Float): Boolean = !variant && shown.track != null && shown.durationMs > 0 && g.seekHit(x, y)
+    fun seekShown(): Boolean = !variant && shown.track != null && shown.durationMs > 0
+
+    private fun seekable(g: NpLayout, x: Float, y: Float): Boolean = seekShown() && g.seekHit(x, y)
+
+    internal fun band(owner: Any, e: Edges?) {
+        if (e != null) bandOwner = owner else if (owner !== bandOwner) return
+        seekBand = e
+    }
 
     fun seekMove(g: NpLayout, x: Float) {
         if (!seeking) return

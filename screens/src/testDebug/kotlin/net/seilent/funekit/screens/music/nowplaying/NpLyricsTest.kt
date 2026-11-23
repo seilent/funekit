@@ -2,7 +2,10 @@ package net.seilent.funekit.screens.music.nowplaying
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -84,6 +87,29 @@ class NpLyricsTest {
     }
 
     @Test
+    fun leavingTheLyricsViewClearsTheDueAndTheSlideEnd() {
+        val np = np(0)
+        val m = model("[00:01.00]one\n[00:02.00]two\n[00:03.00]three")
+        var on by mutableStateOf(true)
+        rule.mainClock.autoAdvance = false
+        np.feed(PlayerState(queueSize = 1, index = 0, track = 1, playing = true, anchor = Anchor(HALF_LINE, RATE, npNanosAt(rule.mainClock.currentTime), true, DURATION)))
+        rule.setContent {
+            val a = remember { Arbiter(s) }
+            Box(Modifier.fillMaxSize().arbiter(a, Swipes(edges = false, bottom = false, turn = false, acts = { false }, onSwipe = { _, _ -> }))) {
+                if (on) NpLyrics(m, np, g, null, a, { rule.mainClock.currentTime })
+            }
+        }
+        rule.mainClock.advanceTimeByFrame()
+        rule.mainClock.advanceTimeByFrame()
+        assertTrue("premise: the view names the next line", m.nextDue >= 0)
+        on = false
+        Snapshot.sendApplyNotifications()
+        rule.mainClock.advanceTimeByFrame()
+        assertEquals(-1L, m.nextDue)
+        assertEquals(-1L, m.slideEnd)
+    }
+
+    @Test
     fun aDragOverPlainLyricsScrollsThem() {
         val m = model((1..PLAIN_LINES).joinToString("\n") { "plain line $it" })
         compose(m, np(0))
@@ -104,6 +130,7 @@ class NpLyricsTest {
 
     companion object {
         private const val RATE = 1000
+        private const val HALF_LINE = 1500L
         private const val DURATION = 180000L
         private const val FRAME = 16L
         private const val PLAIN_LINES = 40

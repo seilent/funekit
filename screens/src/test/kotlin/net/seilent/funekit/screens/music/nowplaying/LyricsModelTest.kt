@@ -156,6 +156,35 @@ class LyricsModelTest {
     }
 
     @Test
+    fun theNextDueIsSetAtEachRestAndAtTheLineMove() {
+        val m = loaded()
+        m.toggle(0)
+        assertEquals(-1L, m.nextDue)
+        assertEquals(10_600L, m.rest(at(1400), 10_000))
+        assertEquals(10_600L, m.nextDue)
+        m.view(10_600, at(2000))
+        assertEquals(11_600L, m.nextDue)
+        m.rest(at(2000, running = false), 10_700)
+        assertEquals(-1L, m.nextDue)
+    }
+
+    @Test
+    fun theSlideEndIsSetWhenASlideStartsAndClearedWhenItEndsOrIsCut() {
+        val m = loaded()
+        m.view(10_000, at(1100))
+        m.view(10_016, at(2050))
+        val end = 10_016 - 50 + Tok.motion_lyricSlide.toLong()
+        assertEquals(end, m.slideEnd)
+        m.view(end, at(2900))
+        assertEquals("premise: still line 1", 1, m.lineShown)
+        assertEquals("the slide's end clears it", -1L, m.slideEnd)
+        m.view(end + 100, at(3050))
+        assertTrue("premise: a new slide", m.slideEnd >= 0)
+        m.retime(1, 300)
+        assertEquals("a retime cuts the slide", -1L, m.slideEnd)
+    }
+
+    @Test
     fun theLyricsFadeRunsTheVariantFadeOutThenInAndAReverseRunsItBack() {
         val f = Tok.motion_variantFade.toLong()
         val m = loaded()

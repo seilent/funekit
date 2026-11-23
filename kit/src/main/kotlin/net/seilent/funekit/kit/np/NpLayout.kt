@@ -56,6 +56,8 @@ class NpLayout(val s: Scale, place: NpRingPlace = NpRingPlace.AboveBar) {
         NpRect(artX, y0, artX + artSide, y0 + px(Tok.npBarHeight, p))
     }
 
+    val seekBand: NpRect = NpRect(px(Tok.npSeekBandX0, p), px(b.npProgressY, p), px(b.npSeekBandX1, p), px(b.npSeekBandBottom, p))
+
     val timeBase: Int = px(b.npProgressY + if (s.large) Tok.npTimeBaselineLarge else Tok.npTimeBaseline, p)
     val timeX64: Int = pen64(Tok.npArtX, p)
     val timeRight64: Int = pen64(Tok.npArtX + b.npArt, p)
