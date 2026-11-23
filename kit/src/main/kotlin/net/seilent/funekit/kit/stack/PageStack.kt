@@ -130,6 +130,8 @@ class PageStack<P : Any>(
 
     val taken: Boolean get() = overlay != null || opening != null
 
+    fun holds(o: Overlay): Boolean = opening === o
+
     val canBack: Boolean get() = pages.isNotEmpty() || overlay != null || phase != Phase.Rest
 
     val armed: Boolean

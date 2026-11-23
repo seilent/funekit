@@ -85,6 +85,12 @@ class HostTest {
     private val page = scale(window, Nav.None, Surface.Page, false)
     private val np = scale(window, Nav.None, Surface.NowPlaying, false)
     private val hudAt = Offset(Tok.canvasW / 2 * np.ppu + (np.left - page.left), MID_U * np.ppu)
+    private val plusAt = Offset(Tok.canvasW / 2 * np.ppu + (np.left - page.left), np.board.vol_plusY * np.ppu)
+    private val passAt = Offset(Tok.canvasW / 2 * np.ppu + (np.left - page.left), (np.h - Tok.gesture_bottom / 2) * np.ppu)
+    private val titleAt = Tok.npTextX + TITLE_DX to np.board.npTitleY - TITLE_DY
+    private val seekAt = (Tok.npSeekBandX0 + np.board.npSeekBandX1) / 2 to (np.board.npProgressY + np.board.npSeekBandBottom) / 2
+    private val idleFrames = ((NowPlayingModel.IDLE + NowPlayingModel.IDLE_FADE) / FRAME_MS + 2).toInt()
+    private val idleFadeFrames = (NowPlayingModel.IDLE_FADE / FRAME_MS + 2).toInt()
 
     private class Level(var pct: Int, private val cap: Int?) : VolumeLevel {
         val sets = mutableListOf<Int>()
@@ -1958,6 +1964,167 @@ class HostTest {
         assertSame(next, app.host.npBackdrop.shown)
     }
 
+    private fun npApp(level: VolumeLevel = Level(START, null), root: Boolean = false): TestApp = TestApp(page, np, null, level) { rule.mainClock.currentTime }.also {
+        it.compose(rule, root)
+        rule.waitForIdle()
+        rule.mainClock.autoAdvance = false
+        rule.runOnIdle {
+            it.music.np.sync(NpShown.of(listOf(song(1))), 0)
+            it.host.resetNp(listOf(TestScreen.Music(MusicEntry(it.stack.entry(), MusicPage.Hub))))
+        }
+        frames(OPEN_FRAMES)
+    }
+
+    private fun npDown(app: TestApp, at: Pair<Float, Float>) = rule.runOnIdle { app.music.np.down(NpLayout(np), at.first, at.second, rule.mainClock.currentTime) }
+
+    private fun idleAlpha(app: TestApp): Float = rule.runOnIdle { app.music.np.idleAlpha(rule.mainClock.currentTime) }
+
+    @Test
+    fun aVolumeKeyOnNowPlayingWakesItsIdlePage() {
+        val app = npApp(root = true)
+        frames(idleFrames)
+        assertEquals("premise: the page is idle", Tok.motion_idleAlpha, idleAlpha(app), 0.001f)
+        val at = rule.runOnIdle { rule.mainClock.currentTime.also { app.host.volPress(1) } }
+        frames(idleFadeFrames)
+        assertEquals("the key wakes the page", 1f, idleAlpha(app), 0f)
+        assertEquals("the key restarts the idle wait", at + NowPlayingModel.IDLE, app.music.np.idleWake())
+    }
+
+    @Test
+    fun aVolumeKeyOnNowPlayingDropsASeekAndTheTitleFocus() {
+        val app = npApp()
+        val m = app.music.np
+        npDown(app, titleAt)
+        assertTrue("premise: the title down focuses it", m.titleFocus)
+        rule.runOnIdle { app.host.volPress(1) }
+        frames(OPEN_FRAMES)
+        assertFalse("the key clears the title focus", m.titleFocus)
+        assertEquals("premise: the plate is up", OverKind.Volume, app.stack.overlay?.kind)
+        npDown(app, seekAt)
+        assertTrue("premise: the seek band down seeks", m.seeking)
+        rule.runOnIdle { app.host.volPress(1) }
+        assertFalse("the key drops the seek", m.seeking)
+    }
+
+    @Test
+    fun aTouchOnThePlateWakesNowPlayingAndKeepsItsFocus() {
+        val level = Level(START, null)
+        val app = npApp(level, root = true)
+        val m = app.music.np
+        npDown(app, titleAt)
+        rule.runOnIdle { m.tap(NpLayout(np), rule.mainClock.currentTime) }
+        frames(idleFrames)
+        assertEquals("premise: the page is idle", Tok.motion_idleAlpha, idleAlpha(app), 0.001f)
+        rule.runOnIdle { app.host.openVolume(rule.mainClock.currentTime) }
+        frames(OPEN_FRAMES)
+        assertTrue("premise: the title keeps its focus under the plate", m.titleFocus)
+        rule.onRoot().performTouchInput {
+            down(plusAt)
+            up()
+        }
+        frames(idleFadeFrames)
+        assertEquals("the plus steps the level", START + STEP, level.pct)
+        assertEquals("a plate touch wakes now playing", 1f, idleAlpha(app), 0f)
+        assertTrue("a plate touch keeps the title focus", m.titleFocus)
+    }
+
+    @Test
+    fun aVolumeKeyUnderASheetOnNowPlayingDoesNothing() {
+        val level = Level(START, null)
+        val app = npApp(level)
+        rule.runOnIdle { app.stack.open(Overlay(OverKind.Sheet)) }
+        frames(OPEN_FRAMES)
+        assertEquals("premise: a sheet is up", OverKind.Sheet, app.stack.overlay?.kind)
+        rule.runOnIdle { app.host.volPress(1) }
+        frames(OPEN_FRAMES)
+        assertEquals("the key under a sheet steps nothing", START, level.pct)
+        assertEquals("no plate opens over the sheet", OverKind.Sheet, app.stack.overlay?.kind)
+    }
+
+    @Test
+    fun aVolumeKeyDuringAPageMoveDoesNothing() {
+        val level = Level(START, null)
+        val app = app(level)
+        rule.runOnIdle { app.stack.push(TestScreen.Music(MusicEntry(app.stack.entry(), MusicPage.Hub)), MoveKind.T2) }
+        frames(OPEN_FRAMES)
+        rule.runOnIdle { app.stack.push(TestScreen.Music(MusicEntry(app.stack.entry(), MusicPage.Album(ALBUM))), MoveKind.T2) }
+        frames(CUT_FRAMES)
+        assertTrue("premise: the push runs", app.stack.phase != Phase.Rest)
+        rule.runOnIdle { app.host.volPress(1) }
+        frames(OPEN_FRAMES)
+        assertEquals("a key during a push steps nothing", START, level.pct)
+        rule.runOnIdle {
+            app.music.np.sync(NpShown.of(listOf(song(1))), rule.mainClock.currentTime)
+            app.host.openNowPlaying()
+        }
+        frames(CUT_FRAMES)
+        assertEquals("premise: the turn into now playing runs", MoveKind.T7, app.stack.turn?.kind)
+        rule.runOnIdle { app.host.volPress(1) }
+        frames(OPEN_FRAMES)
+        assertEquals("a key during the turn into now playing steps", START + STEP, level.pct)
+    }
+
+    @Test
+    fun aKeyDuringALyricsFadeOpensThePlateWhenTheFadeEnds() {
+        val app = lyricsApp(Edit())
+        val m = app.music.np
+        rule.runOnIdle { app.host.npBack() }
+        frames(CUT_FRAMES)
+        assertTrue("premise: the lyrics fade runs", rule.runOnIdle { m.lyrics.fading(rule.mainClock.currentTime) })
+        rule.runOnIdle { app.host.volPress(1) }
+        frames(CUT_FRAMES)
+        npDown(app, titleAt)
+        var n = 0
+        while (rule.runOnIdle { m.lyrics.fading(rule.mainClock.currentTime) } && n < FADE_FRAMES) {
+            assertNull("no plate during the fade", app.stack.overlay)
+            frames(1)
+            n++
+        }
+        frames(OPEN_FRAMES)
+        assertEquals("the plate at the fade's end", OverKind.Volume, app.stack.overlay?.kind)
+        assertEquals("the open drops the touch down during the fade", NpAct.None, rule.runOnIdle { m.tap(NpLayout(np), rule.mainClock.currentTime) })
+    }
+
+    @Test
+    fun aPlatePassDownWakesNowPlaying() {
+        val app = npApp(root = true)
+        frames(idleFrames)
+        assertEquals("premise: the page is idle", Tok.motion_idleAlpha, idleAlpha(app), 0.001f)
+        rule.runOnIdle { app.host.openVolume(rule.mainClock.currentTime) }
+        frames(OPEN_FRAMES)
+        assertEquals("premise: the plate is up", OverKind.Volume, app.stack.overlay?.kind)
+        rule.onRoot().performTouchInput { down(passAt) }
+        frames(idleFadeFrames)
+        assertEquals("the passed down wakes now playing", 1f, idleAlpha(app), 0f)
+        rule.onRoot().performTouchInput { up() }
+        frames(CUT_FRAMES)
+    }
+
+    @Test
+    fun twoKeysInOneIdleBlockOpenOnePlateAndStepTwice() {
+        val level = Level(START, null)
+        val app = npApp(level)
+        rule.runOnIdle {
+            app.host.volPress(1)
+            app.host.volPress(1)
+        }
+        frames(OPEN_FRAMES)
+        assertEquals("the keys open the plate", OverKind.Volume, app.stack.overlay?.kind)
+        assertEquals("both keys step", START + 2 * STEP, level.pct)
+    }
+
+    @Test
+    fun twoKeysInsideThePlatesOpenBothStep() {
+        val level = Level(START, null)
+        val app = npApp(level)
+        rule.runOnIdle { app.host.volPress(1) }
+        frames(1)
+        assertTrue("premise: the plate's open runs at rest", app.stack.moving && app.stack.phase == Phase.Rest)
+        rule.runOnIdle { app.host.volPress(1) }
+        frames(OPEN_FRAMES)
+        assertEquals("both keys step", START + 2 * STEP, level.pct)
+    }
+
     companion object {
         private const val W = 720
         private const val H = 1280
@@ -2001,5 +2168,7 @@ class HostTest {
         private const val RING_ONE_X = 120f
         private const val RING_Y = 398f
         private const val LRC = "[00:01.00]one\n[00:02.00]two"
+        private const val TITLE_DX = 20f
+        private const val TITLE_DY = 4f
     }
 }

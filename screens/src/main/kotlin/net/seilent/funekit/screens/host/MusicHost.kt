@@ -790,8 +790,10 @@ class MusicHost<S : Any> internal constructor(
         stack.reset(under + app.screen(musicEntry(stack.entry(), MusicPage.NowPlaying, MoveKind.T7, entryOf(under.lastOrNull()), models)))
     }
 
+    private fun npFading(t: Long): Boolean = stack.overlay == null && stack.top?.let(::isNp) == true && np.lyrics.fading(t)
+
     fun openVolume(t: Long) {
-        if (stack.phase != Phase.Rest || homeBusy(t)) {
+        if (stack.phase != Phase.Rest || homeBusy(t) || npFading(t)) {
             volDue = true
             return
         }
@@ -807,6 +809,7 @@ class MusicHost<S : Any> internal constructor(
             val e = pageEntry(top)
             if (e != null) models[e]?.lists?.forEach { it.cancel() } else app.cancel(top)
             toast.cancel(t)
+            if (top?.let(::isNp) == true) np.cancelTouch()
             stack.open(volumeOverlay, hides = false, covers = false, onOpen = ::show)
             return
         }
@@ -814,10 +817,25 @@ class MusicHost<S : Any> internal constructor(
     }
 
     fun volPress(d: Int) {
+        val o = stack.overlay
+        if (o != null && o !== volumeOverlay) return
+        if (holding() && !stack.holds(volumeOverlay)) return
+        val t = now()
+        val k = stack.turn?.kind
+        if (stack.phase != Phase.Rest && k != MoveKind.T7 && k != MoveKind.T8 && !homeBusy(t)) return
+        if (stack.phase == Phase.Rest && stack.top?.let(::isNp) == true) np.keyed(t)
+        volStep(d)
+    }
+
+    private fun volStep(d: Int) {
         openVolume(now())
         scope.launch(FailFast) {
             if (quiet { volume.step(d) } != null) openVolume(now())
         }
+    }
+
+    private fun plateTouched() {
+        if (stack.phase == Phase.Rest && stack.top?.let(::isNp) == true) np.touched(now())
     }
 
     private fun volSeek() {
@@ -830,8 +848,8 @@ class MusicHost<S : Any> internal constructor(
     private fun volAct(act: VolumeHud.Act) {
         val s = src
         when (act) {
-            VolumeHud.Act.Plus -> volPress(1)
-            VolumeHud.Act.Minus -> volPress(-1)
+            VolumeHud.Act.Plus -> volStep(1)
+            VolumeHud.Act.Minus -> volStep(-1)
             VolumeHud.Act.Prev, VolumeHud.Act.Next -> scope.launch(FailFast) { quiet { npSkip(if (act == VolumeHud.Act.Next) 1 else -1, np, s, phone) } }
             VolumeHud.Act.Ring -> scope.launch(FailFast) {
                 quiet {
@@ -1346,7 +1364,7 @@ class MusicHost<S : Any> internal constructor(
         }
         LaunchedEffect(volDue, stack.phase) {
             if (!volDue || stack.phase != Phase.Rest) return@LaunchedEffect
-            while (homeBusy(now())) withFrameMillis { }
+            while (homeBusy(now()) || npFading(now())) withFrameMillis { }
             volDue = false
             if (stack.overlay == null) openVolume(now())
         }
@@ -2031,6 +2049,7 @@ class MusicHost<S : Any> internal constructor(
                         stack.cut()
                         return@awaitEachGesture
                     }
+                    plateTouched()
                     d.consume()
                     var ended = false
                     try {
@@ -2040,6 +2059,7 @@ class MusicHost<S : Any> internal constructor(
                             c.consume()
                             val (x, y) = u(c.position)
                             hud.setStep(volume.stepPct())
+                            plateTouched()
                             if (!c.pressed) {
                                 ended = true
                                 volAct(hud.up(now(), x, y))

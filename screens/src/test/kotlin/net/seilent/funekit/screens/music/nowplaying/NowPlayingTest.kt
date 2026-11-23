@@ -15,6 +15,7 @@ import net.seilent.funekit.Surface
 import net.seilent.funekit.Window
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.np.NP_BACK
+import net.seilent.funekit.kit.np.NP_HEART
 import net.seilent.funekit.kit.np.NP_MARK
 import net.seilent.funekit.kit.np.NpLayout
 import net.seilent.funekit.kit.np.NpRingPlace
@@ -216,6 +217,16 @@ class NowPlayingTest {
         assertEquals(NpAct.Back, m.tap(a105, 70))
         m.down(a105, 80f, 200f, 80)
         assertEquals(NpAct.Controls, m.tap(a105, 90))
+    }
+
+    @Test
+    fun aKeyDropsThePressAtOnceAndTheUpTakesNoAct() {
+        val m = NowPlayingModel()
+        m.sync(shown(1), 0)
+        m.down(a105, 207f, 398f, 0)
+        m.keyed(40)
+        assertEquals("the key drops the heart press at once", 1f, m.press[NP_HEART].scale(40f), 0f)
+        assertEquals(NpAct.None, m.tap(a105, 40))
     }
 
     @Test

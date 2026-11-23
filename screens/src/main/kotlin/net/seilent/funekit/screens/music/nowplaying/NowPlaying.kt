@@ -227,6 +227,27 @@ class NowPlayingModel {
         bump()
     }
 
+    fun cancelTouch() {
+        for (p in press) p.drop()
+        touchDown = false
+        seeking = false
+        if (slide.target != null) {
+            slide.touch = false
+            slide.armed = false
+            slide.live = false
+            slide.locked = false
+        } else {
+            slide = NpSlide()
+        }
+        bump()
+    }
+
+    fun keyed(now: Long) {
+        touched(now)
+        cancelTouch()
+        clearTitleFocus()
+    }
+
     fun clear() {
         phoneIs(null)
         state = PlayerState()
