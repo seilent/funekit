@@ -94,10 +94,13 @@ class S4MotionSheetTest {
 
     private fun navT4Rules(d: Dev, ms: Int): List<Pair<String, String>> = when {
         d == sc.a105 && ms >= NAV_T4_REST -> listOf(HUB_THUMB_END to ARTIST_ROWS)
+        d == sc.a105 && ms >= T4_THUMB -> listOf(ARRIVE_THUMB to ARTIST_ROWS)
         d == sc.r1 && ms == NAV_T4_R1_GROUND -> listOf(ARRIVE_DIVIDER to R1_GROUND)
         d == sc.r1 && ms == NAV_T4_R1_FADE -> listOf(LEAVE_RING0 to LEAVE_FADE, LEAVE_GLYPH0 to LEAVE_FADE)
         else -> emptyList()
     }
+
+    private fun t4Rules(d: Dev, ms: Int): List<Pair<String, String>> = if (d == sc.a105 && ms >= T4_THUMB) listOf(ARRIVE_THUMB to ARTIST_ROWS) else emptyList()
 
     private fun t5Rules(d: Dev, ms: Int): List<Pair<String, String>> = if (d == sc.a105 && ms == T5_LEAD_SHOT) listOf(PAGE_THUMB to T5_LEAD) else emptyList()
 
@@ -114,10 +117,10 @@ class S4MotionSheetTest {
                 scene(sc.r1, off, series("t3", listOf(100), SELECT), FIRST_ARTIST) { artistTo(it) } +
                 scene(sc.v1, off, series("t3", listOf(0, 17, 100, 167, 283, 417, 433), SELECT, rules = ::v1T3Rules, funeos = { it >= V1_T3_ARRIVED }), FIRST_ARTIST) { artistTo(it) })
         write("t4", "T4 from the artist page back to the hub (funeOS t4, back at 4920).",
-            scene(a, off, series("t4", listOf(50, 183, 250, 333, 517), BACK), FIRST_ARTIST) { r -> artistTo(r).also { it += BACK to { r.back() } } })
-        val t4 = listOf(100, 200, 400).map { Shot("t4-$it", BACK + it) }
+            scene(a, off, series("t4", listOf(50, 183, 250, 333, 517), BACK, rules = { t4Rules(a, it) }), FIRST_ARTIST) { r -> artistTo(r).also { it += BACK to { r.back() } } })
+        fun t4(d: Dev) = listOf(100, 200, 400).map { Shot("t4-$it", BACK + it, rules = t4Rules(d, it)) }
         write("t4-static", "T4 from the artist page back to the hub at 100, 200 and 400 ms.",
-            listOf(sc.r1, a, sc.v1).flatMap { d -> scene(d, Look(), t4, FIRST_ARTIST) { r -> artistTo(r).also { it += BACK to { r.back() } } } })
+            listOf(sc.r1, a, sc.v1).flatMap { d -> scene(d, Look(), t4(d), FIRST_ARTIST) { r -> artistTo(r).also { it += BACK to { r.back() } } } })
         fun navT4(d: Dev) = (0..NAV_T4_LAST step NAV_T4_STEP).map { Shot("navbar-t4-$it", BACK + it, rules = navT4Rules(d, it)) }
         write("navbar-t4", "T4 back to the hub with NAV BAR ON on a Buttons window.",
             listOf(sc.r1, a).flatMap { d -> scene(d, Look(nav = Nav.Buttons), navT4(d), FIRST_ARTIST) { r -> artistTo(r).also { it += BACK to { r.back() } } } })
@@ -167,7 +170,7 @@ class S4MotionSheetTest {
         write("albumx", "A tap on the albums header pops album detail with T4m (funeOS albumx:500).",
             boards.flatMap { d -> scene(d, Look(), listOf(Shot("albumx-500", HEADER_TAP + X_SHOT + 500)), FIRST_ALBUM) { r -> albumTo(r).also { header(r, it) } } })
         write("artistx", "A tap on the artists header pops the artist page with T4 (funeOS artistx:150 and :500).",
-            boards.flatMap { d -> scene(d, Look(), listOf(150, 500).map { Shot("artistx-$it", HEADER_TAP + X_SHOT + it) }, FIRST_ARTIST) { r -> artistTo(r).also { header(r, it) } } })
+            boards.flatMap { d -> scene(d, Look(), listOf(150, 500).map { Shot("artistx-$it", HEADER_TAP + X_SHOT + it, rules = t4Rules(d, it)) }, FIRST_ARTIST) { r -> artistTo(r).also { header(r, it) } } })
         write("added", "The add ring selected on the artist page and its add toast (funeOS added:500).",
             boards.flatMap { d ->
                 scene(d, Look(), listOf(Shot("added-500", HEADER_TAP + ADD_SELECT + 500)), MUKA_NOTE) { r ->
@@ -310,7 +313,9 @@ class S4MotionSheetTest {
         private const val HUB_THUMB_END = "page.thumb.y472"
         private const val ARRIVE_DIVIDER = "arrive.row0.tile"
         private const val STRIP_AA = "the kit draws the leaving layer at a fractional scale and offset, so the V1 1 px divider border spreads over 2 px (t3-17 at x 40: 46 and 80 levels where funeOS keeps one px at 107; t3-100: 57 and 35 against 66) and its peak falls under funeOS's"
-        private const val ARTIST_ROWS = "the Demo ARTISTS list holds 72 rows (50 artists under 22 letters) against funeOS's 75, so at the 812 px NAV BAR ON view the thumb is 125 px against funeOS's 123 (thumb_of) and its last part ends 2 px lower"
+        private const val ARTIST_ROWS = "the Demo ARTISTS list holds 73 rows against funeOS's 75, so at the 165 px pitch the thumb is 140 px against funeOS's 138 at the 920 px view and 125 against 123 at the 812 px NAV BAR ON view (funeOS player/ui/scrollbar.cpp thumb_of :79-88, v0.4.3), and its last part ends 2 px lower"
+        private const val ARRIVE_THUMB = "arrive.thumb."
+        private const val T4_THUMB = 333
         private const val R1_GROUND = "the R1 reference is RGB565: its accent ground steps from 41 to 33 at y 316 where the kit's is a gradient at 38 and 37, so against the color.bg reference of the arriving # tile (border alpha 0.146, half contrast 17.4 levels) the measured ground masks every box row in the kit and 76 of 92 in funeOS, while the border reads 65 over 38 here and 66 over 41 there"
         private const val NAV_T4_R1_FADE = 160
         private const val T5_LEAD_SHOT = 150

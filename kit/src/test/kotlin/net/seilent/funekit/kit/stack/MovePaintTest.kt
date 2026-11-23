@@ -1752,15 +1752,14 @@ class MovePaintTest {
     }
 
     @Test
-    fun aReopenedPageThumbHoldsTheValueAtTheTurnStartThroughTheMove() {
+    fun anArrivingThumbShowsFromTheSwap() {
         for (seen in listOf(-3000L, -1700L)) {
             val fade = seenAt(seen)
             val r = Run(forms = zoomForms, bars = mapOf(B to (bar to fade)), onSwap = { _, at -> fade.show(at) })
             r.stack.push(B, MoveKind.T2)
             r.stack.frame(0L)
-            val v = fade.at(0L)
-            if (seen == -3000L) assertEquals(0f, v, 0f) else assertEquals(0.0625f, v, 1e-4f)
-            assertEquals(v, r.paint.ctx.arriveThumb, 0f)
+            if (seen == -3000L) assertEquals(0f, fade.at(0L), 0f) else assertEquals(0.0625f, fade.at(0L), 1e-4f)
+            assertEquals(1f, r.paint.ctx.arriveThumb, 0f)
             val end = r.move.endAt
             var t = 0L
             var shown = 0
@@ -1770,17 +1769,16 @@ class MovePaintTest {
                 r.draw(t)
                 val rows = r.arrive()
                 val d = thumbOf(r, "arrive")
-                if (v == 0f || rows.isEmpty()) {
+                if (rows.isEmpty()) {
                     assertNull("no thumb at $t", d)
                 } else {
                     shown++
-                    assertEquals("thumb at $t", rows[0].alpha * v, requireNotNull(d).alpha, 1e-4f)
+                    assertEquals("thumb at $t", rows[0].alpha, requireNotNull(d).alpha, 1e-4f)
                 }
                 t += FRAME
             }
             assertTrue(t >= r.move.swapAt)
-            assertEquals(1f, fade.at(r.move.swapAt), 0f)
-            if (seen == -1700L) assertTrue(shown > 0)
+            assertTrue("$seen", shown > 0)
         }
     }
 
@@ -1806,22 +1804,22 @@ class MovePaintTest {
     }
 
     @Test
-    fun aCarriedT4hKeepsTheThumbValueOfTheT2Start() {
+    fun aCarriedT4hKeepsTheArrivingThumbOfTheT2() {
         val fade = seenAt(-1700L)
-        val v = fade.at(0L)
+        assertTrue("premise: the thumb has begun to fade at the T2 start", fade.at(0L) < 1f)
         val r = Run(forms = zoomForms, bars = mapOf(B to (bar to fade)), onSwap = { _, at -> fade.show(at) })
         retargeted(r, Tok.motion_t2Swap.toLong() + ENTER)
         assertEquals(1f, fade.at(r.move.t0), 0f)
         val c = r.paint.ctx
         assertEquals(0L, c.thumbAt)
-        assertEquals(v, c.leaveThumb, 0f)
+        assertEquals("the T2's arriving thumb, shown from its swap", 1f, c.leaveThumb, 0f)
         r.draw(r.move.t0 + 1)
         val rows = leaveOf(r)
         val d = requireNotNull(thumbOf(r, "leave"))
         assertTrue(rows[0].k < 1f)
         assertEquals(1f, d.k, 0f)
         assertEquals(bar.y0.toFloat(), d.top, 0f)
-        assertEquals(rows[0].alpha * v, d.alpha, 1e-4f)
+        assertEquals(rows[0].alpha, d.alpha, 1e-4f)
     }
 
     private fun slid(r: Run, swap: Boolean = false) {
@@ -1922,10 +1920,10 @@ class MovePaintTest {
     @Test
     fun theT2wLastFrameIsTheRestFrame() {
         val fade = seenAt(-1700L)
-        val r = Run(wraps = mapOf(B to { p: PagePaint -> Painted(p) }), bars = mapOf(B to (bar to fade)))
-        slid(r)
-        val v = r.paint.ctx.arriveThumb
-        assertEquals(fade.at(0L), v, 0f)
+        assertTrue(fade.at(0L) < 1f)
+        val r = Run(wraps = mapOf(B to { p: PagePaint -> Painted(p) }), bars = mapOf(B to (bar to fade)), onSwap = { _, at -> fade.show(at) })
+        slid(r, swap = true)
+        assertEquals(1f, r.paint.ctx.arriveThumb, 0f)
         val at = r.move.endAt
         assertEquals(800L, at)
         val moved = bitmapOf(s.widthPx, s.heightPx) { with(r.paint) { drawMove(at, null) } }
@@ -1933,7 +1931,7 @@ class MovePaintTest {
         val rest = bitmapOf(s.widthPx, s.heightPx) {
             with(page) {
                 ground(1f, 0f)
-                content(Content.Rest, at, null, "arrive", v)
+                content(Content.Rest, at, null, "arrive", page.thumbFade(at))
             }
             chrome(chrome, at)
         }
@@ -2156,13 +2154,14 @@ class MovePaintTest {
     }
 
     @Test
-    fun aT4RowPopDrawsTheArrivingThumbAtItsTurnStartValue() {
+    fun aT4RowPopDrawsTheArrivingThumbShownFromTheSwap() {
         val fade = ThumbFade()
         val r = rowRun("Drawer", mutableListOf(), bars = mapOf("a" to (bar to fade)))
         val t0 = rowPopped(r)
-        assertEquals("a thumb not shown since the push reads 0 at the turn start", 0f, r.paint.ctx.arriveThumb, 0f)
+        assertEquals("a thumb not shown since the push reads 0 at the turn start", 0f, fade.at(t0), 0f)
+        assertEquals(1f, r.paint.ctx.arriveThumb, 0f)
         r.draw(t0 + THUMB_AT)
-        assertTrue("no arriving thumb ink while the row pop runs", r.drawn.none { it.name.endsWith(".thumb") && it.alpha > 0f })
+        assertTrue("the arriving thumb inks while the row pop runs", r.drawn.any { it.name.endsWith(".thumb") && it.alpha > 0f })
     }
 
     private data class Quad4(val dt: Long, val s: Float, val x: Float, val y: Float)

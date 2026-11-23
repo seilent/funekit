@@ -806,7 +806,7 @@ fun moveCtx(t: Turn<*>, home: HomeSide?, from: PageSide?, to: PageSide?, forms: 
         e, k, home, from, to, rows, ya, word, look, item,
         zoom, toChrome?.headerRestX() ?: 0f, to?.let { headerBase(it.scale) } ?: 0f, toChrome?.headerAlpha ?: 0f,
         morph, morphLook, leaveBands = leaveBands, leaveWord = leaveWord, xa = xa, cut = cut, leaveAt = leaveAt, leaveCut = leaveCut, leaveAnchor = anchor,
-        thumbAt = t.at, leaveThumb = from?.paint?.thumbFade(t.at) ?: 0f, arriveThumb = to?.paint?.thumbFade(t.at) ?: 0f,
+        thumbAt = t.at, leaveThumb = from?.paint?.thumbFade(t.at) ?: 0f, arriveThumb = if (to != null) 1f else 0f,
         face = face, album = album, tileSide = tileSide, barX = ts?.let { barOf(it) } ?: Float.MAX_VALUE,
         leaveBarX = leaving?.let { barOf(it.scale) } ?: Float.MAX_VALUE, pivotRow = to?.paint?.pivotRow(), hides = hides, turnEye = turnEye,
         rowHide = rowHide, hideRow = hideRow, rowBottom = rowBottom,
