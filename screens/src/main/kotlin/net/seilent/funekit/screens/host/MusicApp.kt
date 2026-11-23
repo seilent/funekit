@@ -51,6 +51,10 @@ interface MusicApp<S : Any> {
 
     val lyricsView: Boolean get() = false
 
+    val lyricsMode: Boolean get() = false
+
+    fun lyricsModeChanged(on: Boolean) {}
+
     fun offset(track: Long): OffsetEdit? = null
 
     fun sheetDelete(t: SheetTarget): SheetDelete? = null

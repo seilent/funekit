@@ -723,11 +723,12 @@ class HostTest {
 
     private fun song(id: Long) = Row(id, Kind.Song, "Song", "Artist", null, durationMs = DURATION, album = "Album")
 
-    private fun lyricsApp(e: OffsetEdit, view: Boolean = true, mode: Boolean = true, pl: PhoneLyrics? = null): TestApp =
+    private fun lyricsApp(e: OffsetEdit, view: Boolean = true, mode: Boolean = true, pl: PhoneLyrics? = null, modeAtStart: Boolean = false): TestApp =
         TestApp(page, np, null, Level(START, null)) { rule.mainClock.currentTime }.also {
             it.lyricsOn = view
             it.edit = e
             it.phoneLyricsOf = pl
+            it.modeAtStart = modeAtStart
             it.compose(rule)
             rule.waitForIdle()
             rule.mainClock.autoAdvance = false
@@ -1239,6 +1240,54 @@ class HostTest {
     private fun phoneApp(pl: Copy, e: Edit = Edit()): TestApp = lyricsApp(e, mode = false, pl = pl).also { session(it) }
 
     private fun shade(app: TestApp): Long = rule.runOnIdle { app.music.np.lyrics.dim(rule.mainClock.currentTime) }
+
+    @Test
+    fun theOwnLyricsModeSeedsFromTheAppAndEachOwnTurnCallsBack() {
+        val app = lyricsApp(Edit(), mode = false, modeAtStart = true)
+        val l = app.music.np.lyrics
+        rule.runOnIdle {
+            assertTrue("the own mode seeds from the app", l.mode)
+            assertEquals("the shade lands at once", fxInt(1), l.dim(rule.mainClock.currentTime))
+            assertFalse("no fade runs", l.fading(rule.mainClock.currentTime))
+        }
+        rule.runOnIdle { app.host.npTap(NpAct.Lyrics) }
+        frames(OPEN_FRAMES)
+        assertEquals(listOf(false), app.modeChanges)
+        rule.runOnIdle { app.host.showLyrics(true) }
+        frames(OPEN_FRAMES)
+        assertEquals(listOf(false, true), app.modeChanges)
+        rule.runOnIdle { app.stack.edgeBack(app.host.popKind) }
+        frames(OPEN_FRAMES)
+        assertEquals(listOf(false, true, false), app.modeChanges)
+    }
+
+    @Test
+    fun aVariantTurnCallsBackOnlyThePhoneMode() {
+        val pl = Copy()
+        val app = phoneApp(pl)
+        rule.runOnIdle { app.host.npTap(NpAct.Lyrics) }
+        frames(OPEN_FRAMES)
+        assertEquals(listOf(true), pl.sets)
+        assertTrue("a variant turn calls no own mode back", app.modeChanges.isEmpty())
+        rule.runOnIdle { app.host.showLyrics(true) }
+        frames(OPEN_FRAMES)
+        assertEquals(listOf(true), app.modeChanges)
+        assertEquals("the own turn sets no phone mode", listOf(true), pl.sets)
+    }
+
+    @Test
+    fun theHostSeedsTheOwnModeOnceAndATurnStays() {
+        val app = lyricsApp(Edit(), mode = false)
+        val l = app.music.np.lyrics
+        rule.runOnIdle { app.host.npTap(NpAct.Lyrics) }
+        frames(OPEN_FRAMES)
+        assertTrue("premise: the tap turns the own mode on", rule.runOnIdle { l.mode })
+        rule.runOnIdle { app.hosted = false }
+        frames(2)
+        rule.runOnIdle { app.hosted = true }
+        frames(OPEN_FRAMES)
+        assertTrue("the turn stays", rule.runOnIdle { l.mode })
+    }
 
     @Test
     fun aPhoneCopyShowsInTheLyricsViewAndTheKeyFlipsThePhoneMode() {

@@ -119,6 +119,8 @@ class TestApp(page: Scale, np: Scale, src: MusicSource?, private val level: Volu
     lateinit var menuHost: MenuHost
     var pokes = 0
     var lyricsOn by mutableStateOf(false)
+    var modeAtStart = false
+    val modeChanges = mutableListOf<Boolean>()
     var edit: OffsetEdit? = null
     var asked: () -> Unit = {}
     val backdropFlow = MutableStateFlow<NpPicture?>(null)
@@ -156,6 +158,12 @@ class TestApp(page: Scale, np: Scale, src: MusicSource?, private val level: Volu
     override val backdrop: StateFlow<NpPicture?> get() = backdropFlow
 
     override val lyricsView: Boolean get() = lyricsOn
+
+    override val lyricsMode: Boolean get() = modeAtStart
+
+    override fun lyricsModeChanged(on: Boolean) {
+        modeChanges += on
+    }
 
     override fun offset(track: Long): OffsetEdit? = edit.also { asked() }
 

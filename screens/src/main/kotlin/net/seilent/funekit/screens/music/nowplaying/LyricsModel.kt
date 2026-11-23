@@ -129,6 +129,7 @@ class LyricsModel {
     private var fadeAt = -1L
     private var backAt = -1L
     private val dim = Dim()
+    private var seeded by mutableStateOf(false)
 
     private fun bump() {
         revision++
@@ -314,6 +315,13 @@ class LyricsModel {
             fadeAt += MIRROR * (now - backAt)
             backAt = -1
         }
+    }
+
+    internal fun seed(on: Boolean) {
+        if (seeded) return
+        seeded = true
+        mode = on
+        land()
     }
 
     fun land(variant: Boolean = false) {

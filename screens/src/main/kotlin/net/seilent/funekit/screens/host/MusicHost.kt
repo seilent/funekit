@@ -1678,35 +1678,43 @@ class MusicHost<S : Any> internal constructor(
         if (l.fading(t)) {
             if (l.on(np.variant)) {
                 l.reverse(t, np.variant)
-                syncPhoneMode()
+                syncMode()
                 return true
             }
             l.land(np.variant)
         }
         if (!l.shown(np.variant)) return false
         l.toggle(t, np.variant)
-        syncPhoneMode()
+        syncMode()
         return true
     }
 
-    private fun syncPhoneMode() {
-        val pl = app.phoneLyrics ?: return
-        if (!np.variant) return
-        pl.setMode(np.lyrics.phoneMode)
-        np.lyrics.echo(pl.mode.value, true)
+    private fun syncMode() {
+        val pl = app.phoneLyrics
+        if (np.variant && pl != null) {
+            pl.setMode(np.lyrics.phoneMode)
+            np.lyrics.echo(pl.mode.value, true)
+            return
+        }
+        app.lyricsModeChanged(np.lyrics.mode)
     }
 
     private fun lyricsToggle() {
         val l = np.lyrics
         val t = now()
         if (l.fading(t)) l.reverse(t, np.variant) else l.toggle(t, np.variant)
-        syncPhoneMode()
+        syncMode()
     }
 
     fun showLyrics(on: Boolean) {
         val l = np.lyrics
         if (!np.lyricsView || l.mode == on) return
-        if (np.variant && l.phoneLyrics) l.turn(on, false) else lyricsToggle()
+        if (np.variant && l.phoneLyrics) {
+            l.turn(on, false)
+            app.lyricsModeChanged(on)
+        } else {
+            lyricsToggle()
+        }
     }
 
     val fieldSheet: FieldSheet? get() = fieldRun?.sheet
@@ -2087,6 +2095,7 @@ fun <S : Any> rememberMusicHost(
     types.eq.chromes = eq.mapValues { it.value.second }
     types.eq.panes = eqs.associate { it.id to it.pane }
     val navGround = remember(env.bands, env.accent) { NavGround(env.bands, env.accent) }
+    remember(np) { np.lyrics.also { it.seed(app.lyricsMode) } }
     val host = remember { MusicHost(music, models, toast, jump, menuHost, movePaint, scope, app, env, src, volume, types, npGeo, npHalves, npHalfInks, navGround, split, view) }
     DisposableEffect(host, np) {
         val held: (Long) -> Int? = host::heldOffset
