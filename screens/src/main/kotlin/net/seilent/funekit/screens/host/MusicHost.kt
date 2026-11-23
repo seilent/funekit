@@ -1386,7 +1386,10 @@ class MusicHost<S : Any> internal constructor(
         }
         LaunchedEffect(volDue, stack.phase) {
             if (!volDue || stack.phase != Phase.Rest) return@LaunchedEffect
-            while (homeBusy(now()) || npFading(now())) withFrameMillis { }
+            while (homeBusy(now()) || npFading(now())) {
+                withFrameMillis { }
+                follow()
+            }
             volDue = false
             if (stack.overlay == null) openVolume(now())
         }
@@ -1555,6 +1558,7 @@ class MusicHost<S : Any> internal constructor(
     @Composable
     fun MusicPages(pages: Map<S, Shown>, status: StatusState) {
         NpBackdropFeed()
+        NpFollow()
         val npStatusScale = npHalves.holding(NpPart.Status).g.s
         val npStatusInk = rememberStatusInk(status, npStatusScale, npStatus(npStatusScale))
         SideEffect { npStatusShown = npStatusInk }
@@ -2070,6 +2074,31 @@ class MusicHost<S : Any> internal constructor(
             layer = OVER,
             onTap = { goNp() },
         )
+    }
+
+    @Composable
+    private fun NpFollow() {
+        LaunchedEffect(np, stack) {
+            snapshotFlow {
+                val l = np.lyrics
+                listOf(np.lyricsView, np.variant, np.shown.track, stack.phase, stack.top, stack.taken, np.revision, np.artFor, l.track, l.pending, l.revision, l.want, l.mode)
+            }.collect { follow() }
+        }
+    }
+
+    private fun follow() {
+        val l = np.lyrics
+        val shown = np.shown.track
+        if (l.hand != null && l.hand != shown) l.hand = null
+        if (!np.lyricsView || stack.phase != Phase.Rest || stack.top?.let(::isNp) != true || stack.taken) return
+        if (!l.read(shown, np.variant)) return
+        if (l.hand != null) return
+        val t = now()
+        if (l.fading(t) || np.touching()) return
+        val target = l.target(shown, false)
+        if (target == l.mode) return
+        if (!target && np.artFor != shown) return
+        l.toggle(t)
     }
 
     @Composable

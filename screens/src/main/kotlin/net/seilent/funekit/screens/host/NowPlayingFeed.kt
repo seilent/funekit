@@ -153,6 +153,8 @@ fun NowPlayingFeed(np: NowPlayingModel, g: NpLayout, src: MusicSource?, phone: P
                 val got = quietly { withContext(Dispatchers.IO) { listOf(largeArt(g.artSide, config, { pic = it }) { source.viewed { it.art(ref, g.artSide) } }) } }
                 if (got == null) {
                     np.art = null
+                    np.artKey = null
+                    np.artFor = track
                     return@LaunchedEffect
                 }
                 got.single()?.asImageBitmap()
@@ -163,6 +165,7 @@ fun NowPlayingFeed(np: NowPlayingModel, g: NpLayout, src: MusicSource?, phone: P
             np.art = img
             np.artKey = key
             np.artRef = null
+            np.artFor = track
             return@LaunchedEffect
         }
         when {
@@ -180,6 +183,7 @@ fun NowPlayingFeed(np: NowPlayingModel, g: NpLayout, src: MusicSource?, phone: P
         np.artPhone = false
         np.artKey = key
         np.artRef = ref
+        np.artFor = track
     }
     return feed
 }

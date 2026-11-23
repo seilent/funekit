@@ -66,6 +66,7 @@ class NowPlayingModel {
     var mark by mutableStateOf(false)
     var art: ImageBitmap? by mutableStateOf(null)
     var artKey: Any? = null
+    internal var artFor: Long? by mutableStateOf(null)
     var artPhone = false
     internal var artPic = 0L
     internal var artRef: ArtRef? = null
@@ -181,7 +182,10 @@ class NowPlayingModel {
         }
         for (k in 0 until NP_PRESSES) press[k].draw(now.toFloat())
         slideStep(now)
+        lyrics.stepTo(now)
     }
+
+    fun touching(): Boolean = touchDown
 
     private fun fadeIdle(now: Long, to: Float) {
         idleFrom = idleAlpha(now)
