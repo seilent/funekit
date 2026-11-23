@@ -7,6 +7,7 @@ import net.seilent.funekit.keptText
 import net.seilent.funekit.kit.Metrics
 import net.seilent.funekit.kit.motion.Part
 import net.seilent.funekit.kit.pen64
+import net.seilent.funekit.kit.ringHalo
 import net.seilent.funekit.kit.rolePx
 import net.seilent.funekit.px
 import net.seilent.funekit.textPx
@@ -33,7 +34,7 @@ class NpLayout(val s: Scale, place: NpRingPlace = NpRingPlace.AboveBar) {
     private val b = s.board
 
     val backSize: Int = px(Tok.npBackRing, p)
-    val backClip: NpRect = NpRect(0, 0, px(Tok.npBackRingX + Tok.npBackRing, p), px(Tok.npBackRingY + Tok.npBackRing, p))
+    val backClip: NpRect = NpRect(0, 0, px(Tok.npBackRingX + Tok.npBackRing, p) + ringHalo(backSize), px(Tok.npBackRingY + Tok.npBackRing, p) + ringHalo(backSize))
     val backCx: Int = px(Tok.npBackRingX + Tok.npBackRing / HALF, p)
     val backCy: Int = px(Tok.npBackRingY + Tok.npBackRing / HALF, p)
     val backStroke: Int = px(Tok.npBackRingStroke, p)
