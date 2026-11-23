@@ -70,6 +70,7 @@ class AlbumDrawTest {
     @Test
     fun everyRowLookAndModelStaysEqualOverRestFramesAndAFocusStepChangesTwoRows() {
         val m = loaded()
+        m.onRings = false
         val settle = Tok.motion_focusAlpha.toLong() + 1
         val looks = (0 until m.count).map { m.look(it, settle, true) }
         val models = (0 until m.count).map { m.rowModel(it) }

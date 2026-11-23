@@ -217,7 +217,9 @@ class S4MotionSheetTest {
             boards.flatMap { (d, l) ->
                 pressTiles(d, l, "rowpress-0-album", at, false, FIRST_ALBUM, ::albumTo, { r ->
                     val m = r.model(top(r)) as AlbumModel
+                    val g = m.geo!!
                     m.focus.set(0, m.count, at, true)
+                    if (g.top + g.pitch / 2 - m.track.q < g.bottom) m.onRings = false
                     m.press.down(0, at)
                     m.glow.arm(0, at)
                 }) { r, t ->

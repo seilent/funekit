@@ -91,8 +91,6 @@ a105/rowpress-0-queue-tap T7 from the queue turns it out on the NpLeave pane ins
 a105/toast-150 T7 150 ms after the songs pick turns the hub out on the NpLeave pane inside a kit quad that records no region, and its STATUS row lies in the excluded status band, so no region gates
 r1/toast-150 T7 150 ms after the songs pick turns the hub out on the NpLeave pane inside a kit quad that records no region, so no region gates
 r1/rowpress-0-queue-tap T7 from the queue turns it out on the NpLeave pane inside a kit quad that records no region, so no region gates
-a105/album-2500-@Chunks the stand in album has one coverless track where funeOS's Chunks has two with a cover: its art and second row are excluded and its lines are text, so no region gates
-r1/album-2500-@Chunks the stand in album has one coverless track where funeOS's Chunks has two with a cover: its art and second row are excluded and its lines are text, so no region gates
 a105/navbar-t4-200 a move frame: the moving layers record only zoom excluded (runs off the top through the status band), so no region gates
 a105/navbar-t4-240 a move frame: the moving layers record only zoom excluded (runs off the top through the status band), so no region gates
 a105/navbar-t4-280 a move frame: the moving layers record only zoom excluded (runs off the top through the status band), so no region gates
@@ -112,8 +110,6 @@ a105/t3c-550-accentoff a move frame: the moving layers record only word excluded
 a105/t3c-617-accentoff a move frame: the moving layers record only word excluded (runs off the top through the status band); the column page arrives inside the kit zoom layer, so no region gates
 a105/t3zartist-133-back-accentoff a move frame: the moving layers record only 2 text regions; arrive.chrome.header excluded (runs off the top through the status band), so no region gates
 a105/t3zartist-217-back-accentoff a move frame: the moving layers record only 2 text regions; arrive.chrome.header excluded (runs off the top through the status band), so no region gates
-a105/t3zartist-33-accentoff a move frame: the moving layers record only 3 text regions, so no region gates
-a105/t3zartist-50-back-accentoff a move frame: the moving layers record only 3 text regions; leave.chrome.header excluded (runs off the top through the status band), so no region gates
 a105/t3zartist-83-back-accentoff a move frame: the moving layers record no region, so no region gates
 a105/t4-200 a move frame: the moving layers record only zoom excluded (runs off the top through the status band), so no region gates
 a105/t4-250-accentoff a move frame: the moving layers record only zoom excluded (runs off the top through the status band), so no region gates

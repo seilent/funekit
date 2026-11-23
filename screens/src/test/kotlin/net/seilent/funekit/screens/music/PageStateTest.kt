@@ -13,6 +13,7 @@ import net.seilent.funekit.fake.Fake
 import net.seilent.funekit.fake.FakeSet
 import net.seilent.funekit.screens.music.albcol.AlbumColGeo
 import net.seilent.funekit.screens.music.albcol.AlbumColModel
+import net.seilent.funekit.screens.music.album.ALBUM_SHUFFLE
 import net.seilent.funekit.screens.music.album.AlbumGeo
 import net.seilent.funekit.screens.music.album.AlbumModel
 import net.seilent.funekit.screens.music.artist.ARTIST_ALBUMS
@@ -56,7 +57,7 @@ class PageStateTest {
         back.restoreAt(0L)
         assertEquals(Q, back.track.q)
         assertEquals(FOCUS, back.focus.row)
-        assertEquals("the block collapsed whole, 115 u at the A105 px", ABOVE_PX, back.track.lift)
+        assertEquals("the block collapsed whole with the ring band, 177 u at the A105 px", ABOVE_PX, back.track.lift)
         if (!s.large) assertEquals(LIFT_U, fxU(back.geo!!.liftU(back.track.lift)), 0.01f)
     }
 
@@ -72,6 +73,34 @@ class PageStateTest {
         assertEquals(LIST_TOP, g.top)
         assertEquals(LARGE_PITCH, g.pitch)
         albumRoundTrip(s)
+    }
+
+    @Test
+    fun anAlbumComesBackOnItsRing() {
+        val s = page(false)
+        val f = fake(FakeSet.Main)
+        val m = album(f, s)
+        assertTrue("premise: the album opens on the rings", m.onRings)
+        m.ring = ALBUM_SHUFFLE
+        val back = album(f, s, m.state())
+        back.restoreAt(0L)
+        assertTrue(back.onRings)
+        assertEquals(ALBUM_SHUFFLE, back.ring)
+        val rows = album(f, s)
+        rows.onRings = false
+        val off = album(f, s, rows.state())
+        off.restoreAt(0L)
+        assertFalse("the rows keep the focus they had", off.onRings)
+    }
+
+    @Test
+    fun anOldAlbumStatePastTheRingFadeGivesTheFocusToTheRows() {
+        val s = page(false)
+        val back = album(fake(FakeSet.Main), s, listOf(FOCUS, Q / s.ppu))
+        assertTrue("premise: the album loads on the rings", back.onRings)
+        back.restoreAt(0L)
+        assertEquals("a state with no ring still loads", Q, back.track.q)
+        assertFalse("past the ring fade the rows take the focus", back.onRings)
     }
 
     @Test
@@ -160,9 +189,9 @@ class PageStateTest {
         private const val COBALT = "Cobalt Rooms"
         private const val Q = 600
         private const val FOCUS = 5
-        private const val LIFT_U = 115f
-        private const val ABOVE_PX = 345
-        private const val LIST_TOP = 756
+        private const val LIFT_U = 177f
+        private const val ABOVE_PX = 531
+        private const val LIST_TOP = 942
         private const val LARGE_PITCH = 144
         private const val COL_ROW = 5
         private const val ALBUM_ROW = 2

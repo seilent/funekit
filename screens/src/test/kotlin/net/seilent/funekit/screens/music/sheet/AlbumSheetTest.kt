@@ -76,6 +76,7 @@ class AlbumSheetTest {
         }
         val row = scene.knob.coerceIn(0, maxOf(0, m.count - 1))
         m.focus.set(row, m.count, 0L, false)
+        if (scene.knob > 0 || scene.end) m.onRings = false
         var moved = false
         if (scene.knob > 0) {
             val q = m.intoView(row)
@@ -115,7 +116,8 @@ class AlbumSheetTest {
         val h = shot(dev, scene, large)
         val kind = (if (large) "large-" else "") + scene.kind
         val navLarge = large && scene.nav == Nav.Buttons && scene.end
-        val rec = sc.regions(dev, h.s, scene.rules).also {
+        val rules = if (large && scene.nav == Nav.Buttons) scene.rules + NAV_RINGS.map { it to NAV_LARGE } else scene.rules
+        val rec = sc.regions(dev, h.s, rules).also {
             it.residual = scene.residual && !navLarge
             it.residualWhy = if (navLarge) "$NAV_LARGE; at the list end funeOS's rows sit 7 px higher (row 5 number at 154 against 161), and funeOS shows its page thumb (x 235 to 240, y 207 to 276, the lift form of thumb_of over its 277 px bottom): at the list top its thumb track, 277 less the 252 px list top, is 25 px, under scrollbar.min (30 px at LARGE), so thumb_of gives no thumb until the @end set lifts the list and the fade shows on that turn on (ThumbFade.track), where the kit's track is 32 px, its thumb on from the start and not shown again" else if (scene.residual) ALBUM_LOUD else scene.note
         }
@@ -169,6 +171,7 @@ class AlbumSheetTest {
         private const val TERRACE = "テラス盤"
         private const val CLUSTERS = "Clusters"
         private const val LONG_ALBUM = "0 An Album Name Cut Short At The Tile Border"
+        private val NAV_RINGS = listOf("page.ring", "page.glyph")
         private const val ALBUM_LOUD = "album detail shows only its header, art, two lines and track rows on the plain ground"
         private const val FIRST_NOTE = "the first # album of the Demo order stands in for funeOS's"
         private const val SECOND_NOTE = "the second # album of the Demo order stands in for funeOS's"

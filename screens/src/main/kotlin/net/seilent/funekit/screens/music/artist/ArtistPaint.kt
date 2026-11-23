@@ -20,6 +20,7 @@ import net.seilent.funekit.Roles
 import net.seilent.funekit.Scale
 import net.seilent.funekit.fx
 import net.seilent.funekit.fxMul
+import net.seilent.funekit.gen.Glyph
 import net.seilent.funekit.gen.Glyphs
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.keptText
@@ -88,6 +89,28 @@ private val RING_GLYPHS = listOf(Glyphs.play, Glyphs.plus, Glyphs.shuffle)
 
 class AlbumInk(val title: List<Word>, val year: Word, val box: BoxInk?)
 
+fun DrawScope.detailRing(g: Glyph, i: Int, cx: Int, cy: Int, d: Int, l: RingLook, s: Scale, rec: DrawRecord?, n: String, a: Float = 1f) {
+    val stroke = px(if (l.focused) Tok.ringStrokeFocused else Tok.ringStrokeIdle, s.stdPpu)
+    val al = (if (l.focused) Tok.alpha_full else Tok.alpha_mid) * a
+    if (l.lit > 0f) {
+        ringPress(d, stroke, cx, cy, l.lit, a)
+        val h = d / ArtistGeo.RING_HALF + ringHalo(d) + 1
+        val o = d / ArtistGeo.RING_HALF
+        val grid = rec as? GridRecord
+        listOf(
+            Edges(cx - h, cy - h, cx + h, cy - o),
+            Edges(cx - h, cy + o, cx + h, cy + h),
+            Edges(cx - h, cy - o, cx - o, cy + o),
+            Edges(cx + o, cy - o, cx + h, cy + o),
+        ).forEachIndexed { k, e -> grid?.edges("$n.halo$i.$k", KIND_GLOW, e, Ink.white, l.lit) }
+    }
+    val c = Offset(cx.toFloat(), cy.toFloat())
+    ring(c, d.toFloat(), stroke.toFloat(), Ink.white, al)
+    glyph(g, c, (d / ArtistGeo.RING_HALF).toFloat(), Ink.white, al)
+    rec?.ring("$n.ring$i", c, d.toFloat(), al)
+    rec?.glyphs("$n.glyph$i", listOf(g), c, (d / ArtistGeo.RING_HALF).toFloat(), al)
+}
+
 fun detailLabel(): Role = Role(Tok.type_detailLabel_size, Roles.detailTitle.weight, Roles.detailTitle.case, Tok.type_detailLabel_alpha, Roles.detailTitle.tracking)
 
 fun artistHeader(): Role = Role(Roles.pageHeader.size, Roles.pivotActive.weight, Roles.pivotActive.case, Roles.pageHeader.alpha, Roles.pageHeader.tracking)
@@ -149,31 +172,7 @@ class ArtistDraw(
     }
 
     fun DrawScope.rings(looks: List<RingLook>, rec: DrawRecord?, n: String) {
-        val d = geo.ring
-        val cy = geo.ringCy
-        for (i in 0 until RINGS) {
-            val l = looks[i]
-            val cx = geo.ringCx(i)
-            val stroke = px(if (l.focused) Tok.ringStrokeFocused else Tok.ringStrokeIdle, s.stdPpu)
-            val a = if (l.focused) Tok.alpha_full else Tok.alpha_mid
-            if (l.lit > 0f) {
-                ringPress(d, stroke, cx, cy, l.lit)
-                val h = d / ArtistGeo.RING_HALF + ringHalo(d) + 1
-                val o = d / ArtistGeo.RING_HALF
-                val grid = rec as? GridRecord
-                listOf(
-                    Edges(cx - h, cy - h, cx + h, cy - o),
-                    Edges(cx - h, cy + o, cx + h, cy + h),
-                    Edges(cx - h, cy - o, cx - o, cy + o),
-                    Edges(cx + o, cy - o, cx + h, cy + o),
-                ).forEachIndexed { k, e -> grid?.edges("$n.halo$i.$k", KIND_GLOW, e, Ink.white, l.lit) }
-            }
-            val c = Offset(cx.toFloat(), cy.toFloat())
-            ring(c, d.toFloat(), stroke.toFloat(), Ink.white, a)
-            glyph(RING_GLYPHS[i], c, (d / ArtistGeo.RING_HALF).toFloat(), Ink.white, a)
-            rec?.ring("$n.ring$i", c, d.toFloat(), a)
-            rec?.glyphs("$n.glyph$i", listOf(RING_GLYPHS[i]), c, (d / ArtistGeo.RING_HALF).toFloat(), a)
-        }
+        for (i in 0 until RINGS) detailRing(RING_GLYPHS[i], i, geo.ringCx(i), geo.ringCy, geo.ring, looks[i], s, rec, n)
     }
 
     fun DrawScope.label(rec: DrawRecord?, n: String) {

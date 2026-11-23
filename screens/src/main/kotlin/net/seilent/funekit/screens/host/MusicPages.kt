@@ -39,6 +39,7 @@ import net.seilent.funekit.screens.music.albcol.AlbumColLayer
 import net.seilent.funekit.screens.music.albcol.AlbumColModel
 import net.seilent.funekit.screens.music.albcol.AlbumColPaint
 import net.seilent.funekit.screens.music.albcol.albumColDraw
+import net.seilent.funekit.screens.music.album.ALBUM_SHUFFLE
 import net.seilent.funekit.screens.music.album.AlbumDraw
 import net.seilent.funekit.screens.music.album.AlbumLayer
 import net.seilent.funekit.screens.music.album.AlbumModel
@@ -281,6 +282,12 @@ class AlbumType(types: MusicTypes, private val chrome: Chrome, private val conte
                 }
             },
             onSheet = acts::sheet,
+            onRing = { i ->
+                m.gen >= 0 && acts.playOpen(NpForm.Page) { s ->
+                    s.player.play(Listing.AlbumTracks(m.id), m.gen, -1, 0L, i == ALBUM_SHUFFLE)
+                    true
+                }
+            },
         )
     }
 }

@@ -61,6 +61,7 @@ import net.seilent.funekit.kit.touch.ListTouch
 import net.seilent.funekit.kit.touch.RowSpec
 import net.seilent.funekit.kit.touch.Tap
 import net.seilent.funekit.kit.touch.rememberCoast
+import net.seilent.funekit.kit.touch.tapTarget
 import net.seilent.funekit.kit.word
 import net.seilent.funekit.api.FailFast
 import net.seilent.funekit.api.Kind as ApiKind
@@ -109,6 +110,7 @@ fun AlbumLayer(
     pageCovered: Boolean = false,
     onPlay: ((Int) -> Boolean)? = null,
     onSheet: (SheetTarget) -> Boolean = { false },
+    onRing: (Int) -> Boolean = { false },
 ) {
     val geo = draw.geo
     val s: Scale = geo.s
@@ -120,8 +122,10 @@ fun AlbumLayer(
     val t = albumTouch(m, geo, geo.spec())
     SideEffect {
         m.lists = listOf(t)
+        t.band = { geo.band(m.track.lift) }
         t.onScroll = { at ->
             m.afterScroll(at)
+            m.fadeFocus()
             m.poke()
         }
         if (m.counted != m.count) {
@@ -136,6 +140,7 @@ fun AlbumLayer(
         while (true) {
             withFrameMillis { at ->
                 m.press.look(at)
+                m.rings.look(at)
                 frame = at
                 m.tick(at, geo.thumb(m.track) != null, t.moving || t.scroll.dragging)
             }
@@ -199,19 +204,24 @@ fun AlbumLayer(
     }
     LaunchedEffect(m, m.aims) {
         if (m.aims == 0) return@LaunchedEffect
+        val n = m.aims
         val cuts = t.cuts
         val from = m.track.q.toFloat()
         val to = m.aim.toFloat()
         val d = Tok.motion_scroll
         var t0 = -1L
         var e = 0f
-        while (e < d) {
-            if (t.scroll.dragging || t.moving || t.cuts != cuts) break
-            withFrameMillis { at ->
-                if (t0 < 0) t0 = at
-                e = (at - t0).toFloat()
-                if (t.cuts == cuts) t.toPx(Math.round(lerp(from, to, Curves.easeIn.at((e / d).coerceIn(0f, 1f)))))
+        try {
+            while (e < d) {
+                if (t.scroll.dragging || t.moving || t.cuts != cuts) break
+                withFrameMillis { at ->
+                    if (t0 < 0) t0 = at
+                    e = (at - t0).toFloat()
+                    if (t.cuts == cuts) t.toPx(Math.round(lerp(from, to, Curves.easeIn.at((e / d).coerceIn(0f, 1f)))))
+                }
             }
+        } finally {
+            if (n > m.aimed) m.aimed = n
         }
     }
 
@@ -266,6 +276,7 @@ fun AlbumLayer(
                         if (r < m.count && m.row(r) != null) {
                             valid = true
                             m.focus.set(r, m.count, at, true)
+                            m.onRings = false
                             m.press.down(r, at)
                             m.glow.arm(r, at)
                             m.poke()
@@ -274,6 +285,37 @@ fun AlbumLayer(
                 },
             )
         }
+    }
+
+    fun ringTap(): Tap {
+        var started = false
+        var i = -1
+        return Tap(
+            onPress = { started = false },
+            onCancel = {
+                if (i >= 0) m.rings.cancel(now())
+                m.poke()
+            },
+            onCut = {
+                m.rings.drop()
+                m.poke()
+            },
+            onTap = {
+                if (i >= 0) {
+                    m.rings.tap(now())
+                    if (!onRing(i)) m.rings.untap(now())
+                }
+                m.poke()
+            },
+            onAt = { o ->
+                if (!started) {
+                    started = true
+                    i = m.ringAt(o.x, o.y)
+                    if (i >= 0) m.ringDown(i, now())
+                    m.poke()
+                }
+            },
+        )
     }
 
     PageLayer(visible, frozen, Modifier.pxSize(s.widthPx, s.heightPx)) { covered ->
@@ -335,6 +377,12 @@ fun AlbumLayer(
                 }
             }
         }
+        val ringRow = rememberLook(m, hideFocus, snap, covered = covered) { Triple(m.ringLooks(frame, hideFocus), m.track.lift, m.track.q) }
+        Canvas(Modifier.pxSize(s.widthPx, s.heightPx)) {
+            val (looks, lift, q) = ringRow.value
+            with(draw) { rings(looks, lift, q, null, "album") }
+        }
+        if (live) Box(Modifier.pxAt(geo.ringBand).tapTarget(a, ringTap()))
         val count = m.count
         val bar = listThumbOf(geo.s, geo.top, geo.bottom, count, geo.pitch, 0L)
         val len by remember(geo, m, count) { derivedStateOf { geo.thumb(m.track)?.let { it.y1 - it.y0 } } }

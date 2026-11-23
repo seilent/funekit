@@ -85,6 +85,7 @@ class ListTouch(
     var pressed by mutableStateOf(false)
         internal set
     var onScroll: (Long) -> Unit = {}
+    var band: () -> Int = { 0 }
     var box: LayoutCoordinates? = null
         internal set
     var rowTap: (Int) -> Tap? = { null }
@@ -303,7 +304,7 @@ class Arbiter(val scale: Scale) {
         if (!hits(spot, o, up)) return false
         if (up == 0 || rows == null) return true
         val y = o.y - (root ?: return false).localPositionOf(spot.c, Offset.Zero).y
-        return y >= -rows.lift
+        return y >= -rows.lift - t.band()
     }
 
     internal fun listAt(o: Offset): ListTouch? {

@@ -53,13 +53,22 @@ import net.seilent.funekit.screens.music.overlay.SheetFrom
 import net.seilent.funekit.screens.music.overlay.SheetKind
 import net.seilent.funekit.screens.music.overlay.SheetTarget
 import net.seilent.funekit.screens.music.MusicPage
+import net.seilent.funekit.screens.music.artist.ArtistGeo
+import net.seilent.funekit.screens.music.artist.RingLook
 import net.seilent.funekit.screens.music.MusicSource
 import net.seilent.funekit.screens.music.PageModel
 import net.seilent.funekit.screens.music.Paging
 import net.seilent.funekit.screens.music.nowplaying.npTime
 import net.seilent.funekit.screens.music.staleIn
 
-class AlbumGeo(val s: Scale) {
+const val ALBUM_PLAY = 0
+const val ALBUM_SHUFFLE = 1
+private const val A256 = 256
+private const val SAVED_RINGS = 2
+private const val SAVED_RING = 3
+private val ALBUM_RING_X = listOf(Tok.albumRingCx0, Tok.albumRingCx1)
+
+class AlbumGeo(val s: Scale, val rings: Boolean = true) {
     val ppu64: Long = fx(s.ppu)
     private val std64: Long = fx(s.stdPpu)
 
@@ -67,12 +76,19 @@ class AlbumGeo(val s: Scale) {
 
     private val shrink: Long = kept(fx(Tok.tileL) - fx(Tok.tileS))
     private val dockU: Long = fx(Tok.albumArtTop) - fx(Tok.npTextTop) + fxMul(fx(Tok.capHeight), fx(Tok.type_npArtist_size))
-    val lift64: Long = kept(fx(Tok.tileL) - fx(Tok.tileS) + dockU)
-    val top: Int = px64(keptU(Tok.albumRowsTop, s), ppu64)
+    private val docked: Long = kept(dockU)
+    private val band: Long = if (rings) fx(Tok.detailBlockRing) + fx(Tok.albumRowsGap) else 0L
+    val lift64: Long = kept(fx(Tok.tileL) - fx(Tok.tileS) + dockU + band)
+    val ringTop: Int = px64(keptU(Tok.albumRowsTop, s), ppu64)
+    val top: Int = px64(kept(fx(Tok.albumRowsTop) + band), ppu64)
     val pitch: Int = Rows.pitch(s, false)
     val above: Int = px64(lift64, ppu64)
     val bottom: Int = px(s.stdContentBottom, s.stdPpu)
     val view: Int = bottom - top
+    val ring: Int = px(Tok.detailBlockRing, s.stdPpu)
+    private val fade: Long = kept(fx(Tok.albumRingFade))
+    private val fadeStart: Long = max(0L, kept(fx(Tok.albumRowsTop) + fx(Tok.detailBlockRing)) - fxDiv(fxInt(bottom), ppu64))
+    val fadeEnd: Int = px64(fadeStart + fade, ppu64)
     val artX: Int = px(Tok.albumArtX, s.stdPpu)
     val grid: Int = px(Tok.gridTile, s.stdPpu)
     val large: Int = px(Tok.tileL, s.stdPpu)
@@ -87,7 +103,7 @@ class AlbumGeo(val s: Scale) {
 
     fun liftU(liftPx: Int): Long = fxOfPx(liftPx.toFloat(), ppu64)
 
-    fun dock(l: Long): Long = max(0L, l - shrink)
+    fun dock(l: Long): Long = (l - shrink).coerceIn(0L, docked)
 
     fun side(l: Long): Long = kept(fx(Tok.tileL)) - min(l, shrink)
 
@@ -114,6 +130,25 @@ class AlbumGeo(val s: Scale) {
     }
 
     fun rowsTopPx(liftPx: Int): Int = px64(rowsTop(liftU(liftPx)), ppu64)
+
+    fun ringCx(i: Int): Int = px(ALBUM_RING_X[i], s.stdPpu)
+
+    fun ringCy(q: Int): Int = ringTop - q + ring / ArtistGeo.RING_HALF
+
+    fun pressTopPx(liftPx: Int): Int = px64(rowsTop(liftU(liftPx)) - kept(fx(Tok.albumRowsGap)), ppu64)
+
+    fun band(liftPx: Int): Int = max(0, top - liftPx - rowsTopPx(liftPx))
+
+    val ringBand: Edges get() = Edges(0, rowsTopPx(above), s.widthPx, top)
+
+    fun ringAlpha(liftPx: Int): Int = if (!rings) 0 else (A256 * (fade - (liftU(liftPx) - fadeStart).coerceIn(0L, fade)) / fade).toInt()
+
+    fun ringAt(x: Float, y: Float, liftPx: Int, q: Int): Int {
+        if (ringAlpha(liftPx) <= 0 || y < rowsTopPx(liftPx) || y >= min(top - q, bottom)) return -1
+        val half = (Tok.detailBlockRing + Tok.detailRingGap) / ArtistGeo.RING_HALF
+        val sx = x / s.stdPpu
+        return ALBUM_RING_X.indices.lastOrNull { sx >= ALBUM_RING_X[it] - half && sx < ALBUM_RING_X[it] + half } ?: -1
+    }
 
     fun thumb(t: RowTrack): ThumbRect? {
         if (t.max <= above) return null
@@ -146,6 +181,9 @@ class AlbumModel(entry: Long, val id: Long) : PageModel(entry, MusicPage.Album(i
     val press = PressSlots()
     val glow = GlowPair()
     val fade = ThumbFade()
+    var onRings by mutableStateOf(true)
+    var ring by mutableIntStateOf(ALBUM_PLAY)
+    val rings = PressSlots()
     var playing by mutableStateOf<Long?>(null)
     var hidden by mutableStateOf(false)
     val art = mutableStateMapOf<Int, ImageBitmap?>()
@@ -155,6 +193,7 @@ class AlbumModel(entry: Long, val id: Long) : PageModel(entry, MusicPage.Album(i
         private set
     var aims by mutableIntStateOf(0)
         private set
+    var aimed = 0
     var geo: AlbumGeo? = null
     override var lists: List<ListTouch> = emptyList()
     val wake = Channel<Unit>(Channel.CONFLATED)
@@ -188,10 +227,32 @@ class AlbumModel(entry: Long, val id: Long) : PageModel(entry, MusicPage.Album(i
     fun look(i: Int, now: Long, focusShown: Boolean): AlbumLook {
         focus.revision
         press.revision
-        val alpha = focus.rowAlpha(i, now, Tok.type_listPrimary_alpha, Tok.type_listPrimary_alphaDim)
+        val alpha = if (onRings) Tok.type_listPrimary_alphaDim else focus.rowAlpha(i, now, Tok.type_listPrimary_alpha, Tok.type_listPrimary_alphaDim)
         val back = glow.glow.key != i && glow.back.key == i
-        return AlbumLook(alpha, focusShown && i == focus.row, if (glow.glow.key == i || back) press.lit(i, now) else null, back)
+        return AlbumLook(alpha, focusShown && !onRings && i == focus.row, if (glow.glow.key == i || back) press.lit(i, now) else null, back)
     }
+
+    fun ringLooks(now: Long, hideFocus: Boolean): List<RingLook> {
+        rings.revision
+        return List(ALBUM_RING_X.size) { RingLook(onRings && ring == it && !hideFocus, rings.lit(it, now)) }
+    }
+
+    fun ringA(liftPx: Int): Float = if (count == 0) 0f else (geo?.ringAlpha(liftPx) ?: 0) / A256.toFloat()
+
+    fun ringAt(x: Float, y: Float): Int = if (count == 0) -1 else geo?.ringAt(x, y, track.lift, track.q) ?: -1
+
+    fun ringDown(i: Int, now: Long) {
+        onRings = true
+        ring = i
+        rings.down(i, now)
+    }
+
+    fun fadeFocus() {
+        val g = geo ?: return
+        if (onRings && g.ringAlpha(track.lift) <= 0 && scrollTarget >= g.fadeEnd) onRings = false
+    }
+
+    val scrollTarget: Int get() = if (aimed != aims) aim else track.q
 
     fun image(px: Int): ImageBitmap? {
         arts
@@ -211,12 +272,13 @@ class AlbumModel(entry: Long, val id: Long) : PageModel(entry, MusicPage.Album(i
         return if (g.artRect(liftPx).w <= g.grid && image(g.grid) != null) g.grid else if (image(g.large) != null) g.large else g.grid
     }
 
-    fun animating(now: Long): Boolean = focus.animating(now) || press.staleIn(track.drawFirst, track.rowAt(track.q + track.view - 1), 1, now) || glow.glow.moving(now) || glow.back.moving(now) || fade.fading(now)
+    fun animating(now: Long): Boolean = focus.animating(now) || press.staleIn(track.drawFirst, track.rowAt(track.q + track.view - 1), 1, now) || glow.glow.moving(now) || glow.back.moving(now) || fade.fading(now) || rings.stale(now)
 
-    fun wakeAt(now: Long): Long? = listOfNotNull(press.due(now), fade.wakeAt(now).takeIf { it >= 0 }).minOrNull()
+    fun wakeAt(now: Long): Long? = listOfNotNull(press.due(now), rings.due(now), fade.wakeAt(now).takeIf { it >= 0 }).minOrNull()
 
     fun tick(now: Long, thumb: Boolean, moving: Boolean) {
         fade.track(thumb, moving, now)
+        fadeFocus()
         for (g in listOf(glow.glow, glow.back)) {
             val k = g.key ?: continue
             if (!press.framed(k, now) && press.lit(k, now) == 0f) g.clear()
@@ -226,6 +288,7 @@ class AlbumModel(entry: Long, val id: Long) : PageModel(entry, MusicPage.Album(i
     suspend fun load(v: LibraryView) {
         val l = Listing.AlbumTracks(id)
         total = v.page(l, 0, 0).total
+        if (total == 0) onRings = false
         gen = v.generation
         loads++
     }
@@ -246,6 +309,8 @@ class AlbumModel(entry: Long, val id: Long) : PageModel(entry, MusicPage.Album(i
             paging = Paging(Listing.AlbumTracks(id))
             focus.set(0, 0, now, false)
             press.reset()
+            rings.reset()
+            onRings = false
             glow.off()
             loads++
             return false
@@ -303,7 +368,7 @@ class AlbumModel(entry: Long, val id: Long) : PageModel(entry, MusicPage.Album(i
         if (r != focus.row) focus.set(r, count, now, false)
     }
 
-    fun intoView(i: Int): Int = scrollInto(track.topOf(i), track.topOf(i + 1) - track.topOf(i), track)
+    fun intoView(i: Int): Int = scrollInto(track.topOf(i), track.topOf(i + 1) - track.topOf(i), track, firstDocks = geo?.rings ?: true)
 
     fun aimTo(q: Int) {
         aim = q
@@ -318,7 +383,7 @@ class AlbumModel(entry: Long, val id: Long) : PageModel(entry, MusicPage.Album(i
 
     private var kept: List<*>? = null
 
-    override fun state(): List<Any>? = if (ppu > 0f) listOf(focus.row, track.q / ppu) else null
+    override fun state(): List<Any>? = if (ppu > 0f) listOf(focus.row, track.q / ppu, onRings, ring) else null
 
     override fun restoreState(v: List<*>) {
         kept = v
@@ -332,6 +397,9 @@ class AlbumModel(entry: Long, val id: Long) : PageModel(entry, MusicPage.Album(i
         val off = v.getOrNull(1) as? Float ?: return
         lists.firstOrNull()?.toPx(px(off, ppu)) ?: track.at(px(off, ppu))
         focus.set(row.coerceIn(0, count - 1), count, now, false)
+        (v.getOrNull(SAVED_RINGS) as? Boolean)?.let { onRings = it }
+        (v.getOrNull(SAVED_RING) as? Int)?.let { ring = it.coerceIn(ALBUM_PLAY, ALBUM_SHUFFLE) }
+        fadeFocus()
     }
 
     override fun drop() {

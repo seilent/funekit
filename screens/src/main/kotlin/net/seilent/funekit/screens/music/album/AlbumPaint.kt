@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.IntSize
 import net.seilent.funekit.Role
 import net.seilent.funekit.Roles
 import net.seilent.funekit.Scale
+import net.seilent.funekit.gen.Glyphs
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.Chrome
 import net.seilent.funekit.kit.Covers
@@ -45,9 +46,12 @@ import net.seilent.funekit.kit.stack.clipped
 import net.seilent.funekit.kit.stack.restRows
 import net.seilent.funekit.kit.stack.shifted
 import net.seilent.funekit.kit.word
+import net.seilent.funekit.kit.ringPress
 import net.seilent.funekit.px
 import net.seilent.funekit.api.Row
 import net.seilent.funekit.screens.music.ALBUMS
+import net.seilent.funekit.screens.music.artist.RingLook
+import net.seilent.funekit.screens.music.artist.detailRing
 import net.seilent.funekit.screens.music.hub.ART_PEAK
 import net.seilent.funekit.screens.music.hub.GridRecord
 import net.seilent.funekit.screens.music.hub.KIND_TILE
@@ -95,16 +99,20 @@ fun DrawScope.albumTile(img: ImageBitmap?, side: Float, cx: Float, cy: Float, al
 
 const val FLIGHT = "flight"
 
+private val ALBUM_RING_GLYPHS = listOf(Glyphs.play, Glyphs.shuffle)
+
 class AlbumDraw(
     val m: AlbumModel,
-    val geo: AlbumGeo,
+    private val full: AlbumGeo,
     private val inkOf: (RowModel) -> RowInk,
     private val lineOf: (String, Role) -> Word,
     val headerSide: WordSide,
     val accent: Color,
     val accentOff: Boolean,
 ) {
-    val s: Scale get() = geo.s
+    private val bare = AlbumGeo(full.s, rings = false)
+    val geo: AlbumGeo get() = if (m.total == 0) bare else full
+    val s: Scale get() = full.s
     private val inks = HashMap<RowModel, RowInk>()
     private var lines: Triple<Row, Word, Word>? = null
 
@@ -163,6 +171,20 @@ class AlbumDraw(
         textLines(liftPx, rec, name)
     }
 
+    fun DrawScope.rings(looks: List<RingLook>, liftPx: Int, q: Int, rec: DrawRecord?, name: String) {
+        val a = m.ringA(liftPx)
+        if (a <= 0f) return
+        val d = geo.ring
+        val cy = geo.ringCy(q)
+        val bottom = geo.bottom.toFloat()
+        if (a == 1f) clipped(rec, 0f, geo.pressTopPx(liftPx).toFloat(), size.width, bottom) {
+            for (i in looks.indices) ringPress(d, px(if (m.onRings && m.ring == i) Tok.ringStrokeFocused else Tok.ringStrokeIdle, s.stdPpu), geo.ringCx(i), cy, looks[i].lit)
+        }
+        clipped(rec, 0f, geo.rowsTopPx(liftPx).toFloat(), size.width, bottom) {
+            for (i in looks.indices) detailRing(ALBUM_RING_GLYPHS[i], i, geo.ringCx(i), cy, d, looks[i].copy(lit = 0f), s, rec, name, a)
+        }
+    }
+
     fun leaveBands(liftPx: Int): NpBands {
         val w = s.widthPx
         val h = s.heightPx
@@ -175,14 +197,16 @@ class AlbumDraw(
         val art = geo.artRect(liftPx)
         val rows = geo.rowsTopPx(liftPx)
         val t = m.track
-        val split = (geo.top + t.topOf(t.drawFirst + 1) - t.q).coerceIn(rows, bottom)
+        val ring = (geo.top - t.q).coerceIn(rows, bottom)
+        val split = (geo.top + t.topOf(t.drawFirst + 1) - t.q).coerceIn(ring, bottom)
         val out = ArrayList<Pair<Edges, Part>>()
         fun band(e: Edges, p: Part) {
             val c = Edges(e.x0.coerceIn(0, w), e.y0.coerceIn(0, h), e.x1.coerceIn(0, w), e.y1.coerceIn(0, h))
             if (c.w > 0 && c.h > 0) out += c to p
         }
         band(Edges(if (art.y0 < mid) art.x1 else 0, hy, w, mid), Part.NpLArtist)
-        band(Edges(0, rows, w, split), Part.NpLRow1)
+        band(Edges(0, rows, w, ring), Part.NpLArtist)
+        band(Edges(0, ring, w, split), Part.NpLRow1)
         band(Edges(0, split, w, bottom), Part.NpLRows)
         return NpBands(NpLeave.Album, out)
     }
@@ -233,6 +257,7 @@ class AlbumPaint(
     override fun DrawScope.rest(now: Long, rec: DrawRecord?, name: String) {
         with(d) { block(lift, rec, name) }
         if (!m.gone) restRows(this@AlbumPaint, now, rec, name)
+        with(d) { rings(m.ringLooks(now, false), lift, scroll, rec, name) }
     }
 
     override fun wordSide(pivot: Boolean): WordSide? = if (pivot) null else d.headerSide

@@ -213,6 +213,15 @@ class FocusTest {
         assertEquals(0, scrollInto(0, ALBUM_PITCH, aim, 300))
     }
 
+    @Test
+    fun scrollIntoTheFirstRowDocksAtTheCollapseWhenItsListDocks() {
+        val t = album(600)
+        assertEquals(345, scrollInto(0, ALBUM_PITCH, t, firstDocks = true))
+        assertEquals(585, scrollInto(240, ALBUM_PITCH, t, firstDocks = true))
+        val aim = album(100)
+        assertEquals(300, scrollInto(0, ALBUM_PITCH, aim, 300, firstDocks = true))
+    }
+
     private companion object {
         const val STAMP = 1000L
         const val LATE = 5L
