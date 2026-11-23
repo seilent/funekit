@@ -55,6 +55,7 @@ import net.seilent.funekit.kit.home.HomeMenu
 import net.seilent.funekit.kit.motion.MoveKind
 import net.seilent.funekit.kit.motion.NpForm
 import net.seilent.funekit.kit.motion.OverKind
+import net.seilent.funekit.kit.motion.Overlay
 import net.seilent.funekit.kit.quickplay.QpData
 import net.seilent.funekit.kit.quickplay.QpItem
 import net.seilent.funekit.kit.quickplay.QpKind
@@ -340,6 +341,30 @@ class HomeHostTest {
         rule.onRoot().performTouchInput { up() }
         settle()
         assertEquals(OverKind.Sheet, stack.overlay?.kind)
+    }
+
+    @Test
+    fun aTileHeldWhileAnotherOpenHoldsTheSlotOpensNoSheetAndItsUpPlaysNothing() {
+        val data = QpData(null, items(TILES, QpKind.Album), emptyList(), emptyList(), 1L)
+        front(data)
+        val held = Overlay(OverKind.Dlg)
+        val o = tileAt(data, 0)
+        rule.onRoot().performTouchInput { down(o) }
+        step(holdMs - FRAME - 1)
+        rule.mainClock.advanceTimeByFrame()
+        assertNull(stack.overlay)
+        var called = false
+        rule.runOnUiThread { called = stack.open(held) }
+        assertTrue("premise: the other open is called and holds the empty slot", called && stack.taken && stack.overlay == null)
+        step(1)
+        settle()
+        assertSame("no sheet opens and the held open lands", held, stack.overlay)
+        rule.onRoot().performTouchInput { up() }
+        settle()
+        assertTrue("the up plays nothing, $played", played.isEmpty())
+        assertNull(stack.turn)
+        assertEquals(0, npEntries())
+        assertSame(held, stack.overlay)
     }
 
     @Test
