@@ -957,6 +957,7 @@ class HostTest {
             it.lyricsOn = view
             it.edit = e
             it.phoneLyricsOf = pl
+            if (pl != null) it.music.np.workContext = Dispatchers.Unconfined
             it.modeAtStart = modeAtStart
             it.compose(rule, root)
             rule.waitForIdle()
@@ -1671,10 +1672,7 @@ class HostTest {
         val app = lyricsApp(Edit(), mode = false, pl = pl)
         val pic = NpPicture(ImageBitmap(4, 4))
         val art = Bitmap.createBitmap(COVER, COVER, Bitmap.Config.ARGB_8888)
-        rule.runOnIdle {
-            app.music.np.workContext = Dispatchers.Unconfined
-            app.backdropFlow.value = pic
-        }
+        rule.runOnIdle { app.backdropFlow.value = pic }
         session(app, phoneTrack.copy(art = art))
         frames(BLUR_FRAMES)
         rule.runOnIdle {
