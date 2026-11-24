@@ -87,7 +87,7 @@ class NpTimeInk(val t: NpTimes, val left: Word, val right: Word?)
 
 fun npTimes(g: NpLayout, m: NowPlayingModel, now: Long, nanos: Long): NpTimes {
     val n = m.shownAt(now)
-    val dur = n.durationMs
+    val dur = if (m.keySeeking && !m.seeking) m.keySeekDur else n.durationMs
     if (m.variant && dur <= 0) return NpTimes("", null, 0, false)
     val tick = now - Math.floorMod(now, NowPlayingModel.TICK)
     val pos = if (m.slideHeld(now)) m.heldPos else m.position(tick, nanos - (now - tick) * NANOS_PER_MS)

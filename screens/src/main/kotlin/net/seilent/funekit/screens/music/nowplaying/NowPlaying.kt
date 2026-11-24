@@ -3,6 +3,7 @@ package net.seilent.funekit.screens.music.nowplaying
 import androidx.compose.runtime.SnapshotMutationPolicy
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
@@ -105,6 +106,11 @@ class NowPlayingModel {
     private var heldMark = false
     var heldPos = 0L
         private set
+    internal var keySeekPos by mutableLongStateOf(-1L)
+        private set
+    internal var keySeekDur by mutableLongStateOf(0L)
+        private set
+    internal val keySeeking: Boolean get() = keySeekPos >= 0
     private var inputAt = 0L
     private var idle = false
     private var idleAt = -1L
@@ -341,7 +347,13 @@ class NowPlayingModel {
         val p = phone
         if (p != null) return p.position(elapsedNanos / NANOS_MS)
         if (seeking) return geoSeek
+        if (keySeeking) return keySeekPos
         return state.anchor.ms(elapsedNanos)
+    }
+
+    internal fun keySeek(dir: Int, pos: Long, dur: Long) {
+        keySeekPos = if (dir == 0) -1 else pos
+        keySeekDur = if (dir == 0) 0 else dur
     }
 
     fun down(g: NpLayout, x: Float, y: Float, now: Long) {

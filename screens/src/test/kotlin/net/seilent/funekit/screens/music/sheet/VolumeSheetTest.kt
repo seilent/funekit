@@ -167,6 +167,7 @@ class VolumeSheetTest {
                     if (!ramp.on) continue
                     ramp.step(t)
                     h.hud.seekShow(ramp.dir, ramp.target, ramp.dur, t, false)
+                    h.m?.keySeek(ramp.dir, ramp.target, ramp.dur)
                     h.play = Play.SeekForward
                 }
                 tile(dev, "vol-hold-$ms", h, down + ms, "a down on the next glyph held from 1200 ms, the hold from seekHoldMs on, the ramp from the page's own position on 16 ms frames, the shot $ms ms after the down; unpaired: funeOS vol:$ms:holdglyph draws the plate over its shot library's 6:17 track with its art, which no fake set holds, so the page under the scrim can never match")

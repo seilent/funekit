@@ -335,7 +335,7 @@ class MusicHost<S : Any> internal constructor(
         private set
     private var opens = 0
     val hud = VolumeHud(env.np.board, env.np.w, env.np.h)
-    private val seekHold = SeekHold(scope, hud, { app.log(it) }, { now() })
+    private val seekHold = SeekHold(scope, hud, { app.log(it) }, { now() }) { d, t, u -> np.keySeek(d, t, u) }
     private var seekLoop: Job? = null
     private val volumeOverlay = Overlay(OverKind.Volume, hud) { if (hud.pendingSeek() != null) volSeek() }
     private val menuOvers = ArrayList<Overlay>()

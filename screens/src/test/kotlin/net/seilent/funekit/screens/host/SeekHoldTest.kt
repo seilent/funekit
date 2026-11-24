@@ -51,7 +51,7 @@ class SeekHoldTest {
     private val hud = VolumeHud().apply { show(0, 50, true, "artist", "title") }
     private val logs = mutableListOf<String>()
     private var clock = 0L
-    private val hold = SeekHold(scope, hud, { logs += it }, { clock })
+    private val hold = SeekHold(scope, hud, { logs += it }, { clock }) { _, _, _ -> }
     private val p = HoldPlayer(testFake().player)
     private val ok = Refuse(false, Card.Present)
 

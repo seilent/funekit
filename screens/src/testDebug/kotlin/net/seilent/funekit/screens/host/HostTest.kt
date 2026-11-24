@@ -3138,6 +3138,17 @@ class HostTest {
     }
 
     @Test
+    fun aHeldNextOnThePlateMovesTheNowPlayingTimes() {
+        val (app, _) = holdApp()
+        heldNext(app)
+        frames(TICK_FRAMES)
+        assertTrue("the page's times follow the ramp, ${app.music.np.keySeekPos}", app.music.np.keySeeking && app.music.np.keySeekPos > HOLD_POS)
+        rule.onRoot().performTouchInput { up() }
+        frames(OPEN_FRAMES)
+        assertFalse("the end gives the times back to the player", app.music.np.keySeeking)
+    }
+
+    @Test
     fun aSeekTickOnNowPlayingWakesItsIdle() {
         val (app, _) = holdApp()
         val down = heldNext(app)

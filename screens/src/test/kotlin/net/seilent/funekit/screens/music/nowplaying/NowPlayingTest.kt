@@ -43,6 +43,9 @@ import org.junit.Test
 
 private const val HELD_AT = 1000L
 private const val AT = 1000L
+private const val HOLD_POS = 216000L
+private const val HOLD_TO = 250000L
+private const val HOLD_DUR = 377000L
 private const val TITLE_DX = 20f
 private const val TITLE_DY = 4f
 private const val MS_NANOS = 1000000L
@@ -232,6 +235,21 @@ class NowPlayingTest {
         m.keyed(40)
         assertEquals("the key drops the heart press at once", 1f, m.press[NP_HEART].scale(40f), 0f)
         assertEquals(NpAct.None, m.tap(a105, 40))
+    }
+
+    @Test
+    fun theTimesFollowTheSeekTargetDuringAHold() {
+        val m = NowPlayingModel()
+        m.feed(PlayerState(queueSize = 1, index = 0, track = 1L, playing = true, anchor = Anchor(HOLD_POS, 1000, 0, false, HOLD_DUR)))
+        m.sync(shown(1), 0)
+        assertEquals("premise: the times read the player", npTime(HOLD_POS), npTimes(a105, m, AT, 0L).left)
+        m.keySeek(1, HOLD_TO, HOLD_DUR)
+        val t = npTimes(a105, m, AT, 0L)
+        assertEquals("the times follow the ramp's target (funeOS player/ui/nowplaying.cpp NowPlaying::ticks_at :1342-1364, v0.4.3)", npTime(HOLD_TO), t.left)
+        assertEquals(npRemaining(HOLD_DUR, HOLD_TO), t.right)
+        assertEquals((HOLD_TO * a105.bar.w / HOLD_DUR).toInt(), t.fill)
+        m.keySeek(0, 0, 0)
+        assertEquals("the end gives the times back to the player", npTime(HOLD_POS), npTimes(a105, m, AT, 0L).left)
     }
 
     private fun titleDown(m: NowPlayingModel, now: Long) = m.down(a105, Tok.npTextX + TITLE_DX, a105.s.board.npTitleY - TITLE_DY, now)

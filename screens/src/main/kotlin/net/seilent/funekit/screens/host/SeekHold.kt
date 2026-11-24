@@ -37,6 +37,7 @@ internal class SeekHold(
     private val hud: VolumeHud,
     private val log: (String) -> Unit,
     private val now: () -> Long,
+    private val moved: (Int, Long, Long) -> Unit,
 ) {
     private val ramp = SeekRamp()
     private val holds = mutableSetOf<Hold>()
@@ -182,9 +183,12 @@ internal class SeekHold(
                 return false
             }
         }
-        dir = ramp.dir
-        target = ramp.target
-        dur = ramp.dur
+        if (dir != ramp.dir || target != ramp.target || dur != ramp.dur) {
+            dir = ramp.dir
+            target = ramp.target
+            dur = ramp.dur
+            moved(dir, target, dur)
+        }
         if (plate) {
             hud.seekShow(ramp.dir, ramp.target, ramp.dur, at, opened)
             hud.keyHold(Hold.Key in holds, at)
@@ -256,6 +260,7 @@ internal class SeekHold(
         dir = 0
         target = 0
         dur = 0
+        moved(0, 0, 0)
         hud.keyHold(false, at)
         if (final) hud.seekFinal(at) else hud.seekDrop(at)
     }
