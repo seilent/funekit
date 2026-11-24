@@ -319,6 +319,13 @@ internal suspend fun qpLoads(src: QpSource, qp: QuickplayState, tiles: Int, log:
     }
 }
 
+internal suspend fun shuffleLibrary(s: MusicSource): Boolean {
+    val g = s.library.generation.value
+    if (s.library.view(g).page(Listing.Songs, 0, 0).total == 0) return false
+    s.player.play(Listing.Songs, g, -1, 0L, shuffle = true)
+    return true
+}
+
 internal fun qpResumes(t: QpTile, track: Long?, variant: Boolean): Boolean =
     t.section == QP_PLAYING || (!variant && track != null && t.item.kind == QpKind.Song && t.item.id == track)
 
@@ -650,7 +657,7 @@ fun <S : Any> HomeLayer(
     page: Scale,
     a: Arbiter,
     onEntry: (HomeEntry) -> Unit,
-    onRing: () -> Unit,
+    onRing: () -> Unit = { host.playOpen(npOpenForm(true, false)) { shuffleLibrary(it) } },
 ) {
     val scope = rememberCoroutineScope()
     val stack = host.stack

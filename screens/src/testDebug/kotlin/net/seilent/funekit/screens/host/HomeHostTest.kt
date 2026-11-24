@@ -43,6 +43,7 @@ import net.seilent.funekit.api.LibraryView
 import net.seilent.funekit.api.LibraryState
 import net.seilent.funekit.api.Listing
 import net.seilent.funekit.api.NoCard
+import net.seilent.funekit.api.Page
 import net.seilent.funekit.api.Player
 import net.seilent.funekit.api.pins
 import net.seilent.funekit.fake.FakeSet
@@ -136,6 +137,11 @@ class HomeHostTest {
         override suspend fun play(ids: List<Long>, index: Int, posMs: Long) {
             reply?.await()
             fake.player.play(ids, index, posMs)
+        }
+
+        override suspend fun play(listing: Listing, generation: Long, index: Int, posMs: Long, shuffle: Boolean) {
+            reply?.await()
+            fake.player.play(listing, generation, index, posMs, shuffle)
         }
     }
 
@@ -583,6 +589,57 @@ class HomeHostTest {
         settle()
         assertTrue("premise: the pane is in front", qp.pan.front && stack.top == null)
         assertEquals("the front lands on the scroll it showed", pos, qpPos(state.qpTouch, qp, l))
+    }
+
+    @Test
+    fun theRingShufflesTheLibraryAndOpensNowPlaying() {
+        reply = CompletableDeferred()
+        launcher(qpSource(QpData.EMPTY))
+        assertNull("premise: nothing is loaded", fake.player.state.value.track)
+        val r = state.geo.ringHit()
+        tap((r.x0 + r.x1) / 2f, (r.y0 + r.y1) / 2f)
+        until("the ring starts a T7") { stack.turn?.kind == MoveKind.T7 }
+        assertTrue("the ring's T7 holds the bind on its play", stack.armed)
+        assertEquals(NpForm.Ring, app.movePaint.npForm)
+        frames(NowPlayingModel.HOLD_CAP / 2)
+        assertTrue("the bind holds while the shuffle waits", stack.armed && stack.turn?.kind == MoveKind.T7 && !npOnTop())
+        reply!!.complete(Unit)
+        until("the ring lands on now playing") { npOnTop() && !stack.armed }
+        val s = fake.player.state.value
+        assertTrue("the library plays shuffled", s.shuffle)
+        assertEquals(runBlocking { fake.library.view().page(Listing.Songs, 0, 0).total }, s.queueSize)
+    }
+
+    @Test
+    fun anEmptyLibraryRingPlaysNoListingAndLeavesNoNowPlaying() {
+        var reads = 0
+        val listings = mutableListOf<Listing>()
+        val lib = object : Library by library {
+            override fun view(generation: Long): LibraryView {
+                val v = library.view(generation)
+                return object : LibraryView by v {
+                    override suspend fun page(listing: Listing, offset: Int, count: Int): Page {
+                        if (listing != Listing.Songs) return v.page(listing, offset, count)
+                        reads++
+                        return Page(generation, offset, 0, emptyList())
+                    }
+                }
+            }
+        }
+        val p = object : Player by player {
+            override suspend fun play(listing: Listing, generation: Long, index: Int, posMs: Long, shuffle: Boolean) {
+                listings += listing
+            }
+        }
+        launcher(qpSource(QpData.EMPTY), MusicSource(lib, p, fake.quickplay, fake.favorites, fake.playlists, fake.lyrics))
+        val r = state.geo.ringHit()
+        tap((r.x0 + r.x1) / 2f, (r.y0 + r.y1) / 2f)
+        until("premise: the ring asked for its shuffle") { reads > 0 || listings.isNotEmpty() }
+        frames(NowPlayingModel.HOLD_CAP + HOLD)
+        until("the ring's open lands") { stack.phase == Phase.Rest && !stack.armed }
+        assertEquals("an empty library plays no listing", emptyList<Listing>(), listings)
+        assertEquals(0, npEntries())
+        assertNull(stack.top)
     }
 
     @Test

@@ -45,7 +45,7 @@ class TestHome(home: Scale, entries: List<HomeEntry>, source: QpSource?) {
 
     @Composable
     internal fun Layer(s: HomeState, host: MusicHost<TestScreen>, models: MusicModels, music: MusicSource?, page: Scale, a: Arbiter) {
-        HomeLayer(s, host, models, music, page, a, onEntry = { picks += it }, onRing = { host.openNp(npOpenForm(true, false)) })
+        HomeLayer(s, host, models, music, page, a, onEntry = { picks += it })
     }
 
     @Composable
