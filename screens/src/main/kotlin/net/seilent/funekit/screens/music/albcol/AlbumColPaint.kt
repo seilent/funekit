@@ -32,6 +32,7 @@ import net.seilent.funekit.kit.nextCluster
 import net.seilent.funekit.kit.pen64
 import net.seilent.funekit.kit.pressFrame
 import net.seilent.funekit.kit.ring
+import net.seilent.funekit.kit.ringPress
 import net.seilent.funekit.kit.roleStyle
 import net.seilent.funekit.kit.stack.DrawRecord
 import net.seilent.funekit.kit.stack.PageKind
@@ -97,9 +98,10 @@ class AlbumColDraw(
             val grid = rec as? GridRecord
             if (e.art != null) grid?.art("$name.art", t, e.art, 1f, peakOff = ART_PEAK) else if (!e.boxed) grid?.edges("$name.art", KIND_TILE, t, Ink.tile, 1f)
             val c = Offset(geo.ringX.toFloat(), geo.ringDrop.toFloat())
-            val stroke = px(if (look.focused) Tok.ringStrokeFocused else Tok.ringStrokeIdle, sp).toFloat()
+            val stroke = px(if (look.focused) Tok.ringStrokeFocused else Tok.ringStrokeIdle, sp)
             val ra = if (look.focused) Tok.alpha_full else Tok.alpha_mid
-            ring(c, geo.ring.toFloat(), stroke, Ink.white, ra)
+            ringPress(geo.ring, stroke, geo.ringX, geo.ringDrop, look.ringLit)
+            ring(c, geo.ring.toFloat(), stroke.toFloat(), Ink.white, ra)
             glyph(Glyphs.play, c, geo.ring / RING_SLOT, Ink.white, ra)
         }
         if (k == null) return

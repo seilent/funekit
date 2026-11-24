@@ -319,6 +319,12 @@ class AlbumColType(types: MusicTypes, private val chrome: Chrome) : MusicPageTyp
             onAlbum = { row -> acts.album(row, -1, false) },
             leavesLit = at.leavesLit,
             onSheet = acts::sheet,
+            onAlbumRing = { row ->
+                m.gen >= 0 && acts.playOpen(NpForm.Page) { s ->
+                    s.player.play(Listing.AlbumTracks(row.id), m.gen, 0, 0L)
+                    true
+                }
+            },
         )
     }
 }
@@ -352,6 +358,12 @@ class ArtistType(types: MusicTypes, private val chrome: Chrome) : MusicPageType<
             leavesLit = at.leavesLit,
             pageCovered = at.covered,
             onSheet = acts::sheet,
+            onAlbumRing = { row ->
+                m.gen >= 0 && acts.playOpen(NpForm.Page) { s ->
+                    s.player.play(Listing.AlbumTracks(row.id), m.gen, 0, 0L)
+                    true
+                }
+            },
         )
     }
 }

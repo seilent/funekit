@@ -214,10 +214,13 @@ class ArtistDraw(
         }
         if (!hidden || m.hiddenRing) {
             val d = geo.rowRing
-            val c = Offset((geo.artX + side - geo.rowInset - d / ArtistGeo.RING_HALF).toFloat(), (geo.rowInset + d / ArtistGeo.RING_HALF).toFloat())
-            val stroke = px(if (look.focused) Tok.ringStrokeFocused else Tok.ringStrokeIdle, s.stdPpu).toFloat()
+            val cx = geo.artX + side - geo.rowInset - d / ArtistGeo.RING_HALF
+            val cy = geo.rowInset + d / ArtistGeo.RING_HALF
+            val c = Offset(cx.toFloat(), cy.toFloat())
+            val stroke = px(if (look.focused) Tok.ringStrokeFocused else Tok.ringStrokeIdle, s.stdPpu)
             val ra = if (look.focused) Tok.alpha_full else Tok.alpha_mid
-            ring(c, d.toFloat(), stroke, Ink.white, ra)
+            ringPress(d, stroke, cx, cy, look.ringLit)
+            ring(c, d.toFloat(), stroke.toFloat(), Ink.white, ra)
             glyph(Glyphs.play, c, (d / ArtistGeo.RING_HALF).toFloat(), Ink.white, ra)
         }
         val clipBottom = px(Tok.detailRow, s.stdPpu).toFloat()

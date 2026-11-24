@@ -107,6 +107,7 @@ fun ArtistLayer(
     leavesLit: () -> Boolean = { false },
     pageCovered: Boolean = false,
     onSheet: (SheetTarget) -> Boolean = { false },
+    onAlbumRing: (Row) -> Boolean = { false },
 ) {
     val geo = draw.geo
     val s: Scale = geo.s
@@ -280,7 +281,11 @@ fun ArtistLayer(
                         pn.press.tap(now())
                         val row = pn.row(r)
                         if (p == ARTIST_ALBUMS) {
-                            if (row != null) onAlbum(row)
+                            if (row != null && r == pn.ringRow) {
+                                if (!onAlbumRing(row)) pn.press.untap(now())
+                            } else if (row != null) {
+                                onAlbum(row)
+                            }
                         } else if (!onPlay(r)) {
                             pn.press.untap(now())
                         }
@@ -298,7 +303,7 @@ fun ArtistLayer(
                         false
                     }
                 },
-                onAt = {
+                onAt = { o ->
                     if (!started) {
                         started = true
                         val at = now()
@@ -308,8 +313,9 @@ fun ArtistLayer(
                             val was = pn.focus.row
                             pn.focus.set(r, pn.count, at, true)
                             pn.focus.setUnpress(was)
+                            pn.ringRow = if (p == ARTIST_ALBUMS && geo.rowRingAt(o.x, o.y - geo.boxTop + t.over + t.px - t.topOf(r))) r else -1
                             pn.press.down(r, at)
-                            pn.glow.arm(r, at)
+                            if (pn.ringRow != r) pn.glow.arm(r, at)
                             m.poke()
                         }
                     }

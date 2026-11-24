@@ -49,6 +49,7 @@ import net.seilent.funekit.screens.music.MusicPage
 import net.seilent.funekit.screens.music.MusicSource
 import net.seilent.funekit.screens.music.PageModel
 import net.seilent.funekit.screens.music.Paging
+import net.seilent.funekit.screens.music.artist.ArtistGeo
 import net.seilent.funekit.screens.music.hub.HubMap
 import net.seilent.funekit.screens.music.hub.NO_CELL
 import net.seilent.funekit.screens.music.hub.hubMap
@@ -69,6 +70,7 @@ class AlbumColGeo(val s: Scale) {
     val ring: Int = px(Tok.albcolRing, sp)
     val ringX: Int = side - px(Tok.albcolRingInset, sp)
     val ringDrop: Int = px(Tok.albcolRingDrop, sp)
+    private val ringR: Int = ring / ArtistGeo.RING_HALF + px((Tok.rowPlayRing - Tok.rowRing) / ArtistGeo.RING_HALF, sp)
     val textX: Int = side + px(Tok.albcolTextGap, sp)
     val right: Int = s.widthPx - px(Tok.edge, sp)
     val titleBase: Int = px64(fx(Tok.albcolTitleTop) + fxMul(fx(Tok.capHeight), fx(Tok.type_albcolTitle_size)), std64)
@@ -98,10 +100,16 @@ class AlbumColGeo(val s: Scale) {
 
     fun rowTop(t: RowTrack, r: Int): Int = boxTop + t.topOf(r) - t.q
 
+    fun ringAt(x: Float, y: Float): Boolean {
+        val dx = x - ringX
+        val dy = y - ringDrop
+        return dx * dx + dy * dy <= ringR * ringR
+    }
+
     fun thumb(t: RowTrack): ThumbRect? = listThumbOf(s, boxTop, bottom, t)
 }
 
-data class ColLook(val focused: Boolean, val lit: Float, val ring: Float)
+data class ColLook(val focused: Boolean, val lit: Float, val ring: Float, val ringLit: Float = 0f)
 
 data class ColEntry(val letter: Int, val row: Row?, val tracks: List<String>, val accent: Boolean, val art: ImageBitmap?, val boxed: Boolean, val hidden: Boolean)
 
@@ -122,6 +130,7 @@ class AlbumColModel(entry: Long, val letter: Int) : PageModel(entry, MusicPage.A
     var counted: HubMap? = null
     val focus = FocusTrack().also { it.attach() }
     val press = PressSlots()
+    var ringRow = -1
     val fade = ThumbFade()
     val art = mutableStateMapOf<ArtKey, ImageBitmap?>()
     val tracks = mutableStateMapOf<Long, List<String>>()
@@ -263,6 +272,7 @@ class AlbumColModel(entry: Long, val letter: Int) : PageModel(entry, MusicPage.A
     fun look(r: Int, now: Long, focusShown: Boolean): ColLook {
         focus.revision
         press.revision
+        if (r == ringRow) return ColLook(focusShown && r == focus.row, 0f, 0f, press.look(r, now))
         return ColLook(focusShown && r == focus.row, press.lit(r, now), press.ring(r, now))
     }
 

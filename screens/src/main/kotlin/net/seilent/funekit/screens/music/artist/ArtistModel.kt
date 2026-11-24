@@ -88,6 +88,7 @@ class ArtistGeo(val s: Scale) {
     val artX: Int = px(Tok.hubEdge, sp)
     val rowRing: Int = px(Tok.detailRing, sp)
     val rowInset: Int = px(Tok.detailRingInset, sp)
+    private val rowRingR: Int = rowRing / RING_HALF + px((Tok.rowPlayRing - Tok.rowRing) / RING_HALF, sp)
     val textX: Int = px(Tok.detailTextX, sp)
     val right: Int = s.widthPx - px(Tok.hubEdge, sp)
     val pivotTop: Int = px(s.board.pivotTop, sp)
@@ -119,6 +120,12 @@ class ArtistGeo(val s: Scale) {
 
     fun rowTop(t: RowTrack, r: Int): Int = boxTop + t.topOf(r) - t.q
 
+    fun rowRingAt(x: Float, y: Float): Boolean {
+        val dx = x - (artX + side - rowInset - rowRing / RING_HALF)
+        val dy = y - (rowInset + rowRing / RING_HALF)
+        return dx * dx + dy * dy <= rowRingR * rowRingR
+    }
+
     fun thumb(t: RowTrack): ThumbRect? = listThumbOf(s, boxTop, bottom, t)
 
     fun openRect(): Edges = Edges(artX, boxTop, artX + side, boxTop + side)
@@ -142,13 +149,14 @@ class ArtistPane(val pivot: Int, val listing: Listing) {
     val focus = FocusTrack().also { it.attach() }
     val press = PressSlots()
     val glow = GlowPair()
+    var ringRow = -1
 
     val count: Int get() = max(0, total)
 
     fun row(i: Int): Row? = paging.window?.row(i)
 }
 
-data class ArtistLook(val alpha: Float, val focused: Boolean, val glow: Float?, val lit: Float, val ring: Float, val back: Boolean = false)
+data class ArtistLook(val alpha: Float, val focused: Boolean, val glow: Float?, val lit: Float, val ring: Float, val back: Boolean = false, val ringLit: Float = 0f)
 
 data class RingLook(val focused: Boolean, val lit: Float)
 
@@ -281,7 +289,10 @@ class ArtistModel(entry: Long, val id: Long) : PivotPage(entry, MusicPage.Artist
         val focused = !onRings && !hideFocus && i == pn.focus.row
         val back = pn.glow.glow.key != i && pn.glow.back.key == i
         val lit = pn.press.lit(i, now)
-        return ArtistLook(alpha, focused, if (pn.glow.glow.key == i || back) lit else null, lit, pn.press.ring(i, now), back)
+        val ring = p == ARTIST_ALBUMS && i == pn.ringRow
+        val glow = if (pn.glow.glow.key == i || back) lit else null
+        if (ring) return ArtistLook(alpha, focused, glow, 0f, 0f, back, pn.press.look(i, now))
+        return ArtistLook(alpha, focused, glow, lit, pn.press.ring(i, now), back)
     }
 
     fun ringLook(i: Int, now: Long, hideFocus: Boolean): RingLook {

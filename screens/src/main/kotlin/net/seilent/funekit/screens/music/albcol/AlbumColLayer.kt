@@ -101,6 +101,7 @@ fun AlbumColLayer(
     onAlbum: (Row) -> Unit,
     leavesLit: () -> Boolean = { false },
     onSheet: (SheetTarget) -> Boolean = { false },
+    onAlbumRing: (Row) -> Boolean = { false },
 ) {
     val geo = draw.geo
     val s: Scale = geo.s
@@ -238,7 +239,13 @@ fun AlbumColLayer(
                         m.aimTo(scrollInto(m.track.topOf(r), m.track.topOf(r + 1) - m.track.topOf(r), m.track))
                         val l = m.letterAt(r)
                         val row = m.row(r)
-                        if (l >= 0) onJump(l) else if (row != null) onAlbum(row)
+                        if (l >= 0) {
+                            onJump(l)
+                        } else if (row != null && r == m.ringRow) {
+                            if (!onAlbumRing(row)) m.press.untap(now())
+                        } else if (row != null) {
+                            onAlbum(row)
+                        }
                         m.poke()
                     }
                 },
@@ -252,13 +259,14 @@ fun AlbumColLayer(
                         false
                     }
                 },
-                onAt = {
+                onAt = { o ->
                     if (!started) {
                         started = true
                         val at = now()
                         if (r < m.count && (m.letterAt(r) >= 0 || m.row(r) != null)) {
                             valid = true
                             m.focus.set(r, m.count, at, true)
+                            m.ringRow = if (m.letterAt(r) < 0 && geo.ringAt(o.x, o.y - geo.boxTop + t.over + t.px - t.topOf(r))) r else -1
                             m.press.down(r, at)
                             m.poke()
                         }
