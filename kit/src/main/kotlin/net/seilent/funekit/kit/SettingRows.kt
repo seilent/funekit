@@ -48,9 +48,9 @@ fun settingMeasure(s: Scale, fonts: FontFamily.Resolver, density: Density, cover
     val bs = vs.copy(fontWeight = Fonts.weight(Accent.bold(Roles.settingsValue.weight, accentOff)))
     return SettingMeasure(
         s,
-        textWidth(title, ts, fonts, density, covers),
-        textWidth(Roles.settingsValue, vs, fonts, density, covers),
-        textWidth(Roles.settingsValue, bs, fonts, density, covers),
+        textWidth(title, ts, fonts, density, covers, s.board.fontHanMinPx),
+        textWidth(Roles.settingsValue, vs, fonts, density, covers, s.board.fontHanMinPx),
+        textWidth(Roles.settingsValue, bs, fonts, density, covers, s.board.fontHanMinPx),
         title,
     )
 }
@@ -169,7 +169,7 @@ fun settingInk(
     val top = size.pad
     val h = size.band
     val vl = if (swatch || value.isEmpty()) emptyList() else meas.valueLines(meas.wideLine(lines), value, editable)
-    val vw = vl.map { m.word(it, Roles.settingsValue, vs, fonts, density, covers) }
+    val vw = vl.map { m.word(it, Roles.settingsValue, vs, fonts, density, covers, s.board.fontHanMinPx) }
     val vasc = Metrics.ascent(meas.valuePx)
     val vdesc = Metrics.descent(meas.valuePx)
     val two = vl.size > 1
@@ -194,9 +194,9 @@ fun settingInk(
     val tdesc = Metrics.descent(meas.titlePx)
     val tpitch = if (lines.size > 1) px(Tok.settingsTitlePitch, s.ppu) else 0
     val tbase = top + (h - tasc - tpitch - tdesc) / HALF + tasc
-    val tw = lines.map { m.word(it, meas.title, ts, fonts, density, covers) }
+    val tw = lines.map { m.word(it, meas.title, ts, fonts, density, covers, s.board.fontHanMinPx) }
     val tb = tw.indices.map { tbase + it * tpitch }
-    val sw = sub?.let { m.word(it, Roles.settingsSub, roleStyle(Roles.settingsSub, s, density, Ink.white), fonts, density, covers) }
+    val sw = sub?.let { m.word(it, Roles.settingsSub, roleStyle(Roles.settingsSub, s, density, Ink.white), fonts, density, covers, s.board.fontHanMinPx) }
     return SettingInk(
         s,
         lines,

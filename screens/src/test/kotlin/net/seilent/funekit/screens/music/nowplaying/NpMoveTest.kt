@@ -252,7 +252,7 @@ class NpMoveTest {
         val density = Density(1f)
         val fonts = createFontFamilyResolver(RuntimeEnvironment.getApplication())
         val style = roleStyle(Roles.time, s, density, Ink.white, Tok.alpha_full).merge(Fonts.style(Roles.time, line.textPx, density, Roles.time.tracking * s.ppu))
-        val percent = TextMeasurer(fonts, density, LayoutDirection.Ltr).word("$battery%", Roles.time, style, fonts, density, null)
+        val percent = TextMeasurer(fonts, density, LayoutDirection.Ltr).word("$battery%", Roles.time, style, fonts, density, null, s.board.fontHanMinPx)
         return StatusInk(StatusState("", battery, false, Play.Playing, false, -1, -1), StatusText(null, percent, null), line, s, box)
     }
 

@@ -61,7 +61,7 @@ fun npTimeRole(s: NpLayout): Role = keptText(Roles.npViewTime, s.s)
 class NpInk(val shown: NpShown, val artist: Word, val album: Word, val title: Word, val next: List<Word>, val from: Word)
 
 class NpMeasure(val g: NpLayout, val measurer: TextMeasurer, val fonts: FontFamily.Resolver, val density: Density, val covers: Covers?) {
-    fun word(t: String, r: Role): Word = measurer.word(t, r, roleStyle(r, g.s, density, Ink.white, ppu = g.p), fonts, density, covers)
+    fun word(t: String, r: Role): Word = measurer.word(t, r, roleStyle(r, g.s, density, Ink.white, ppu = g.p), fonts, density, covers, g.s.board.fontHanMinPx)
 
     fun ink(n: NpShown, variant: Boolean): NpInk {
         val nr = npNextRole(g, variant)

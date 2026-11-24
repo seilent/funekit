@@ -120,9 +120,9 @@ class LyricsInk(
     private fun wrap(text: String, role: Role, base: Int): List<Word> {
         if (text.isEmpty()) return emptyList()
         val style = roleStyle(role, g.s, density, Ink.white, ppu = g.p)
-        val tw = textWidth(role, style, fonts, density, covers, base)
+        val tw = textWidth(role, style, fonts, density, covers, g.s.board.fontHanMinPx, base)
         val rows = wrapRanges(text, width64, Int.MAX_VALUE, { b, e -> if (e > b) pen64(tw(text.substring(b, e))) else 0 }, { p, e -> nextCluster(text, p, e) })
-        return rows.map { (b, e) -> measurer.word(text.substring(b, e), role, style, fonts, density, covers, base) }
+        return rows.map { (b, e) -> measurer.word(text.substring(b, e), role, style, fonts, density, covers, g.s.board.fontHanMinPx, base) }
     }
 
     fun words(line: Int, big: Boolean): List<Word> = cache.getOrPut(line to big) {

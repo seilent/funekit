@@ -239,12 +239,12 @@ fun chromeOf(
 ): Chrome {
     fun ink(n: String, std: Boolean, bold: Boolean): Word {
         val role = if (bold) Roles.pivotActive else Roles.pivotInactive
-        return m.word(n, role, roleStyle(role, s, density, Ink.white, ppu = if (std) s.stdPpu else s.ppu), fonts, density, covers)
+        return m.word(n, role, roleStyle(role, s, density, Ink.white, ppu = if (std) s.stdPpu else s.ppu), fonts, density, covers, s.board.fontHanMinPx)
     }
     val h = Role(Roles.pageHeader.size, headerWeight, headerCase, Roles.pageHeader.alpha, Roles.pageHeader.tracking)
     return Chrome(
         s,
-        m.word(header, h, roleStyle(h, s, density, Ink.header, ppu = s.stdPpu), fonts, density, covers),
+        m.word(header, h, roleStyle(h, s, density, Ink.header, ppu = s.stdPpu), fonts, density, covers, s.board.fontHanMinPx),
         pivots.map { PivotInk(ink(it, false, false), ink(it, false, true), ink(it, true, false), ink(it, true, true)) },
     )
 }

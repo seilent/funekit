@@ -64,7 +64,7 @@ import net.seilent.funekit.kit.thumb as drawThumb
 private const val HALF = 2f
 
 fun albumChrome(m: TextMeasurer, fonts: FontFamily.Resolver, s: Scale, density: Density, covers: Covers?): Chrome =
-    Chrome(s, m.word(ALBUMS, Roles.albumHeader, roleStyle(Roles.albumHeader, s, density, Ink.header, ppu = s.stdPpu), fonts, density, covers), emptyList()).also {
+    Chrome(s, m.word(ALBUMS, Roles.albumHeader, roleStyle(Roles.albumHeader, s, density, Ink.header, ppu = s.stdPpu), fonts, density, covers, s.board.fontHanMinPx), emptyList()).also {
         it.headerPen = Tok.page_albumHeaderX
         it.headerAlpha = Roles.albumHeader.alpha
     }
@@ -218,7 +218,7 @@ fun albumDraw(m: AlbumModel, s: Scale, measurer: TextMeasurer, fonts: FontFamily
         m,
         geo,
         { r -> rowInk(measurer, fonts, r, s, density, accentOff, covers) },
-        { t, r -> measurer.word(t, r, roleStyle(r, s, density, Ink.white, ppu = s.stdPpu), fonts, density, covers) },
+        { t, r -> measurer.word(t, r, roleStyle(r, s, density, Ink.white, ppu = s.stdPpu), fonts, density, covers, s.board.fontHanMinPx) },
         albumHeaderSide(measurer, fonts, s, density, covers, chrome),
         accent,
         accentOff,

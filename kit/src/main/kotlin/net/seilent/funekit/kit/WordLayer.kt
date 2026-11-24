@@ -40,7 +40,7 @@ fun rememberWord(text: String, role: Role, s: Scale, ppu: Float = s.stdPpu): Wor
     val density = LocalDensity.current
     val covers = rememberCovers()
     return remember(text, role, s.board, ppu, density, fonts, covers) {
-        m.word(text, role, roleStyle(role, s, density, Ink.white, ppu = ppu), fonts, density, covers).takeIf { it.inked }
+        m.word(text, role, roleStyle(role, s, density, Ink.white, ppu = ppu), fonts, density, covers, s.board.fontHanMinPx).takeIf { it.inked }
     }
 }
 

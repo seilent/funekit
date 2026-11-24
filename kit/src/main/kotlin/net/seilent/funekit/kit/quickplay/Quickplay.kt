@@ -132,13 +132,13 @@ fun qpInk(m: TextMeasurer, fonts: FontFamily.Resolver, s: Scale, density: Densit
     val hs = roleStyle(Roles.quickplayHeader, s, density, Ink.white, ppu = sp)
     val hint = keptText(Roles.qpHint, s)
     val ts = roleStyle(hint, s, density, Ink.white, ppu = sp)
-    val w = textWidth(hint, ts, fonts, density, null)
+    val w = textWidth(hint, ts, fonts, density, null, s.board.fontHanMinPx)
     val lines = qpHintLines(status.ifEmpty { QP_HINT }, pen64(Tok.qpHintW, sp)) { pen64(w(it)) }
     return QpInk(
-        QP_HEADERS.map { m.word(it, Roles.quickplayHeader, hs, fonts, density, null) },
-        m.word(QP_NOW, Roles.quickplayHeader, hs, fonts, density, null),
-        lines.map { m.word(it, hint, ts, fonts, density, null) },
-        m.word(QP_PAUSED, Roles.quickplayHeader, hs, fonts, density, null),
+        QP_HEADERS.map { m.word(it, Roles.quickplayHeader, hs, fonts, density, null, s.board.fontHanMinPx) },
+        m.word(QP_NOW, Roles.quickplayHeader, hs, fonts, density, null, s.board.fontHanMinPx),
+        lines.map { m.word(it, hint, ts, fonts, density, null, s.board.fontHanMinPx) },
+        m.word(QP_PAUSED, Roles.quickplayHeader, hs, fonts, density, null, s.board.fontHanMinPx),
     )
 }
 
@@ -555,7 +555,7 @@ fun qpBoxes(m: TextMeasurer, fonts: FontFamily.Resolver, l: QpLayout, density: D
     return QpBoxes { i ->
         val t = l.tiles[i]
         val lines = (if (t.section == QP_PLAYING) Tok.boxLinesPlaying else Tok.boxLines).toInt()
-        boxInk(m, fonts, t.item.title, l.caption, style, l.rect(i, 0L), lines, sp, density, covers)
+        boxInk(m, fonts, t.item.title, l.caption, style, l.rect(i, 0L), lines, sp, density, covers, l.s.board.fontHanMinPx)
     }
 }
 

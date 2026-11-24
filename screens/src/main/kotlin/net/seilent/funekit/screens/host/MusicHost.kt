@@ -1000,7 +1000,7 @@ class MusicHost<S : Any> internal constructor(
     }
 
     private fun infoWidth(): (String) -> Int {
-        val w = textWidth(infoRole, roleStyle(infoRole, env.page, env.density, Ink.white), env.fonts, env.density, env.covers)
+        val w = textWidth(infoRole, roleStyle(infoRole, env.page, env.density, Ink.white), env.fonts, env.density, env.covers, env.page.board.fontHanMinPx)
         return { t -> pen64(w(t)) }
     }
 

@@ -72,9 +72,9 @@ fun homeInk(m: TextMeasurer, fonts: FontFamily.Resolver, s: Scale, density: Dens
     return HomeInk(
         s,
         keys,
-        keys.map { m.word(it.word, Roles.homeItem, item, fonts, density, null) },
-        keys.map { m.word(subOf(it), Roles.homeSubtitle, sub, fonts, density, null) },
-        m.word(WATERMARK, Roles.watermark, roleStyle(Roles.watermark, s, density, Ink.white, ppu = sp), fonts, density, null),
+        keys.map { m.word(it.word, Roles.homeItem, item, fonts, density, null, s.board.fontHanMinPx) },
+        keys.map { m.word(subOf(it), Roles.homeSubtitle, sub, fonts, density, null, s.board.fontHanMinPx) },
+        m.word(WATERMARK, Roles.watermark, roleStyle(Roles.watermark, s, density, Ink.white, ppu = sp), fonts, density, null, s.board.fontHanMinPx),
     )
 }
 

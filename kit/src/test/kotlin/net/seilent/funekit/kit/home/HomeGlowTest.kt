@@ -122,7 +122,7 @@ class HomeGlowTest {
         val pressed = inkWidth(draw { homeMenu(ink, menu, geo, rest, null) })
         val regular = inkWidth(draw { word(ink.names[1], penPx(x64), base.toFloat(), Ink.white, a) })
         val boldStyle = roleStyle(Roles.homeItem, s, density, Ink.white, ppu = sp).copy(fontWeight = FontWeight.Bold)
-        val bold = m.word(keys[1].word, Roles.homeItem, boldStyle, fonts, density, null)
+        val bold = m.word(keys[1].word, Roles.homeItem, boldStyle, fonts, density, null, s.board.fontHanMinPx)
         val boldWidth = inkWidth(draw { word(bold, penPx(x64), base.toFloat(), Ink.white, a) })
         assertEquals(regular.toFloat(), pressed.toFloat(), 1f)
         assertTrue(boldWidth - pressed >= 10)

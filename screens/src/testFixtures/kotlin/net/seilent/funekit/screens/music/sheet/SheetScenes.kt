@@ -134,7 +134,7 @@ fun MusicScenes.statusInk(s: Scale): StatusInk {
     val box = pageStatus()
     val line = statusLine(s, box)
     val style = roleStyle(Roles.time, s, density, Ink.white, Tok.alpha_full).merge(Fonts.style(Roles.time, line.textPx, density, Roles.time.tracking * s.ppu))
-    fun w(t: String) = measurer.word(t, Roles.time, style, fonts, density, null)
+    fun w(t: String) = measurer.word(t, Roles.time, style, fonts, density, null, s.board.fontHanMinPx)
     return StatusInk(StatusState(STATUS_CLOCK, STATUS_BATTERY, false, Play.Playing, false, -1, -1), StatusText(w(STATUS_CLOCK), w("$STATUS_BATTERY%"), null), line, s, box)
 }
 
@@ -144,8 +144,8 @@ private const val STATUS_CLOCK = "12:00"
 private const val STATUS_BATTERY = 100
 
 fun MusicScenes.toastInk(t: Toast, s: Scale): ToastInk = ToastInk(
-    measurer.word(t.artist, Roles.toastArtist, roleStyle(Roles.toastArtist, s, density, Ink.white), fonts, density, null),
-    measurer.word(t.title, Roles.toastTitle, roleStyle(Roles.toastTitle, s, density, Ink.white), fonts, density, null),
+    measurer.word(t.artist, Roles.toastArtist, roleStyle(Roles.toastArtist, s, density, Ink.white), fonts, density, null, s.board.fontHanMinPx),
+    measurer.word(t.title, Roles.toastTitle, roleStyle(Roles.toastTitle, s, density, Ink.white), fonts, density, null, s.board.fontHanMinPx),
 )
 
 fun DrawScope.trackToast(t: Toast, ink: ToastInk, s: Scale, w: Int, now: Long, rec: Regions?) {

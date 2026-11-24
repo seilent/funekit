@@ -200,7 +200,7 @@ class EqRowsPane(private val header: String, private val rows: EqRows) : EqPane 
         fun titleInk(tl: List<String>): TitleInk {
             val tpitch = if (tl.size < HALF) 0 else px(Tok.settingsTitlePitch, s.ppu)
             val tbase = (h - asc - tpitch - desc) / HALF + asc
-            return TitleInk(tl.map { m.text.word(it, Roles.pageRowTitle, ts, m.fonts, m.density, m.covers) }, tl.indices.map { tbase + it * tpitch }, r.left64 + r.title64(r.wideLine(tl)))
+            return TitleInk(tl.map { m.text.word(it, Roles.pageRowTitle, ts, m.fonts, m.density, m.covers, m.s.board.fontHanMinPx) }, tl.indices.map { tbase + it * tpitch }, r.left64 + r.title64(r.wideLine(tl)))
         }
         val light = split(false)
         val bold = split(true)
@@ -221,8 +221,8 @@ class EqRowsPane(private val header: String, private val rows: EqRows) : EqPane 
             r.left64,
             r.titlePx,
             gap,
-            lines.map { m.text.word(it, Roles.settingsValue, vs, m.fonts, m.density, m.covers) },
-            lines.map { m.text.word(it, Roles.settingsValue, bs, m.fonts, m.density, m.covers) },
+            lines.map { m.text.word(it, Roles.settingsValue, vs, m.fonts, m.density, m.covers, m.s.board.fontHanMinPx) },
+            lines.map { m.text.word(it, Roles.settingsValue, bs, m.fonts, m.density, m.covers, m.s.board.fontHanMinPx) },
             r.right64,
             bases,
             m.accent,

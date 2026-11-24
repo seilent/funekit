@@ -233,7 +233,7 @@ fun listWords(s: Scale, measurer: TextMeasurer, fonts: FontFamily.Resolver, dens
     val cs = roleStyle(Roles.listCount, s, density, Ink.white)
     val qs = roleStyle(Roles.quickplayHint, s, density, Ink.white, ppu = s.stdPpu)
     return ListLines(
-        { t -> measurer.word(t, Roles.listCount, cs, fonts, density, covers) },
-        { t -> measurer.word(t, Roles.quickplayHint, qs, fonts, density, covers) },
+        { t -> measurer.word(t, Roles.listCount, cs, fonts, density, covers, s.board.fontHanMinPx) },
+        { t -> measurer.word(t, Roles.quickplayHint, qs, fonts, density, covers, s.board.fontHanMinPx) },
     )
 }

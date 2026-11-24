@@ -133,8 +133,8 @@ class PhoneScaleSheetTest {
         t.frame(ToastPlace.Bottom, px(s.stdContentBottom, s.stdPpu), 0L)
         t.frame(ToastPlace.Bottom, px(s.stdContentBottom, s.stdPpu), TOAST_AT)
         val ink = ToastInk(
-            measurer.word(t.artist, Roles.toastArtist, roleStyle(Roles.toastArtist, s, unitDensity, KitInk.white), fonts, unitDensity, null),
-            measurer.word(t.title, Roles.toastTitle, roleStyle(Roles.toastTitle, s, unitDensity, KitInk.white), fonts, unitDensity, null),
+            measurer.word(t.artist, Roles.toastArtist, roleStyle(Roles.toastArtist, s, unitDensity, KitInk.white), fonts, unitDensity, null, s.board.fontHanMinPx),
+            measurer.word(t.title, Roles.toastTitle, roleStyle(Roles.toastTitle, s, unitDensity, KitInk.white), fonts, unitDensity, null, s.board.fontHanMinPx),
         )
         toast(t, ink, s, TOAST_AT)
     }
@@ -143,8 +143,8 @@ class PhoneScaleSheetTest {
         val g = JumpGrid().also { it.open(KitPages.jumpAvail, 0, s.stdContentBottom) }
         fun style(r: Role) = roleStyle(r, s, unitDensity, KitInk.white, ppu = s.stdPpu)
         val ink = JumpInk(
-            measurer.word("exit", Roles.jumpExit, style(Roles.jumpExit), fonts, unitDensity, null),
-            (0 until Section.count).map { measurer.word(Section.letter(it), Roles.jumpCell, style(Roles.jumpCell), fonts, unitDensity, null) },
+            measurer.word("exit", Roles.jumpExit, style(Roles.jumpExit), fonts, unitDensity, null, s.board.fontHanMinPx),
+            (0 until Section.count).map { measurer.word(Section.letter(it), Roles.jumpCell, style(Roles.jumpCell), fonts, unitDensity, null, s.board.fontHanMinPx) },
         )
         drawRect(KitInk.bg)
         jumpGrid(g, ink, JumpCells(s), s, g.offset, 0L)

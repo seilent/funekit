@@ -205,8 +205,8 @@ class HubSheetTest {
         val at = scene.build(g)
         fun style(r: Role) = roleStyle(r, s, sc.density, KitInk.white, ppu = s.stdPpu)
         val ink = JumpInk(
-            sc.measurer.word("exit", Roles.jumpExit, style(Roles.jumpExit), sc.fonts, sc.density, null),
-            (0 until Section.count).map { sc.measurer.word(Section.letter(it), Roles.jumpCell, style(Roles.jumpCell), sc.fonts, sc.density, sc.covers) },
+            sc.measurer.word("exit", Roles.jumpExit, style(Roles.jumpExit), sc.fonts, sc.density, null, s.board.fontHanMinPx),
+            (0 until Section.count).map { sc.measurer.word(Section.letter(it), Roles.jumpCell, style(Roles.jumpCell), sc.fonts, sc.density, sc.covers, s.board.fontHanMinPx) },
         )
         h.m.pane.setFocus(PICKED, 0, 0L, false)
         val rec = sc.regions(dev, s).also {

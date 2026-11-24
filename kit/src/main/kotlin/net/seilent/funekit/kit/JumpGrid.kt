@@ -308,10 +308,10 @@ fun JumpGridOverlay(
     val ink = remember(s, density, fonts, covers) {
         fun style(r: Role) = roleStyle(r, s, density, Ink.white, ppu = sp)
         JumpInk(
-            m.word("exit", Roles.jumpExit, style(Roles.jumpExit), fonts, density, null),
+            m.word("exit", Roles.jumpExit, style(Roles.jumpExit), fonts, density, null, s.board.fontHanMinPx),
             (0 until Section.count).map {
                 val l = Section.letter(it)
-                m.word(l, Roles.jumpCell, style(Roles.jumpCell), fonts, density, covers)
+                m.word(l, Roles.jumpCell, style(Roles.jumpCell), fonts, density, covers, s.board.fontHanMinPx)
             },
         )
     }

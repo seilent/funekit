@@ -77,16 +77,16 @@ fun gridInk(m: TextMeasurer, fonts: FontFamily.Resolver, g: HubGrid, c: GridCell
     val sp = s.stdPpu
     if (c.letter >= 0) {
         val ls = roleStyle(Roles.letterGlyph, s, density, Ink.white, ppu = sp)
-        return GridInk(c, m.word(Section.letter(c.letter), Roles.letterGlyph, ls, fonts, density, covers), Word.none, null)
+        return GridInk(c, m.word(Section.letter(c.letter), Roles.letterGlyph, ls, fonts, density, covers, g.s.board.fontHanMinPx), Word.none, null)
     }
     val cs = roleStyle(g.caption, s, density, Ink.white, ppu = sp)
     val ts = if (c.accent) cs.copy(fontWeight = Fonts.weight(Accent.bold(g.caption.weight, accentOff))) else cs
     val bs = roleStyle(g.box, s, density, Ink.white, ppu = sp)
     return GridInk(
         c,
-        m.word(c.title, g.caption, ts, fonts, density, covers),
-        m.word(c.sub, g.caption, cs, fonts, density, covers),
-        boxInk(m, fonts, c.title, g.box, bs, g.tileAt(k, 0), Tok.boxLines.toInt(), sp, density, covers),
+        m.word(c.title, g.caption, ts, fonts, density, covers, g.s.board.fontHanMinPx),
+        m.word(c.sub, g.caption, cs, fonts, density, covers, g.s.board.fontHanMinPx),
+        boxInk(m, fonts, c.title, g.box, bs, g.tileAt(k, 0), Tok.boxLines.toInt(), sp, density, covers, g.s.board.fontHanMinPx),
     )
 }
 

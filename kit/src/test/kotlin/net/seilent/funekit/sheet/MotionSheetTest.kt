@@ -159,7 +159,7 @@ class MotionSheetTest {
 
         private fun style(r: Role, ppu: Float = s.stdPpu) = roleStyle(r, s, unitDensity, KitInk.white, ppu = ppu)
 
-        private fun measure(t: String, r: Role, ppu: Float = s.stdPpu) = measurer.word(t, r, style(r, ppu), fonts, unitDensity, null)
+        private fun measure(t: String, r: Role, ppu: Float = s.stdPpu) = measurer.word(t, r, style(r, ppu), fonts, unitDensity, null, s.board.fontHanMinPx)
 
         private val inks = HashMap<Page, PageInk>()
 
@@ -469,7 +469,7 @@ class MotionSheetTest {
             val g = JumpGrid().also { it.open(avail, 0, s.stdH) }
             val ink = JumpInk(
                 measure("exit", Roles.jumpExit),
-                (0 until Section.count).map { measurer.word(Section.letter(it), Roles.jumpCell, style(Roles.jumpCell), fonts, unitDensity, covers) },
+                (0 until Section.count).map { measurer.word(Section.letter(it), Roles.jumpCell, style(Roles.jumpCell), fonts, unitDensity, covers, s.board.fontHanMinPx) },
             )
             val cells = JumpCells(s)
             val o = Overlay(OverKind.Jump).also { it.lead = JUMP_LEAD }

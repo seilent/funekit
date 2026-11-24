@@ -162,7 +162,7 @@ class ArtistDrawTest {
         val chrome = artistChrome(sc.measurer, sc.fonts, s, sc.density, null)
         val d = artistDraw(m, s, sc.measurer, sc.fonts, sc.density, null, chrome, Ink.white, true)
         val word = MusicPage.Hub.pivots[HUB_ARTISTS]
-        fun measured(r: Role) = sc.measurer.word(word, r, roleStyle(r, s, sc.density, Ink.header, ppu = s.stdPpu), sc.fonts, sc.density, null)
+        fun measured(r: Role) = sc.measurer.word(word, r, roleStyle(r, s, sc.density, Ink.header, ppu = s.stdPpu), sc.fonts, sc.density, null, s.board.fontHanMinPx)
         val page = measured(Roles.pageHeader)
         val artist = measured(artistHeader())
         assertTrue("premise: the page header role measures apart from the artist header, ${page.width} ${artist.width}", abs(page.width - artist.width) > PEN)

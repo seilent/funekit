@@ -55,7 +55,7 @@ fun viewHeader(): Role = Role(Roles.pageHeader.size, Roles.listCollection.weight
 
 fun viewChrome(m: TextMeasurer, fonts: FontFamily.Resolver, s: Scale, density: Density, covers: Covers?, title: String): Chrome {
     val role = viewHeader()
-    return Chrome(s, m.word(title, role, roleStyle(role, s, density, Ink.header, ppu = s.stdPpu), fonts, density, covers), emptyList())
+    return Chrome(s, m.word(title, role, roleStyle(role, s, density, Ink.header, ppu = s.stdPpu), fonts, density, covers, s.board.fontHanMinPx), emptyList())
 }
 
 fun listViewDraw(m: ListViewModel, s: Scale, measurer: TextMeasurer, fonts: FontFamily.Resolver, density: Density, covers: Covers?, accent: Color, accentOff: Boolean): ListViewDraw {

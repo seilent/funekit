@@ -85,8 +85,8 @@ class WordInkTest {
     @Test
     fun trackingMovesNoGlyphBeforeTheFirstPen() {
         val style = roleStyle(Roles.pageHeader, a105, unitDensity, Ink.white, ppu = a105.stdPpu)
-        val tracked = measurer.word("l", Roles.pageHeader, style, fonts, unitDensity, null)
-        val flat = measurer.word("l", Roles.pageHeader, style.copy(letterSpacing = TextUnit.Unspecified), fonts, unitDensity, null)
+        val tracked = measurer.word("l", Roles.pageHeader, style, fonts, unitDensity, null, a105.board.fontHanMinPx)
+        val flat = measurer.word("l", Roles.pageHeader, style.copy(letterSpacing = TextUnit.Unspecified), fonts, unitDensity, null, a105.board.fontHanMinPx)
         val a = shot(600, 500) { word(tracked, 100f, 420f, Ink.white, 1f) }
         val b = shot(600, 500) { word(flat, 100f, 420f, Ink.white, 1f) }
         val ea = leftEdge(a, 0, 300, 400, 0xFF)
@@ -100,8 +100,8 @@ class WordInkTest {
         val style = roleStyle(Roles.pageHeader, a105, unitDensity, Ink.white, ppu = a105.stdPpu)
         val flatStyle = style.copy(letterSpacing = TextUnit.Unspecified)
         for ((t, n) in listOf("l" to 1, "AB" to 2, "ABC" to 3)) {
-            val w = measurer.word(t, Roles.pageHeader, style, fonts, unitDensity, null).width
-            val f = measurer.word(t, Roles.pageHeader, flatStyle, fonts, unitDensity, null).width
+            val w = measurer.word(t, Roles.pageHeader, style, fonts, unitDensity, null, a105.board.fontHanMinPx).width
+            val f = measurer.word(t, Roles.pageHeader, flatStyle, fonts, unitDensity, null, a105.board.fontHanMinPx).width
             assertEquals("$t", -3f * n, w - f, 0.05f)
         }
     }
@@ -131,7 +131,7 @@ class WordInkTest {
     fun theWordTakesOffExactlyTheShiftTheLayoutDraws() {
         val style = roleStyle(Roles.pageHeader, a105, unitDensity, Ink.white, ppu = a105.stdPpu)
         val flatStyle = style.copy(letterSpacing = TextUnit.Unspecified)
-        val tracked = measurer.word("l", Roles.pageHeader, style, fonts, unitDensity, null)
+        val tracked = measurer.word("l", Roles.pageHeader, style, fonts, unitDensity, null, a105.board.fontHanMinPx)
         fun raw(st: TextStyle) = shot(600, 500) {
             val l = measurer.measure("l", st, density = unitDensity, fontFamilyResolver = fonts)
             drawText(l, Ink.white, Offset(100f, 420f - l.firstBaseline))
@@ -145,7 +145,7 @@ class WordInkTest {
     @Test
     fun inkIsTheGlyphOutlineNotTheAdvanceBox() {
         val style = roleStyle(Roles.pageHeader, a105, unitDensity, Ink.white, ppu = a105.stdPpu)
-        val w = measurer.word("l", Roles.pageHeader, style, fonts, unitDensity, null)
+        val w = measurer.word("l", Roles.pageHeader, style, fonts, unitDensity, null, a105.board.fontHanMinPx)
         val s = shot(600, 500) { word(w, 100f, 420f, Ink.white, 1f) }
         assertTrue("lsb ${w.inkLeft}", w.inkLeft > 1f)
         assertEquals(100f + w.inkLeft, leftEdge(s, 0, 300, 400, 0xFF), 0.5f)
@@ -156,7 +156,7 @@ class WordInkTest {
     @Test
     fun aSpaceHasNoInk() {
         val style = roleStyle(Roles.pageHeader, a105, unitDensity, Ink.white, ppu = a105.stdPpu)
-        val w = measurer.word(" ", Roles.pageHeader, style, fonts, unitDensity, null)
+        val w = measurer.word(" ", Roles.pageHeader, style, fonts, unitDensity, null, a105.board.fontHanMinPx)
         assertTrue(!w.inked)
     }
 
@@ -201,7 +201,7 @@ class WordInkTest {
     @Test
     fun aSpriteScalesTheWordAboutItsPenAndClipsAtItsBottom() {
         val style = roleStyle(Roles.pageHeader, a105, unitDensity, Ink.white, ppu = a105.stdPpu)
-        val w = measurer.word("l", Roles.pageHeader, style, fonts, unitDensity, null)
+        val w = measurer.word("l", Roles.pageHeader, style, fonts, unitDensity, null, a105.board.fontHanMinPx)
         val whole = shot(600, 500) { sprite(w, 1f, 100f, 420f, 1f, 500) }
         val half = shot(600, 500) { sprite(w, 0.5f, 100f, 420f, 1f, 500) }
         assertEquals(100f + w.inkLeft, leftEdge(whole, 0, 300, 400, 0xFF), 0.5f)
@@ -215,13 +215,13 @@ class WordInkTest {
     @Test
     fun animatedTextKeepsFuneOsPenPositionsAcrossAPivotLabel() {
         val base = roleStyle(Roles.pivotActive, a105, unitDensity, Ink.white)
-        val width = textWidth(Roles.pivotActive, base, fonts, unitDensity, null)
+        val width = textWidth(Roles.pivotActive, base, fonts, unitDensity, null, a105.board.fontHanMinPx)
         val t = cased("artists", Roles.pivotActive)
         val last = t.substring(t.length - 1)
-        val want = 40f + width(t) - width(last) + measurer.word(last, Roles.pivotActive, base, fonts, unitDensity, null).inkRight
+        val want = 40f + width(t) - width(last) + measurer.word(last, Roles.pivotActive, base, fonts, unitDensity, null, a105.board.fontHanMinPx).inkRight
         fun drawn(motion: TextMotion): Float {
             val st = base.copy(textMotion = motion)
-            val w = measurer.word(t, Roles.pivotActive, st, fonts, unitDensity, null)
+            val w = measurer.word(t, Roles.pivotActive, st, fonts, unitDensity, null, a105.board.fontHanMinPx)
             val s = shot(720, 300) { word(w, 40f, 200f, Ink.white, 1f) }
             return rightEdge(s, 719, 150, 200, 0xFF)
         }

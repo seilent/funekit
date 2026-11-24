@@ -120,14 +120,14 @@ fun hubDraw(m: HubModel, s: Scale, measurer: TextMeasurer, fonts: FontFamily.Res
     val header = chrome?.let { c -> morphSide(measurer, fonts, s, density, covers, c.header.text, Roles.pageHeader, true, c.headerAlpha, c.headerRestX(), px(Tok.page_headerBaseline, s.stdPpu).toFloat(), -1) }
     val ls = roleStyle(Roles.sectionLabel, s, density, Ink.white)
     val qs = roleStyle(Roles.quickplayHint, s, density, Ink.white, ppu = s.stdPpu)
-    val lw = textWidth(Roles.sectionLabel, ls, fonts, density, covers)
+    val lw = textWidth(Roles.sectionLabel, ls, fonts, density, covers, s.board.fontHanMinPx)
     return HubDraw(
         m,
         geo,
         { r -> rowInk(measurer, fonts, r, s, density, accentOff, covers) },
         { c, k -> gridInk(measurer, fonts, geo.grid, c, k, density, accentOff, covers) },
-        { path -> measurer.word(fitPath(path, labelMax64(s), PATH_DOTS) { pen64(lw(it)) }, Roles.sectionLabel, ls, fonts, density, covers) },
-        { t -> measurer.word(t, Roles.quickplayHint, qs, fonts, density, covers) },
+        { path -> measurer.word(fitPath(path, labelMax64(s), PATH_DOTS) { pen64(lw(it)) }, Roles.sectionLabel, ls, fonts, density, covers, s.board.fontHanMinPx) },
+        { t -> measurer.word(t, Roles.quickplayHint, qs, fonts, density, covers, s.board.fontHanMinPx) },
         accent,
         accentOff,
         sides,

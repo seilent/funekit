@@ -410,7 +410,7 @@ fun VolumeParts.placeLines(artist: LineInk, title: LineInk, artistTop: Int, labe
 
 fun TextMeasurer.volumeInk(hud: VolumeHud, v: VolumeParts, fonts: FontFamily.Resolver, density: Density, covers: Covers?, old: Pair<String, String>? = null): VolumeInk {
     fun style(r: Role, size: Int = v.rolePx(r)) = Fonts.style(r, size, density, r.tracking * v.ppu).merge(TextStyle(color = Ink.white))
-    fun of(text: String, r: Role, size: Int = v.rolePx(r)) = word(text, r, style(r, size), fonts, density, covers)
+    fun of(text: String, r: Role, size: Int = v.rolePx(r)) = word(text, r, style(r, size), fonts, density, covers, v.board.fontHanMinPx)
     val num = VolumeHud.numberText(hud.percent)
     val full = v.rolePx(Roles.volNumber)
     val size = numberFit(full, v.numberRoom64()) { s -> of(num, Roles.volNumber, s).let { ((it.inkRight - it.inkLeft) * PEN).roundToInt() } }

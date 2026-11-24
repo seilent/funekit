@@ -256,8 +256,8 @@ class Regions(
 
     override fun word(name: String, wd: Word, x: Float, base: Float, alpha: Float, color: Color) {
         if (!wd.inked) return
-        val runs = wd.runs.map { it.layout }
-        val line = if (runs.isEmpty()) null else Box(x, runs.minOf { base - it.firstBaseline }, x, runs.maxOf { base - it.firstBaseline + it.size.height })
+        val runs = wd.runs
+        val line = if (runs.isEmpty()) null else Box(x, runs.minOf { base - it.layout.firstBaseline + it.dy }, x, runs.maxOf { base - it.layout.firstBaseline + it.dy + it.layout.size.height })
         add(name, Kind.Text, Box(x + wd.inkLeft, base + wd.inkTop, x + wd.inkRight, base + wd.inkBottom), color, alpha, line = line)
     }
 

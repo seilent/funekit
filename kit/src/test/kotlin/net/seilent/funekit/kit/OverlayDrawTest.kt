@@ -60,8 +60,8 @@ class OverlayDrawTest {
         val g = JumpGrid().also { it.open(BooleanArray(Section.count) { i -> i != 1 }, 0, 1280 / 3f) }
         fun style(r: Role) = roleStyle(r, a105, unitDensity, Ink.white, ppu = 3f)
         val ink = JumpInk(
-            measurer.word("exit", Roles.jumpExit, style(Roles.jumpExit), fonts, unitDensity, null),
-            (0 until Section.count).map { measurer.word(Section.letter(it), Roles.jumpCell, style(Roles.jumpCell), fonts, unitDensity, covers) },
+            measurer.word("exit", Roles.jumpExit, style(Roles.jumpExit), fonts, unitDensity, null, a105.board.fontHanMinPx),
+            (0 until Section.count).map { measurer.word(Section.letter(it), Roles.jumpCell, style(Roles.jumpCell), fonts, unitDensity, covers, a105.board.fontHanMinPx) },
         )
         val px = shot { jumpGrid(g, ink, JumpCells(a105), a105, 0f, 0) }
         near(0xFF, red(px, 200, 130), 0)
@@ -76,8 +76,8 @@ class OverlayDrawTest {
     fun aPressedLetterKeepsItsTileAndGlowsItsLetterAtScaleOne() {
         fun style(r: Role) = roleStyle(r, a105, unitDensity, Ink.white, ppu = 3f)
         val ink = JumpInk(
-            measurer.word("exit", Roles.jumpExit, style(Roles.jumpExit), fonts, unitDensity, null),
-            (0 until Section.count).map { measurer.word(Section.letter(it), Roles.jumpCell, style(Roles.jumpCell), fonts, unitDensity, covers) },
+            measurer.word("exit", Roles.jumpExit, style(Roles.jumpExit), fonts, unitDensity, null, a105.board.fontHanMinPx),
+            (0 until Section.count).map { measurer.word(Section.letter(it), Roles.jumpCell, style(Roles.jumpCell), fonts, unitDensity, covers, a105.board.fontHanMinPx) },
         )
         val cells = JumpCells(a105)
         val t = cells.at(Jump.slotOf(2), 0f)
@@ -100,8 +100,8 @@ class OverlayDrawTest {
     fun aFocusedExitIsMarkedByItsLabelAtFullAlphaAndNoBar() {
         fun style(r: Role) = roleStyle(r, a105, unitDensity, Ink.white, ppu = 3f)
         val ink = JumpInk(
-            measurer.word("exit", Roles.jumpExit, style(Roles.jumpExit), fonts, unitDensity, null),
-            (0 until Section.count).map { measurer.word(Section.letter(it), Roles.jumpCell, style(Roles.jumpCell), fonts, unitDensity, covers) },
+            measurer.word("exit", Roles.jumpExit, style(Roles.jumpExit), fonts, unitDensity, null, a105.board.fontHanMinPx),
+            (0 until Section.count).map { measurer.word(Section.letter(it), Roles.jumpCell, style(Roles.jumpCell), fonts, unitDensity, covers, a105.board.fontHanMinPx) },
         )
         val cells = JumpCells(a105)
         val e = cells.at(Jump.slotOf(Jump.EXIT), 0f)
@@ -133,8 +133,8 @@ class OverlayDrawTest {
         t.show(0, "artist", "title")
         t.frame(ToastPlace.Top, 1280, 0)
         val ink = ToastInk(
-            measurer.word("artist", Roles.toastArtist, roleStyle(Roles.toastArtist, a105, unitDensity, Ink.white), fonts, unitDensity, null),
-            measurer.word("title", Roles.toastTitle, roleStyle(Roles.toastTitle, a105, unitDensity, Ink.white), fonts, unitDensity, null),
+            measurer.word("artist", Roles.toastArtist, roleStyle(Roles.toastArtist, a105, unitDensity, Ink.white), fonts, unitDensity, null, a105.board.fontHanMinPx),
+            measurer.word("title", Roles.toastTitle, roleStyle(Roles.toastTitle, a105, unitDensity, Ink.white), fonts, unitDensity, null, a105.board.fontHanMinPx),
         )
         val px = shot { toast(t, ink, a105, 400) }
         near(Math.round(0xFF * 0.2f), red(px, 5, 60))

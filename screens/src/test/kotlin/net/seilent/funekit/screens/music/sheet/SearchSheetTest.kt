@@ -192,8 +192,8 @@ class SearchSheetTest {
         g.follow(g.target)
         fun style(role: Role) = roleStyle(role, s, sc.density, KitInk.white, ppu = s.stdPpu)
         val ink = JumpInk(
-            sc.measurer.word("exit", Roles.jumpExit, style(Roles.jumpExit), sc.fonts, sc.density, null),
-            (0 until Section.count).map { sc.measurer.word(Section.letter(it), Roles.jumpCell, style(Roles.jumpCell), sc.fonts, sc.density, sc.covers) },
+            sc.measurer.word("exit", Roles.jumpExit, style(Roles.jumpExit), sc.fonts, sc.density, null, s.board.fontHanMinPx),
+            (0 until Section.count).map { sc.measurer.word(Section.letter(it), Roles.jumpCell, style(Roles.jumpCell), sc.fonts, sc.density, sc.covers, s.board.fontHanMinPx) },
         )
         val rec = sc.regionsOn(dev, s, true, JUMP_LOUD)
         val hr = HubRegions(rec)

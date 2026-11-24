@@ -448,7 +448,7 @@ class MenuPlan(
 fun menuInk(m: TextMeasurer, fonts: FontFamily.Resolver, menu: Menu, s: Scale, density: Density, accentOff: Boolean, covers: Covers?): MenuInk {
     val mp = if (menu.kept) s.stdPpu else s.ppu
     fun style(role: Role, ppu: Float = mp) = roleStyle(role, s, density, Ink.white, ppu = ppu)
-    fun text(t: String, role: Role, ppu: Float = mp) = m.word(t, role, style(role, ppu), fonts, density, covers)
+    fun text(t: String, role: Role, ppu: Float = mp) = m.word(t, role, style(role, ppu), fonts, density, covers, s.board.fontHanMinPx)
     val pitch = px(Tok.settingsPitch, mp)
     val edge = px(Tok.edge, mp)
     val titleRole = if (menu.mixedTitle) mixedRole(Roles.dialogTitle) else Roles.dialogTitle
@@ -458,12 +458,12 @@ fun menuInk(m: TextMeasurer, fonts: FontFamily.Resolver, menu: Menu, s: Scale, d
     val itemPx = rolePx(itemRole, s, mp)
     val valuePx = rolePx(Roles.settingsValue, s, mp)
     val countPx = rolePx(Roles.listCount, s, mp)
-    val title = m.word(menu.title, titleRole, style(titleRole, s.stdPpu), fonts, density, covers)
+    val title = m.word(menu.title, titleRole, style(titleRole, s.stdPpu), fonts, density, covers, s.board.fontHanMinPx)
     val titleH = if (menu.title.isEmpty()) 0 else Metrics.ascent(titlePx) + Metrics.descent(titlePx)
     val parts = menu.wraps.isNotEmpty() || menu.subs.isNotEmpty()
     val pin = if ((menu.form == MenuForm.Sheet && (menu.valueSheet || menu.cellsOn)) || parts) menu.lead else 0
     val w = s.widthPx
-    val mixedWidth = textWidth(mixedItem, style(mixedItem), fonts, density, covers)
+    val mixedWidth = textWidth(mixedItem, style(mixedItem), fonts, density, covers, s.board.fontHanMinPx)
     fun width64(t: String) = pen64(mixedWidth(t))
     val rows = menu.items.mapIndexed { i, t ->
         val line = menu.readOnly || i < menu.lead
@@ -474,7 +474,7 @@ fun menuInk(m: TextMeasurer, fonts: FontFamily.Resolver, menu: Menu, s: Scale, d
         val v = menu.values.getOrElse(i) { "" }
         val valueRole = Roles.settingsValue
         val valueStyle = style(valueRole).let { if (i == menu.edit) it.copy(fontWeight = Fonts.weight(Accent.bold(valueRole.weight, accentOff))) else it }
-        val value = if (v.isEmpty()) null else m.word(v, valueRole, valueStyle, fonts, density, covers)
+        val value = if (v.isEmpty()) null else m.word(v, valueRole, valueStyle, fonts, density, covers, s.board.fontHanMinPx)
         val vx64 = if (value == null) Int.MIN_VALUE else pen64(w.toFloat()) - pen64(Tok.edge, mp) - pen64(value.width)
         val clipX = if (value == null) w - edge else penFloor(vx64) - px(Tok.gutter, mp)
         var h = pitch

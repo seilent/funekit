@@ -194,7 +194,7 @@ class RowInk(
 
 fun rowInk(m: TextMeasurer, fonts: FontFamily.Resolver, r: RowModel, s: Scale, density: Density, accentOff: Boolean, covers: Covers?): RowInk {
     fun style(role: Role) = roleStyle(role, s, density, Ink.white)
-    fun text(t: String, role: Role, st: TextStyle = style(role)) = m.word(t, role, st, fonts, density, covers)
+    fun text(t: String, role: Role, st: TextStyle = style(role)) = m.word(t, role, st, fonts, density, covers, s.board.fontHanMinPx)
     val divider = r.kind == RowKind.Divider
     val p = if (divider) Roles.letterGlyph else Rows.primaryRole(r)
     val ps = if (r.accent && !divider) style(p).copy(fontWeight = Fonts.weight(Accent.bold(p.weight, accentOff))) else style(p)

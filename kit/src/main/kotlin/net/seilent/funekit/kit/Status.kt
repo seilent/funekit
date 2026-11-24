@@ -51,7 +51,7 @@ fun rememberStatusInk(state: StatusState, scale: Scale, box: StatusBox): StatusI
     val density = LocalDensity.current
     val line = statusLine(scale, box)
     val text = remember(state.clock, state.battery, state.volume, line.textPx, scale.ppu, density, fonts) {
-        fun measure(t: String) = measurer.word(t, Roles.time, timeStyle(scale, line, density), fonts, density, null)
+        fun measure(t: String) = measurer.word(t, Roles.time, timeStyle(scale, line, density), fonts, density, null, scale.board.fontHanMinPx)
         StatusText(
             clock = if (state.clock.isEmpty()) null else measure(state.clock),
             percent = if (state.battery >= 0) measure("${min(state.battery, PERCENT)}%") else null,

@@ -316,10 +316,10 @@ class MenuDrawTest {
     @Test
     fun aCjkSheetTitleDrawsItsKanjiThroughCoversAtRegular() {
         val m = sheet(listOf("play"), title = "play 漢字")
-        assertEquals(1, menuInk(measurer, fonts, m, a105, unitDensity, true, null).title.runs.size)
+        assertEquals("with no covers only the Han glyphs split the title", 3, menuInk(measurer, fonts, m, a105, unitDensity, true, null).title.runs.size)
         val d = draw(m, OverKind.Sheet, 380)
         val runs = d.ink.title.runs
-        assertEquals(listOf("play ", "漢字"), runs.map { it.layout.layoutInput.text.text })
+        assertEquals("each Han glyph is its own run", listOf("play ", "漢", "字"), runs.map { it.layout.layoutInput.text.text })
         assertEquals(FontWeight.Normal, runs[1].layout.layoutInput.style.fontWeight)
         val t = d.plan.titleRect!!
         val kanji = 48 + ceil(runs[1].x).toInt()

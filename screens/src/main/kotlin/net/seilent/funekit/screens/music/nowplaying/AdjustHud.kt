@@ -212,7 +212,7 @@ class AdjustInk(private val s: Scale, private val measurer: TextMeasurer, privat
     }
 
     fun word(r: Role, t: String): Word = used.getOrPut(r to t) {
-        last[r to t] ?: measurer.word(t, r, roleStyle(r, s, density, Ink.white, ppu = p), fonts, density, covers)
+        last[r to t] ?: measurer.word(t, r, roleStyle(r, s, density, Ink.white, ppu = p), fonts, density, covers, s.board.fontHanMinPx)
     }
 }
 

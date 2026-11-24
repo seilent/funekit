@@ -319,7 +319,7 @@ fun ToastStrip(
     val covers = rememberCovers()
     val ink = remember(t.artist, t.title, s, density, fonts, covers) {
         fun style(r: Role) = roleStyle(r, s, density, Ink.white)
-        ToastInk(m.word(t.artist, Roles.toastArtist, style(Roles.toastArtist), fonts, density, covers), m.word(t.title, Roles.toastTitle, style(Roles.toastTitle), fonts, density, covers))
+        ToastInk(m.word(t.artist, Roles.toastArtist, style(Roles.toastArtist), fonts, density, covers, s.board.fontHanMinPx), m.word(t.title, Roles.toastTitle, style(Roles.toastTitle), fonts, density, covers, s.board.fontHanMinPx))
     }
     var frameAt by remember { mutableLongStateOf(-1L) }
     var hit: Edges? by remember { mutableStateOf(null) }

@@ -105,7 +105,7 @@ class VolumeSheetTest {
         val box = npStatus(s)
         val line = statusLine(s, box)
         val style = roleStyle(Roles.time, s, sc.density, Ink.white, Tok.alpha_full).merge(Fonts.style(Roles.time, line.textPx, sc.density, Roles.time.tracking * s.ppu))
-        fun w(t: String) = sc.measurer.word(t, Roles.time, style, sc.fonts, sc.density, null)
+        fun w(t: String) = sc.measurer.word(t, Roles.time, style, sc.fonts, sc.density, null, s.board.fontHanMinPx)
         return StatusInk(StatusState(CLOCK, BATTERY, false, Play.Playing, false, -1, -1), StatusText(w(CLOCK), w("$BATTERY%"), null), line, s, box)
     }
 
@@ -170,8 +170,8 @@ class VolumeSheetTest {
             t.show(TOAST_AT, row.sub, row.title, track = true)
             t.frame(ToastPlace.Bottom, toastSurface(s, false), TOAST_AT)
             val tink = ToastInk(
-                sc.measurer.word(t.artist, Roles.toastArtist, roleStyle(Roles.toastArtist, s, sc.density, Ink.white), sc.fonts, sc.density, null),
-                sc.measurer.word(t.title, Roles.toastTitle, roleStyle(Roles.toastTitle, s, sc.density, Ink.white), sc.fonts, sc.density, null),
+                sc.measurer.word(t.artist, Roles.toastArtist, roleStyle(Roles.toastArtist, s, sc.density, Ink.white), sc.fonts, sc.density, null, s.board.fontHanMinPx),
+                sc.measurer.word(t.title, Roles.toastTitle, roleStyle(Roles.toastTitle, s, sc.density, Ink.white), sc.fonts, sc.density, null, s.board.fontHanMinPx),
             )
             val shot = TOAST_AT + TOAST_SHOT
             t.frame(ToastPlace.Bottom, toastSurface(s, false), shot)

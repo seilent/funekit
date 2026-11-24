@@ -48,7 +48,7 @@ object Tiles {
     fun line(t: Edges, ppu: Float): List<Edges> = Rows.insetRing(t, Tok.boxInset, Tok.boxLine, ppu)
 }
 
-fun boxInk(m: TextMeasurer, fonts: FontFamily.Resolver, name: String, role: Role, style: TextStyle, t: Edges, lines: Int, ppu: Float, density: Density, covers: Covers?): BoxInk {
+fun boxInk(m: TextMeasurer, fonts: FontFamily.Resolver, name: String, role: Role, style: TextStyle, t: Edges, lines: Int, ppu: Float, density: Density, covers: Covers?, hanMinPx: Float): BoxInk {
     val text = cased(name, role)
     val rtl = text.isNotEmpty() && !Bidi(text, Bidi.DIRECTION_DEFAULT_LEFT_TO_RIGHT).baseIsLeftToRight()
     val inset64 = pen64(Tok.boxInset + Tok.boxCaptionX, ppu)
@@ -58,9 +58,9 @@ fun boxInk(m: TextMeasurer, fonts: FontFamily.Resolver, name: String, role: Role
     if (text.isEmpty() || lines <= 0) return BoxInk(emptyList(), rtl, x64, 0L, 0L, track64)
     val avail = if (rtl) x64 - inner.x0 * PEN else inner.x1 * PEN - x64
     val base = if (rtl) Bidi.DIRECTION_RIGHT_TO_LEFT else Bidi.DIRECTION_LEFT_TO_RIGHT
-    val w = textWidth(role, style, fonts, density, covers, base)
+    val w = textWidth(role, style, fonts, density, covers, hanMinPx, base)
     val rows = wrapRanges(text, avail, lines, { b, e -> if (e > b) Tiles.placed64(w(text.substring(b, e)), track64) else 0 }, { p, e -> nextCluster(text, p, e) })
-    val words = rows.mapIndexed { i, r -> m.word(text.substring(r.first, if (i == rows.lastIndex) text.length else r.second), role, style, fonts, density, covers, base) }
+    val words = rows.mapIndexed { i, r -> m.word(text.substring(r.first, if (i == rows.lastIndex) text.length else r.second), role, style, fonts, density, covers, hanMinPx, base) }
     return BoxInk(words, rtl, x64, Tiles.pitch(role), fx(ppu), track64)
 }
 

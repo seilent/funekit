@@ -140,7 +140,7 @@ fun albumColDraw(m: AlbumColModel, s: Scale, measurer: TextMeasurer, fonts: Font
     val geo = AlbumColGeo(s)
     val sp = s.stdPpu
     val ts = roleStyle(Roles.albcolTitle, s, density, Ink.white, ppu = sp)
-    val tw = textWidth(Roles.albcolTitle, ts, fonts, density, covers)
+    val tw = textWidth(Roles.albcolTitle, ts, fonts, density, covers, s.board.fontHanMinPx)
     val us = ts.copy(fontWeight = Fonts.weight(Accent.bold(Roles.albcolTitle.weight, accentOff)))
     val asStyle = roleStyle(Roles.albcolArtist, s, density, Ink.white, ppu = sp)
     val ks = roleStyle(Roles.sectionLabel, s, density, Ink.white, ppu = sp)
@@ -152,19 +152,19 @@ fun albumColDraw(m: AlbumColModel, s: Scale, measurer: TextMeasurer, fonts: Font
         val a = e.row ?: return ColInk(emptyList(), Word.none, emptyList(), null)
         val title = a.title
         val rows = wrapRanges(title, width64, geo.titleLines, { b, en -> if (en > b) pen64(tw(title.substring(b, en))) else 0 }, { p, en -> nextCluster(title, p, en) })
-        val lines = rows.map { (b, en) -> measurer.word(title.substring(b, en), Roles.albcolTitle, if (e.accent) us else ts, fonts, density, covers) }
+        val lines = rows.map { (b, en) -> measurer.word(title.substring(b, en), Roles.albcolTitle, if (e.accent) us else ts, fonts, density, covers, s.board.fontHanMinPx) }
         return ColInk(
             lines,
-            measurer.word(a.sub, Roles.albcolArtist, asStyle, fonts, density, covers),
-            e.tracks.map { measurer.word(it, Roles.sectionLabel, ks, fonts, density, covers) },
-            boxInk(measurer, fonts, title, box, bs, Edges(0, 0, geo.side, geo.side), Tok.boxLines.toInt(), sp, density, covers),
+            measurer.word(a.sub, Roles.albcolArtist, asStyle, fonts, density, covers, s.board.fontHanMinPx),
+            e.tracks.map { measurer.word(it, Roles.sectionLabel, ks, fonts, density, covers, s.board.fontHanMinPx) },
+            boxInk(measurer, fonts, title, box, bs, Edges(0, 0, geo.side, geo.side), Tok.boxLines.toInt(), sp, density, covers, s.board.fontHanMinPx),
         )
     }
     return AlbumColDraw(
         m,
         geo,
         ::ink,
-        { l -> measurer.word(Section.letter(l), Roles.letterGlyph, ls, fonts, density, covers) },
+        { l -> measurer.word(Section.letter(l), Roles.letterGlyph, ls, fonts, density, covers, s.board.fontHanMinPx) },
         header,
         accent,
         accentOff,

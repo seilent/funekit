@@ -119,7 +119,7 @@ fun artistChrome(m: TextMeasurer, fonts: FontFamily.Resolver, s: Scale, density:
     val word = MusicPage.Hub.pivots[HUB_ARTISTS]
     val role = artistHeader()
     val base = chromeOf(m, fonts, s, density, word, MusicPage.Artist(0L).pivots, covers)
-    return Chrome(s, m.word(word, role, roleStyle(role, s, density, Ink.header, ppu = s.stdPpu), fonts, density, covers), base.pivots)
+    return Chrome(s, m.word(word, role, roleStyle(role, s, density, Ink.header, ppu = s.stdPpu), fonts, density, covers, s.board.fontHanMinPx), base.pivots)
 }
 
 @Composable
@@ -327,7 +327,7 @@ fun artistDraw(m: ArtistModel, s: Scale, measurer: TextMeasurer, fonts: FontFami
     val title = keptText(Roles.detailTitle, s)
     val ts = roleStyle(title, s, density, Ink.white, ppu = sp)
     val us = ts.copy(fontWeight = Fonts.weight(Accent.bold(title.weight, accentOff)))
-    val tw = textWidth(title, ts, fonts, density, covers)
+    val tw = textWidth(title, ts, fonts, density, covers, s.board.fontHanMinPx)
     val sub = keptText(Roles.detailSub, s)
     val ss = roleStyle(sub, s, density, Ink.white, ppu = sp)
     val box = keptText(Roles.boxCaptionLib, s)
@@ -337,9 +337,9 @@ fun artistDraw(m: ArtistModel, s: Scale, measurer: TextMeasurer, fonts: FontFami
         val t = r.title
         val rows = wrapRanges(t, width64, Tok.detailTitleLines.toInt(), { b, e -> if (e > b) pen64(tw(t.substring(b, e))) else 0 }, { p, e -> nextCluster(t, p, e) })
         return AlbumInk(
-            rows.map { (b, e) -> measurer.word(t.substring(b, e), title, if (lit) us else ts, fonts, density, covers) },
-            measurer.word((r.year ?: 0).toString(), sub, ss, fonts, density, covers),
-            boxInk(measurer, fonts, t, box, bs, Edges(geo.artX, 0, geo.artX + geo.side, geo.side), Tok.boxLines.toInt(), sp, density, covers),
+            rows.map { (b, e) -> measurer.word(t.substring(b, e), title, if (lit) us else ts, fonts, density, covers, s.board.fontHanMinPx) },
+            measurer.word((r.year ?: 0).toString(), sub, ss, fonts, density, covers, s.board.fontHanMinPx),
+            boxInk(measurer, fonts, t, box, bs, Edges(geo.artX, 0, geo.artX + geo.side, geo.side), Tok.boxLines.toInt(), sp, density, covers, s.board.fontHanMinPx),
         )
     }
     val base = px(s.board.page_pivotBaseline, s.ppu).toFloat()
@@ -348,8 +348,8 @@ fun artistDraw(m: ArtistModel, s: Scale, measurer: TextMeasurer, fonts: FontFami
     return ArtistDraw(
         m,
         geo,
-        { n -> measurer.word(n, Roles.detailName, ns, fonts, density, covers) },
-        measurer.word(IN_COLLECTION, lr, roleStyle(lr, s, density, Ink.white, ppu = sp), fonts, density, covers),
+        { n -> measurer.word(n, Roles.detailName, ns, fonts, density, covers, s.board.fontHanMinPx) },
+        measurer.word(IN_COLLECTION, lr, roleStyle(lr, s, density, Ink.white, ppu = sp), fonts, density, covers, s.board.fontHanMinPx),
         ::album,
         { r -> rowInk(measurer, fonts, r, s, density, accentOff, covers) },
         pivots,
