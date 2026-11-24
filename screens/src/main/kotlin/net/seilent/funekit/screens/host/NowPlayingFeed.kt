@@ -214,6 +214,7 @@ fun NowPlayingFeed(np: NowPlayingModel, g: NpLayout, src: MusicSource?, phone: P
                 np.artId = Any()
             }
         }
+        if (img != null && np.bare == track) np.lateArt(track)
         np.artPhone = false
         np.artKey = key
         np.artRef = ref

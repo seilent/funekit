@@ -73,6 +73,9 @@ class NowPlayingModel {
     var art: ImageBitmap? by mutableStateOf(null)
     var artKey: Any? = null
     internal var artFor: Long? by mutableStateOf(null)
+    internal var bare: Long? = null
+    private var artLate: Long? = null
+    private var artFrom = -1L
     var artPhone = false
     internal var artPic = 0L
     internal var artRef: ArtRef? = null
@@ -204,6 +207,7 @@ class NowPlayingModel {
         for (k in 0 until NP_PRESSES) press[k].draw(now.toFloat())
         slideStep(now)
         lyrics.stepTo(now)
+        if (artLate != null) artIn(now)
     }
 
     fun touching(): Boolean = touchDown
@@ -487,7 +491,36 @@ class NowPlayingModel {
 
     fun pressing(now: Long): Boolean = press.any { it.stale(now.toFloat()) }
 
-    fun animating(now: Long): Boolean = !idleDone(now) || pressing(now) || slideBusy() || lyrics.fading(now) || titleGlow.moving(now)
+    fun animating(now: Long): Boolean = !idleDone(now) || pressing(now) || slideBusy() || lyrics.fading(now) || titleGlow.moving(now) || artFading(now)
+
+    internal val artStart: Long get() = artFrom
+    internal val artPending: Boolean get() = artLate != null
+
+    internal fun lateArt(track: Long?) {
+        artLate = track
+        artFrom = -1
+        bump()
+    }
+
+    internal fun artAlpha(k: Float, now: Long): Float = k * artIn(now)
+
+    internal fun artIn(now: Long): Float {
+        val t = artLate ?: return 1f
+        if (t != shown.track || variant) {
+            artLate = null
+            return 1f
+        }
+        if (artFrom < 0) artFrom = now
+        val d = Tok.motion_t7Fade.toLong()
+        if (now - artFrom >= d) {
+            artLate = null
+            return 1f
+        }
+        return Curves.easeOut.at(progress(now - artFrom, d))
+    }
+
+    internal fun artFading(now: Long): Boolean =
+        artLate != null && artLate == shown.track && !variant && artFrom >= 0 && now - artFrom < Tok.motion_t7Fade.toLong()
 
     var slide = NpSlide()
         private set

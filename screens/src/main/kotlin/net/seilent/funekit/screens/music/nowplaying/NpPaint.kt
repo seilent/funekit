@@ -319,10 +319,11 @@ class NpFrame(
     val mark: NpMarkLook,
     val rings: NpRingsLook,
     val status: Float,
+    val art: Float = 1f,
 )
 
 fun npFrame(m: NowPlayingModel, g: NpLayout, now: Long, hideFocus: Boolean): NpFrame =
-    NpFrame(npTextLook(m, g, now), npBackLook(m, now, hideFocus), npMarkLook(m, now), npRingsLook(m, now, hideFocus), npStatusAlpha(m, now))
+    NpFrame(npTextLook(m, g, now), npBackLook(m, now, hideFocus), npMarkLook(m, now), npRingsLook(m, now, hideFocus), npStatusAlpha(m, now), m.artIn(now))
 
 fun DrawScope.npPage(
     g: NpLayout,
@@ -352,7 +353,7 @@ fun DrawScope.npParts(
 ) {
     if (NpPart.Back in parts) npBackRing(g, f.back, 1f, rec)
     if (NpPart.Top in parts) npTop(g, ink, variant, 1f, rec)
-    if (NpPart.Art in parts) npArt(g, art, variant, 1f, f.text.covers)
+    if (NpPart.Art in parts) npArt(g, art, variant, f.art, f.text.covers)
     if (NpPart.Mark in parts) npMark(g, f.mark, 1f, rec)
     if (NpPart.Times in parts) npTimeBand(g, time, f.text.shown.durationMs, accent, 1f, rec)
     if (NpPart.Title in parts) npTitle(g, ink, variant, 1f, rec)
@@ -454,8 +455,9 @@ class NpPaint(
             if (r != null && (r.w <= 0 || r.h <= 0)) continue
             npHalf(h) {
                 val draw: DrawScope.() -> Unit = {
+                    val a = art()
                     val f = npFrame(m, h.g, now, hideFocus())
-                    npParts(h.g, f, k.shownInk(now), k.shownTime(now), art(), status(), accent, accentOff, m.variant, rec, shown)
+                    npParts(h.g, f, k.shownInk(now), k.shownTime(now), a, status(), accent, accentOff, m.variant, rec, shown)
                 }
                 if (r == null) draw() else clipRect(r.x0.toFloat(), r.y0.toFloat(), r.x1.toFloat(), r.y1.toFloat(), block = draw)
             }

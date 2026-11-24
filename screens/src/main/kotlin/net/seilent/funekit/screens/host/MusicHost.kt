@@ -585,6 +585,7 @@ class MusicHost<S : Any> internal constructor(
         toastAtTurn(t, toast)
         npHalfInks.forEach { k -> npAtTurn(t, k, ::isNp) }
         if (listOfNotNull(t.from, t.to).any(::isNp)) npPrimed = np.shown.track
+        if (t.to?.let(::isNp) == true) np.bare = if (np.art == null) np.shown.track else null
         pageThumbsAtTurn(t, ::thumbOf)
         if (t.kind == MoveKind.T8) t.to?.let { swapped(it, t.at) }
     }

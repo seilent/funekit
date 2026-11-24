@@ -119,9 +119,12 @@ fun NowPlayingLayer(
     val density = LocalDensity.current
     val measures = remember(halves, measurer, fonts, density, covers) { halves.map { NpMeasure(it.g, measurer, fonts, density, covers) } }
     var frame by remember { mutableLongStateOf(now()) }
+    val artNow by rememberUpdatedState(art)
+    val visibleNow by rememberUpdatedState(visible)
     LaunchedEffect(m) {
         while (true) {
             withFrameMillis { at ->
+                if (visibleNow) m.bare = if (artNow == null) m.shown.track else null
                 m.stepTo(at)
                 frame = at
             }
@@ -173,7 +176,7 @@ fun NowPlayingLayer(
                     val t = text.value[i]
                     npHalf(h) {
                         if (NpPart.Top in h.parts) npTop(h.g, inks[i], variant, k, null)
-                        if (NpPart.Art in h.parts) npArt(h.g, art, variant, k, t.covers)
+                        if (NpPart.Art in h.parts) npArt(h.g, art, variant, m.artAlpha(k, frame), t.covers)
                         if (NpPart.Title in h.parts) npTitle(h.g, inks[i], variant, k, null, glow.value?.let { RowGlow(m.titleGlow, it) })
                     }
                 }

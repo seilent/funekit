@@ -3241,6 +3241,97 @@ class HostTest {
         assertFalse("a lifecycle stop ends the hold", app.host.seekOn)
     }
 
+    private fun coverApp(gate: ArtGate, playing: Boolean = true): TestApp {
+        val f = testFake(FakeSet.Demo)
+        val cover = png(Color.BLUE)
+        fun painted(v: LibraryView): LibraryView = object : LibraryView by v {
+            override suspend fun art(ref: ArtRef, maxSide: Int): ByteArray {
+                gate.hold?.await()
+                return cover
+            }
+        }
+        val lib = object : Library by f.library {
+            override fun view(): LibraryView = painted(f.library.view())
+
+            override fun view(generation: Long): LibraryView = painted(f.library.view(generation))
+        }
+        val ts = runBlocking { f.library.view().page(Listing.Songs, 0, ART_SONGS).rows.filter { it.art != null }.map { it.id }.take(2) }
+        runBlocking {
+            f.player.play(ts, 0, 0)
+            if (!playing) f.player.pause()
+        }
+        val src = MusicSource(lib, f.player, f.quickplay, f.favorites, f.playlists, f.lyrics)
+        return TestApp(page, np, src, Level(START, null)) { rule.mainClock.currentTime }.also {
+            it.music.np.workContext = Dispatchers.Unconfined
+            it.compose(rule, root = true)
+            rule.waitForIdle()
+            rule.mainClock.autoAdvance = false
+        }
+    }
+
+    private fun lateCoverAtRest(asleep: Boolean = false): TestApp {
+        val gate = ArtGate().apply { hold = CompletableDeferred() }
+        val app = coverApp(gate, playing = !asleep)
+        rule.runOnIdle { app.host.resetNp(listOf(hub(app))) }
+        frames(if (asleep) OPEN_FRAMES + idleFrames else OPEN_FRAMES)
+        assertFalse("premise: no cover yet", app.music.np.artPending)
+        if (asleep) {
+            val t = rule.mainClock.currentTime
+            assertTrue("premise: the page sleeps", rule.runOnIdle { !app.music.np.animating(t) && app.music.np.wakeAt(t) == null })
+        }
+        rule.runOnIdle { gate.hold?.complete(Unit) }
+        artSettled(app)
+        frames(TICK_FRAMES)
+        return app
+    }
+
+    @Test
+    fun aCoverLandingAtRestFades() {
+        val app = lateCoverAtRest()
+        assertTrue(
+            "the resting page starts the late cover's fade (funeOS player/ui/nowplaying.cpp NowPlaying::art_tile :415-424, NowPlaying::art_in :371-386, v0.4.3)",
+            app.music.np.artStart >= 0,
+        )
+        val mid = rule.runOnIdle { app.music.np.artAlpha(1f, app.music.np.artStart + Tok.motion_t7Fade.toLong() / 2) }
+        assertTrue("the resting draw takes the fade's alpha mid fade, $mid", mid > 0f && mid < 1f)
+        frames(ART_FADE_FRAMES)
+        assertFalse("the fade ends at rest", app.music.np.artPending)
+    }
+
+    @Test
+    fun aCoverLandingOnASleepingPageWakesItsFade() {
+        val app = lateCoverAtRest(asleep = true)
+        assertTrue(
+            "the late cover wakes the sleeping page into its fade (funeOS player/ui/nowplaying.cpp NowPlaying::art_tile :415-424, NowPlaying::art_in :371-386, v0.4.3)",
+            app.music.np.artStart >= 0,
+        )
+        frames(ART_FADE_FRAMES)
+        assertFalse("the fade ends on the sleeping page", app.music.np.artPending)
+    }
+
+    @Test
+    fun aLeaveAfterALateCoverKeepsTheCover() {
+        val app = lateCoverAtRest()
+        frames(ART_FADE_FRAMES)
+        rule.runOnIdle { app.host.npBack() }
+        frames(CUT_FRAMES)
+        assertEquals("the leave draws the cover whole", 1f, rule.runOnIdle { app.music.np.artIn(rule.mainClock.currentTime) }, 0f)
+    }
+
+    @Test
+    fun aSlowCoverOnAnNpEnterKeepsFadingAcrossTheLanding() {
+        val gate = ArtGate().apply { hold = CompletableDeferred() }
+        val app = coverApp(gate)
+        rule.runOnIdle { app.host.goNp() }
+        frames(ENTER_FRAMES)
+        rule.runOnIdle { gate.hold?.complete(Unit) }
+        artSettled(app)
+        frames(TICK_FRAMES)
+        assertTrue("premise: the fade starts in the enter", app.music.np.artStart >= 0)
+        frames(OPEN_FRAMES + ART_FADE_FRAMES)
+        assertFalse("the fade runs on at rest and ends", app.music.np.artPending)
+    }
+
     companion object {
         private const val W = 720
         private const val H = 1280
@@ -3269,6 +3360,8 @@ class HostTest {
         private const val HOLD_FRAMES = 27
         private const val TICK_FRAMES = 3
         private const val CLOSE_FRAMES = 11
+        private const val ART_FADE_FRAMES = 23
+        private const val ENTER_FRAMES = 25
         private const val PRESS_OFF_FRAMES = 9
         private const val HOLD_POS = 216000L
         private const val HOLD_DUR = 377000L

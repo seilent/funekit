@@ -36,8 +36,10 @@ import net.seilent.funekit.api.Stale
 import net.seilent.funekit.core.Lrc
 import net.seilent.funekit.fake.Fake
 import net.seilent.funekit.fake.FakeSet
+import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.Play
 import net.seilent.funekit.kit.Toast
+import net.seilent.funekit.kit.motion.Curves
 import net.seilent.funekit.kit.np.NpLayout
 import net.seilent.funekit.scale
 import net.seilent.funekit.screens.music.MusicSource
@@ -640,6 +642,35 @@ class NowPlayingFeedTest {
         assertEquals("an empty queue plays nothing", Play.None, playOf(NpFeed.Own(PlayerState())))
     }
 
+    private fun lateCover(np: NowPlayingModel): Long {
+        val (_, b) = artPlayed(np)
+        assertEquals("a cover in place at the first draw takes no fade", 1f, np.artIn(0L), 0f)
+        rule.runOnIdle { np.bare = b }
+        player { next() }
+        artFor(np, b)
+        return b
+    }
+
+    @Test
+    fun aLateCoverFadesInOverTheT7Fade() {
+        val np = NowPlayingModel()
+        lateCover(np)
+        val fade = Tok.motion_t7Fade.toLong()
+        assertEquals("the late cover starts its fade at its first draw (funeOS player/ui/nowplaying.cpp NowPlaying::art_in :371-386, v0.4.3)", 0f, rule.runOnIdle { np.artIn(FADE_AT) }, 0f)
+        val half = fade / 2
+        assertEquals(Curves.easeOut.at(half.toFloat() / fade), rule.runOnIdle { np.artIn(FADE_AT + half) }, 1e-4f)
+        assertEquals(1f, rule.runOnIdle { np.artIn(FADE_AT + fade) }, 0f)
+        assertFalse("the fade ends once", rule.runOnIdle { np.artFading(FADE_AT + fade) })
+    }
+
+    @Test
+    fun artForIsWrittenAtTheSettleNotTheFadeEnd() {
+        val np = NowPlayingModel()
+        val b = lateCover(np)
+        assertTrue("premise: the fade runs", rule.runOnIdle { np.artIn(FADE_AT) < 1f && np.artFading(FADE_AT + 1) })
+        assertEquals("artFor is the art effect's settle", b, np.artFor)
+    }
+
     private companion object {
         const val SDK = 35
         const val V1_W = 240
@@ -650,6 +681,7 @@ class NowPlayingFeedTest {
         const val OFFSET = 500
         const val MOVED = 200
         const val PNG_SIDE = 64
+        const val FADE_AT = 10_000L
         const val ART_SONGS = 20
         const val ART_TRACKS = 3
         const val WAIT_MS = 5_000L
