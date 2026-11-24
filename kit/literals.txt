@@ -49,6 +49,7 @@ kit/src/main/kotlin/net/seilent/funekit/kit/Status.kt LEVEL_X 18 fos player/ui/r
 kit/src/main/kotlin/net/seilent/funekit/kit/Status.kt LEVEL_Y 10 fos player/ui/rows.cpp:1251 battery level inset (ih + 5) / 10 (funeOS ui/rows.cpp draw_status)
 kit/src/main/kotlin/net/seilent/funekit/kit/Status.kt ROUND_X 9 fos player/ui/rows.cpp:1251 battery level inset (iw + 9) / 18 (funeOS ui/rows.cpp draw_status)
 kit/src/main/kotlin/net/seilent/funekit/kit/Status.kt ROUND_Y 5 fos player/ui/rows.cpp:1251 battery level inset (ih + 5) / 10 (funeOS ui/rows.cpp draw_status)
+kit/src/main/kotlin/net/seilent/funekit/kit/Status.kt SEEK_INK_DX 2 fos player/ui/rows.cpp:21 the seek glyphs draw 2/32 of the glyph box right of the play slot centre, (size * 2 + glyphBox / 2) / glyphBox px (funeOS ui/rows.cpp kSeekInkDx, draw_status)
 kit/src/main/kotlin/net/seilent/funekit/kit/motion/Motion.kt LOG_STEPS 10f fos player/ui/app.cpp:14707 a dialog closed while opening hides over hide - round(-hide / 10 x log2(o)) ms (funeOS ui/app.cpp close_overlay)
 kit/src/main/kotlin/net/seilent/funekit/kit/motion/Motion.kt MS_PER_S 1000f fos player/ui/rows.cpp:589 the pane follows the drag out at pivotPaneSpeed u per second (funeOS ui/rows.cpp PivotMotion::dx)
 kit/src/main/kotlin/net/seilent/funekit/kit/motion/PageMove.kt HALF 2f fos player/ui/pagemove.cpp:972 the T3a content rides the bottom of the growing art, the art centre plus half its side (funeOS ui/pagemove.cpp art_legs)

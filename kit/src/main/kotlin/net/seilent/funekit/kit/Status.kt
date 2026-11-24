@@ -22,11 +22,13 @@ import net.seilent.funekit.px
 import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
 
 private const val PERCENT = 100
 private const val HALF = 2
+private const val SEEK_INK_DX = 2
 
-enum class Play { None, Playing, Paused }
+enum class Play { None, Playing, Paused, SeekForward, SeekBack }
 
 class StatusState(
     val clock: String,
@@ -129,7 +131,18 @@ private fun DrawScope.drawStatus(
         }
     }
     if (st.bluetooth) mark(Glyphs.bluetooth, fg)
-    if (st.play != Play.None) mark(if (st.play == Play.Playing) Glyphs.play else Glyphs.pause, fg)
+    if (st.play != Play.None) {
+        val g = when (st.play) {
+            Play.Playing -> Glyphs.play
+            Play.Paused -> Glyphs.pause
+            Play.SeekForward -> Glyphs.seekForward
+            else -> Glyphs.seekBack
+        }
+        val box = Tok.glyphBox.roundToInt()
+        val dx = if (st.play == Play.SeekForward || st.play == Play.SeekBack) (size * SEEK_INK_DX + box / HALF) / box else 0
+        glyph(g, Offset((right - size / HALF + dx).toFloat(), cy), size.toFloat(), fg, a)
+        right -= size + gap
+    }
     if (st.wifi >= 0) {
         wifi(center(), size.toFloat(), st.wifi, fg, a)
         right -= size + gap
