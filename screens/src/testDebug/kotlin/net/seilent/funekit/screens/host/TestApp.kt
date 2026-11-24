@@ -1,7 +1,6 @@
 package net.seilent.funekit.screens.host
 
 import android.graphics.Matrix
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
@@ -270,7 +269,6 @@ class TestApp(page: Scale, np: Scale, src: MusicSource?, private val level: Volu
             h.applied()
         }
         h.StackClock { MoveKind.T4n }
-        if (hs != null) BackHandler(enabled = stack.top == null && hs.front) { hs.back() }
         if (!root) {
             Box(Modifier.pxSize(page.widthPx, page.heightPx).arbiter(a, Swipes(false, false, false, { false }, { _, _ -> }))) {
                 h.MusicPages(emptyMap(), status)

@@ -93,7 +93,7 @@ class PageStack<P : Any>(
     private var landAt = -1L
     private val gone = mutableListOf<P>()
     private var opened: PlayOpen? by mutableStateOf(null)
-    private var pending = 0
+    private var pending by mutableIntStateOf(0)
     private var replayDue = false
     private var cutOwed = false
     private var leaveOwed: Pair<(P) -> Boolean, (Turn<P>) -> MoveKind>? = null
@@ -132,7 +132,7 @@ class PageStack<P : Any>(
 
     fun holds(o: Overlay): Boolean = opening === o
 
-    val canBack: Boolean get() = pages.isNotEmpty() || overlay != null || phase != Phase.Rest
+    val canBack: Boolean get() = pages.isNotEmpty() || taken || pending > 0 || phase != Phase.Rest
 
     val armed: Boolean
         get() = opened.let { it != null && (it.state == PlayOpen.State.Armed || it.state == PlayOpen.State.Released) }

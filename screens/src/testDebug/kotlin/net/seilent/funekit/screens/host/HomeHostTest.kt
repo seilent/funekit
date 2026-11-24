@@ -65,6 +65,7 @@ import net.seilent.funekit.kit.quickplay.peekHit
 import net.seilent.funekit.kit.quickplay.qpTiles
 import net.seilent.funekit.kit.quickplay.quickplay
 import net.seilent.funekit.kit.stack.Phase
+import net.seilent.funekit.kit.stack.PlayOpen
 import net.seilent.funekit.kit.touch.Swipe
 import net.seilent.funekit.scale
 import net.seilent.funekit.screens.music.MusicPage
@@ -382,6 +383,119 @@ class HomeHostTest {
         assertNull(stack.turn)
         assertEquals(0, npEntries())
         assertSame(held, stack.overlay)
+    }
+
+    private fun systemBack() = rule.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
+
+    private fun seekMs(): Long = fake.player.state.value.anchor.ms(0L)
+
+    @Test
+    fun aBackOverATileSheetInFrontClosesTheSheetThenASecondBackClosesThePane() {
+        val data = QpData(null, items(TILES, QpKind.Album), emptyList(), emptyList(), 1L)
+        val qp = front(data)
+        val o = tileAt(data, 0)
+        rule.onRoot().performTouchInput { down(o) }
+        step(holdMs)
+        settle()
+        rule.onRoot().performTouchInput { up() }
+        settle()
+        assertEquals("premise: the held tile's sheet is open over the pane", OverKind.Sheet, stack.overlay?.kind)
+        assertTrue("premise: the pane is in front under the sheet", qp.pan.front)
+        systemBack()
+        until("the back closes the sheet") { stack.overlay == null }
+        settle()
+        assertTrue("the pane stays in front", qp.pan.front && qp.pan.still)
+        systemBack()
+        settle()
+        assertFalse("a second back closes the pane", qp.pan.front)
+        assertFalse(rule.activity.isFinishing)
+    }
+
+    @Test
+    fun aBackOverTheVolumePlateInFrontHidesItCommitsItsSeekAndKeepsThePane() {
+        val ids = songs(TILES)
+        runBlocking {
+            fake.player.play(listOf(ids[0]), 0, 0)
+            fake.player.pause()
+        }
+        val qp = front(songData(ids))
+        assertEquals("premise: the paused track is at 0", 0L, seekMs())
+        rule.runOnUiThread { app.host.volPress(1) }
+        until("premise: the key opens the plate") { stack.overlay?.kind == OverKind.Volume && app.host.hud.visible(SystemClock.uptimeMillis()) }
+        frames(OPEN_MS)
+        val x = Tok.canvasW / 2 * np.ppu + (np.left - a105Page.left)
+        val y = np.board.vol_ringY * np.ppu
+        sync()
+        val d = SystemClock.uptimeMillis()
+        send(MotionEvent.ACTION_DOWN, x, y, d)
+        frame()
+        for (i in 1..STEPS) {
+            send(MotionEvent.ACTION_MOVE, x + SEEK_PX * i / STEPS, y, d)
+            frame()
+        }
+        assertTrue("premise: a seek is pending", app.host.hud.pendingSeek() != null)
+        systemBack()
+        until("the back hides the plate") { app.host.hud.hiding }
+        assertTrue("the pane stays in front", qp.pan.front && qp.pan.still)
+        send(MotionEvent.ACTION_CANCEL, x + SEEK_PX, y, d)
+        settle()
+        assertTrue("the back commits the pending seek, ${seekMs()}", seekMs() > 0L)
+        assertNull(stack.overlay)
+    }
+
+    @Test
+    fun aBackDuringAnArrivalAtHomeLandsItAndKeepsThePaneInFront() {
+        val data = songData(songs(TILES))
+        val qp = front(data)
+        tapTile(data, 1)
+        until("premise: the tile play lands on now playing") { npOnTop() && !stack.armed }
+        rule.runOnUiThread { app.host.back() }
+        until("premise: the pop from now playing arrives at home") { stack.phase != Phase.Rest && stack.top == null }
+        assertTrue("premise: the pane is in front under the arrival", qp.pan.front)
+        systemBack()
+        settle()
+        assertTrue("a back during the arrival leaves the pane in front", qp.pan.front && qp.pan.still)
+        assertNull(stack.top)
+        assertEquals(Phase.Rest, stack.phase)
+        assertFalse(rule.activity.isFinishing)
+    }
+
+    @Test
+    fun aBackOverAnAskedOpenInFrontClosesItAndKeepsThePane() {
+        val qp = front(songData(songs(TILES)))
+        val o = Overlay(OverKind.Sheet)
+        var called = false
+        rule.runOnUiThread { called = stack.open(o) }
+        apply()
+        rule.mainClock.advanceTimeByFrame()
+        assertTrue("premise: the open is asked and holds the empty slot", called && stack.taken && stack.overlay == null)
+        systemBack()
+        until("the back closes the asked open") { stack.overlay == null && !stack.taken }
+        settle()
+        assertNull(stack.overlay)
+        assertTrue("the pane stays in front", qp.pan.front && qp.pan.still)
+        assertFalse(rule.activity.isFinishing)
+    }
+
+    @Test
+    fun aBackOverAnAskedPlayOpenInFrontRefusesItAndKeepsThePane() {
+        val data = songData(songs(TILES))
+        reply = CompletableDeferred()
+        val qp = front(data)
+        tapTile(data, 1)
+        val h = checkNotNull(app.host.opened) { "premise: the tile tap asks a play open" }
+        apply()
+        rule.mainClock.advanceTimeByFrame()
+        assertTrue("premise: the play open is asked and not armed", stack.moving && stack.turn == null && !stack.armed)
+        systemBack()
+        frames(HOLD)
+        assertEquals("the back refuses the play open", PlayOpen.State.Refused, h.state)
+        reply!!.complete(Unit)
+        settle()
+        assertEquals(0, npEntries())
+        assertNull(stack.top)
+        assertTrue("the pane stays in front", qp.pan.front && qp.pan.still)
+        assertFalse(rule.activity.isFinishing)
     }
 
     @Test
@@ -984,5 +1098,8 @@ class HomeHostTest {
         private const val DRAG_Y = 200f
         private const val DRAG_STEPS = 10
         private const val DRAG_PX = 20f
+        private const val OPEN_MS = 400L
+        private const val SEEK_PX = 240f
+        private const val STEPS = 8
     }
 }

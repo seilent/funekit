@@ -170,6 +170,19 @@ class PageStackTest {
     }
 
     @Test
+    fun anOpenAskedAtTheRootTakesTheBackBeforeItsFrame() {
+        val s = PageStack<String>(MoveForms(), { PageKind.Grid }) { ends }
+        assertFalse("premise: the root at rest has no back", s.canBack)
+        val o = Overlay(OverKind.Sheet)
+        assertTrue(s.open(o))
+        assertTrue("premise: the open is asked and has not risen", s.taken && s.overlay == null)
+        assertTrue("an asked open takes the back", s.canBack)
+        s.frame(0)
+        assertSame(o, s.overlay)
+        assertTrue(s.canBack)
+    }
+
+    @Test
     fun aBackDuringT2wReversesBeforeTheSwapAndRetargetsAfterIt() {
         val slide = MoveEnds(peek0 = 0.6f, slideX = 300f, grounds = true)
         fun pushed() = PageStack<String>(MoveForms(), { PageKind.Plain }) { slide }.also {

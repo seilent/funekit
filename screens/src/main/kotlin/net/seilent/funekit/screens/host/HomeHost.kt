@@ -1,5 +1,6 @@
 package net.seilent.funekit.screens.host
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
@@ -632,6 +633,11 @@ fun rememberHomeState(
 }
 
 @Composable
+fun HomeBack(state: HomeState, stack: PageStack<*>) {
+    BackHandler(enabled = state.front && !stack.canBack) { state.back() }
+}
+
+@Composable
 fun <S : Any> HomeLayer(
     state: HomeState,
     host: MusicHost<S>,
@@ -644,6 +650,7 @@ fun <S : Any> HomeLayer(
 ) {
     val scope = rememberCoroutineScope()
     val stack = host.stack
+    HomeBack(state, stack)
     val atHome = stack.top == null
     val rest = stack.phase == Phase.Rest
     val over = stack.overlay
