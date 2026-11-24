@@ -81,7 +81,7 @@ private const val ON_RING = "the press disc fills the ring under the ring and it
 private const val UNDER_PRESS = "its press glow or press disc is drawn with it: the glow region masks its window, the disc's ink fills it"
 private val FLAT = doubleArrayOf(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0)
 
-enum class VolumePart { GlowPrev, GlowRing, GlowNext, GlowPlus, GlowMinus, Disc, Readout, Prev, Next, Ring, Play, Pause, Plus, Minus, Label, Number }
+enum class VolumePart { GlowPrev, GlowRing, GlowNext, GlowPlus, GlowMinus, Disc, Readout, Seek, Prev, Next, Ring, Play, Pause, Plus, Minus, Label, Number }
 
 data class VolumePlace(val scale: Float, val x: Float, val y: Float) {
     fun matrix(): DoubleArray = doubleArrayOf(scale.toDouble(), 0.0, x.toDouble(), 0.0, scale.toDouble(), y.toDouble(), 0.0, 0.0, 1.0)
@@ -116,6 +116,8 @@ class VolumeInk(
     val oldTitle: Word,
     val artistBase: Int,
     val titleBase: Int,
+    val seekLeft: Word = Word.none,
+    val seekRight: Word = Word.none,
 )
 
 class VolumeParts(val board: TokBoard.Board, val ppu: Float, val w: Float = Tok.canvasW) {
@@ -150,6 +152,12 @@ class VolumeParts(val board: TokBoard.Board, val ppu: Float, val w: Float = Tok.
 
     fun readoutBase(): Int = ringY + (rolePx(Roles.overlayNumber) * Tok.adjustNumberDrop).roundToInt()
 
+    fun seekLeftX(left: Word): Float = Tok.vol_seekX * ppu - left.inkLeft
+
+    fun seekRightX(right: Word): Float = (w - Tok.vol_seekRight) * ppu - right.inkRight
+
+    fun seekBase(): Int = px(board.vol_plusY + Tok.vol_seekDrop, ppu) + capMid(rolePx(Roles.volSeek))
+
     fun textTop(): Int {
         val label = labelBase() - capMid(rolePx(Roles.volLabel))
         return maxOf(px(board.vol_textY, ppu), label + px(board.vol_textGap, ppu))
@@ -174,7 +182,7 @@ class VolumeParts(val board: TokBoard.Board, val ppu: Float, val w: Float = Tok.
     }
 
     fun flat(p: VolumePart, l: VolumeLook, label: IntArray? = null): VolumePlace {
-        if (p == VolumePart.Number || p == VolumePart.Readout) return VolumePlace(1f, 0f, 0f)
+        if (p == VolumePart.Number || p == VolumePart.Readout || p == VolumePart.Seek) return VolumePlace(1f, 0f, 0f)
         val (ax, ay) = anchor(p, label)
         val x = cx + (ax - cx) * l.k - l.size * ax
         val y = ringY + (ay - ringY) * l.k - l.size * ay
@@ -189,7 +197,8 @@ class VolumeParts(val board: TokBoard.Board, val ppu: Float, val w: Float = Tok.
             VolumePart.Number -> l.number * Tok.overlayLit
             VolumePart.Play -> if (hud.playing) 0f else lit
             VolumePart.Pause -> if (hud.playing) lit else 0f
-            VolumePart.Readout -> if (hud.seeking) l.group * Tok.overlayDim else 0f
+            VolumePart.Readout -> if (hud.seeking && l.seek <= 0f) l.group * Tok.overlayDim else 0f
+            VolumePart.Seek -> l.seek * Tok.overlayLit
             VolumePart.GlowPrev -> glow(VolumeHud.Hit.Prev)
             VolumePart.GlowRing -> glow(VolumeHud.Hit.Ring)
             VolumePart.GlowNext -> glow(VolumeHud.Hit.Next)
@@ -280,6 +289,7 @@ fun VolumeParts.partPoints(p: VolumePart, ink: VolumeInk): List<Offset>? {
         VolumePart.Label -> inkOf(ink.label, labelX(ink.label), labelBase())
         VolumePart.Number -> inkOf(ink.number, numberX(ink.number), numberBase(ink.numberPx))
         VolumePart.Readout -> inkOf(ink.readout, readoutX(ink.readout), readoutBase())
+        VolumePart.Seek -> listOfNotNull(inkOf(ink.seekLeft, seekLeftX(ink.seekLeft), seekBase()), inkOf(ink.seekRight, seekRightX(ink.seekRight), seekBase())).flatten().ifEmpty { null }
         VolumePart.Ring -> circle(rpx)
         VolumePart.Disc -> (rpx - HALF * stroke).takeIf { it > 0 }?.let { circle(it) }
         VolumePart.GlowRing -> mask(GlowCache.halo(rpx, stroke, px(Tok.vol_glowRing, ppu)))
@@ -306,7 +316,7 @@ fun VolumeParts.drawn(hud: VolumeHud, ink: VolumeInk, now: Long): VolumeDraw? {
 private fun markOf(p: VolumePart): Mark = when (p) {
     VolumePart.GlowPrev, VolumePart.GlowRing, VolumePart.GlowNext, VolumePart.GlowPlus, VolumePart.GlowMinus -> Mark.Glow
     VolumePart.Disc, VolumePart.Ring -> Mark.Ring
-    VolumePart.Readout, VolumePart.Label, VolumePart.Number -> Mark.Text
+    VolumePart.Readout, VolumePart.Seek, VolumePart.Label, VolumePart.Number -> Mark.Text
     VolumePart.Prev, VolumePart.Next, VolumePart.Play, VolumePart.Pause, VolumePart.Plus, VolumePart.Minus -> Mark.Glyph
 }
 
@@ -436,6 +446,8 @@ fun TextMeasurer.volumeInk(hud: VolumeHud, v: VolumeParts, fonts: FontFamily.Res
         oldTitle = old?.let { of(it.second, Roles.volTitle) } ?: Word.none,
         artistBase = ab,
         titleBase = tb,
+        seekLeft = if (hud.seekLeft.isEmpty()) Word.none else of(hud.seekLeft, Roles.volSeek),
+        seekRight = if (hud.seekRight.isEmpty()) Word.none else of(hud.seekRight, Roles.volSeek),
     )
 }
 
@@ -472,6 +484,10 @@ private fun DrawScope.volumePart(v: VolumeParts, ink: VolumeInk, p: VolumePart, 
         VolumePart.Label -> word(ink.label, v.labelX(ink.label), v.labelBase().toFloat(), Ink.white, a)
         VolumePart.Number -> word(ink.number, v.numberX(ink.number), v.numberBase(ink.numberPx).toFloat(), Ink.white, a)
         VolumePart.Readout -> word(ink.readout, v.readoutX(ink.readout), v.readoutBase().toFloat(), Ink.white, a)
+        VolumePart.Seek -> {
+            word(ink.seekLeft, v.seekLeftX(ink.seekLeft), v.seekBase().toFloat(), Ink.white, a)
+            word(ink.seekRight, v.seekRightX(ink.seekRight), v.seekBase().toFloat(), Ink.white, a)
+        }
         else -> {
             val (g, size) = v.glyphOf(p) ?: return
             glyph(g, c, size.toFloat(), Ink.white, a)
@@ -550,7 +566,7 @@ fun VolumeLayer(hud: VolumeHud, s: Scale, modifier: Modifier = Modifier) {
     val glow = remember { Glow() }
     val cur = hud.artist to hud.title
     val old = hud.oldArtist to hud.oldTitle
-    val ink = remember(v, density, fonts, covers, cur, old, hud.percent, hud.seeking, hud.readout, hud.h) {
+    val ink = remember(v, density, fonts, covers, cur, old, hud.percent, hud.seeking, hud.readout, hud.seekLeft, hud.seekRight, hud.h) {
         m.volumeInk(hud, v, fonts, density, covers, old)
     }
     var frameAt by remember { mutableLongStateOf(-1L) }
@@ -559,6 +575,7 @@ fun VolumeLayer(hud: VolumeHud, s: Scale, modifier: Modifier = Modifier) {
             withFrameMillis {
                 frameAt = it
                 hud.tiltFrame(it)
+                hud.seekFrame(it)
             }
             if (!hud.visible(frameAt)) break
             if (!hud.moving(frameAt)) {

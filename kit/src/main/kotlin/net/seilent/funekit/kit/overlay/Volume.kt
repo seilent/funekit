@@ -16,6 +16,8 @@ import net.seilent.funekit.kit.touch.axisOf
 import java.util.Locale
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToLong
+import kotlin.math.sqrt
 
 private const val HALF = 2
 private const val PAD = 10
@@ -41,11 +43,12 @@ class VolumeLook(
     val line: List<VolumeLine>,
     val old: List<VolumeLine>,
     val cross: Boolean,
+    val seek: Float = 0f,
 )
 
 class VolumeHud(var board: TokBoard.Board = TokBoard.v1, var w: Float = Tok.canvasW, var h: Float = board.canvasH) : OverHud {
     enum class Hit { None, Exit, Plus, Minus, Prev, Ring, Next }
-    enum class Act { None, Pass, Plus, Minus, Prev, Ring, Next, Volume, Seek, Draw }
+    enum class Act { None, Pass, Plus, Minus, Prev, Ring, Next, Volume, Seek, Draw, SeekEnd }
     class Pos(val on: Boolean = false, val ms: Long = 0, val dur: Long = 0, val track: Long = 0)
 
     private enum class Drag { Tap, Volume, Seek, Off }
@@ -81,6 +84,10 @@ class VolumeHud(var board: TokBoard.Board = TokBoard.v1, var w: Float = Tok.canv
     var readout = ""
         private set
     var seekTo = 0L
+        private set
+    var seekLeft = ""
+        private set
+    var seekRight = ""
         private set
     val exitPress = Press()
 
@@ -125,6 +132,20 @@ class VolumeHud(var board: TokBoard.Board = TokBoard.v1, var w: Float = Tok.canv
     private var pressUp = -1L
     private var pressEnd = Up.Held
     private val near = intArrayOf(-1, -1, -1, -1)
+    private var glyph = Hit.None
+    private var glyphAt = -1L
+    private var holdDir = 0
+    private var holdTouch = false
+    private var keyHeld = false
+    private var seekDir = 0
+    private var seekIn = -1L
+    private var seekEnd = -1L
+    private var seekOut = -1L
+    private var numCut = -1L
+    private var seekDur = 0L
+    private var seekPos = -1L
+
+    val holding: Boolean get() = holdDir != 0
 
     private fun bump() {
         revision++
@@ -136,7 +157,7 @@ class VolumeHud(var board: TokBoard.Board = TokBoard.v1, var w: Float = Tok.canv
     private fun tiltHold(): Long = (if (tiltTap) Tok.motion_volumeTiltTapHold else Tok.motion_volumeTiltHold).toLong()
 
     private fun restFrom(now: Long) {
-        fadeAt = if (held) -1 else max(endAt(), now) + Tok.motion_volumeRestHold.toLong()
+        fadeAt = if (held || keyHeld) -1 else max(endAt(), now) + Tok.motion_volumeRestHold.toLong()
     }
 
     private fun holdEnd(now: Long) {
@@ -169,15 +190,26 @@ class VolumeHud(var board: TokBoard.Board = TokBoard.v1, var w: Float = Tok.canv
             atRest = false
             tilt = false
             upAt = -1
+            seekIn = -1
+            seekEnd = -1
+            seekOut = -1
+            numCut = -1
+            seekDir = 0
             this.artist = artist
             this.title = title
         } else {
             if (closing(now) || (fadeAt >= 0 && now >= fadeAt)) revive(now)
-            if (percent != this.percent) {
+            if (percent != this.percent && seekDir == 0) {
                 numFrom = numberK(now)
                 chgAt = now
                 numShift = 0
-                if (held) heldAt = now
+                if (held && seekIn < 0) heldAt = now
+                numCut = -1
+                if (seekIn >= 0 && seekOut < 0 && seekEnd >= 0) {
+                    seekEnd = min(seekEnd, now - Tok.seekReadoutHold.toLong())
+                } else if (seekIn >= 0 && seekOut < 0) {
+                    seekOut = now
+                }
             }
             setTrack(playing, artist, title, now)
         }
@@ -198,6 +230,12 @@ class VolumeHud(var board: TokBoard.Board = TokBoard.v1, var w: Float = Tok.canv
         shown = false
         tilt = false
         upAt = -1
+        seekIn = -1
+        seekEnd = -1
+        seekOut = -1
+        numCut = -1
+        seekDir = 0
+        keyHeld = false
         dropTouch()
         bump()
     }
@@ -298,9 +336,24 @@ class VolumeHud(var board: TokBoard.Board = TokBoard.v1, var w: Float = Tok.canv
         if (!shown) return 0f
         val t = if (held && heldAt >= 0) min(now, heldAt) else now
         val hAt = numberAt()
-        var own = if (t < hAt) 1f else 1f - Curves.easeIn.at(progress(t - hAt, Tok.motion_volumeNumberFade.toLong()))
+        val fade = Tok.motion_volumeNumberFade.toLong()
+        var own = if (t < hAt) 1f else 1f - Curves.easeIn.at(progress(t - hAt, fade))
+        if (numCut >= 0) own = min(own, 1f - Curves.easeIn.at(progress(now - numCut, fade)))
         if (chgAt >= 0 && numFrom < 1f) own = min(own, numFrom + progress(now - chgAt, Tok.motion_volumeNumberBack.toLong()))
         return own
+    }
+
+    fun seekK(now: Long): Float {
+        if (seekIn < 0) return 0f
+        val inMs = Tok.motion_seekReadoutIn.toLong()
+        var k = progress(now - seekIn, inMs)
+        val hold = Tok.seekReadoutHold.toLong()
+        if (seekOut >= 0) {
+            k = min(k, 1f - progress(now - seekOut, inMs))
+        } else if (seekEnd >= 0 && now >= seekEnd + hold) {
+            k = min(k, 1f - Curves.easeIn.at(progress(now - seekEnd - hold, Tok.motion_volumeNumberFade.toLong())))
+        }
+        return k
     }
 
     fun look(now: Long): VolumeLook {
@@ -341,7 +394,7 @@ class VolumeHud(var board: TokBoard.Board = TokBoard.v1, var w: Float = Tok.canv
             line = inL.map { VolumeLine(it.a * text, textDx + it.dx) }
             old = outL.map { VolumeLine(it.a * text, textDx + it.dx) }
         }
-        return VolumeLook(group, k, size, number, exitIn * r, text, textDx, scrimK(now), exitPress.lit(nowF), pressK(now), line, old, cross)
+        return VolumeLook(group, k, size, number, exitIn * r, text, textDx, scrimK(now), exitPress.lit(nowF), pressK(now), line, old, cross, seekK(now) * r)
     }
 
     private fun crossLines(c: Long): Pair<List<VolumeLine>, List<VolumeLine>> {
@@ -362,6 +415,10 @@ class VolumeHud(var board: TokBoard.Board = TokBoard.v1, var w: Float = Tok.canv
         if (tilt && upAt < 0) tilt = false
         held = false
         seeking = false
+        holdTouch = false
+        glyph = Hit.None
+        holdDir = 0
+        glyphAt = -1
         drag = Drag.Tap
         if (owns) {
             owns = false
@@ -463,7 +520,6 @@ class VolumeHud(var board: TokBoard.Board = TokBoard.v1, var w: Float = Tok.canv
         if (fadeAt >= 0 && now >= fadeAt) revive(now)
         owns = true
         held = true
-        heldAt = now
         drops = false
         seeking = false
         fadeAt = -1
@@ -473,6 +529,11 @@ class VolumeHud(var board: TokBoard.Board = TokBoard.v1, var w: Float = Tok.canv
         press = if (hit == Hit.Exit) Hit.None else hit
         pressUp = -1
         pressEnd = Up.Held
+        glyph = if (hit == Hit.Prev || hit == Hit.Next) hit else Hit.None
+        glyphAt = if (glyph != Hit.None) now else -1
+        heldAt = if (glyph != Hit.None) -1 else now
+        holdDir = 0
+        holdTouch = false
         exitLit = hit == Hit.Exit
         if (exitLit) exitPress.down(now.toFloat())
         row = y >= board.vol_ringY - Tok.vol_hit / HALF && y < board.vol_ringY + Tok.vol_hit / HALF
@@ -490,7 +551,38 @@ class VolumeHud(var board: TokBoard.Board = TokBoard.v1, var w: Float = Tok.canv
 
     fun move(now: Long, x: Float, y: Float, percent: Int, pos: Pos): Act {
         if (!owns) return Act.None
+        if (holdTouch) {
+            if (tilt) tiltAt(x, y)
+            val g = glyphHit(x, y)
+            val was = holdDir
+            val from = glyph
+            val lit = if (pressUp < 0) press else Hit.None
+            if (holdDir != 0 && g != (if (holdDir > 0) Hit.Next else Hit.Prev)) {
+                holdDir = 0
+                pressUp = now
+                pressEnd = Up.Cancelled
+            }
+            if (holdDir == 0 && g != glyph) {
+                glyph = g
+                glyphAt = if (g != Hit.None) now else -1
+                if (g != Hit.None) {
+                    press = g
+                    pressUp = -1
+                    pressEnd = Up.Held
+                }
+            }
+            bump()
+            if (was != 0 && holdDir == 0) return Act.SeekEnd
+            return if (tilt || glyph != from || (if (pressUp < 0) press else Hit.None) != lit) Act.Draw else Act.None
+        }
+        if (glyph != Hit.None && !tap(x, y)) {
+            glyph = Hit.None
+            glyphAt = -1
+            heldAt = now
+        }
+        val slid = seeking
         val a = slide(x, y, percent, pos)
+        if (seeking && !slid && seekDir == 0 && seekIn >= 0 && seekOut < 0) seekOut = now
         if (drag != Drag.Tap && (!tilt || upAt >= 0)) {
             tilt = true
             upAt = -1
@@ -510,6 +602,26 @@ class VolumeHud(var board: TokBoard.Board = TokBoard.v1, var w: Float = Tok.canv
 
     fun up(now: Long, x: Float, y: Float): Act {
         if (!owns) return Act.None
+        if (holdTouch) {
+            val was = holdDir != 0
+            tiltUp(now, tap(x, y))
+            holdEnd(now)
+            if (press != Hit.None && pressUp < 0) {
+                pressUp = now
+                pressEnd = Up.Cancelled
+            }
+            owns = false
+            held = false
+            holdTouch = false
+            holdDir = 0
+            glyph = Hit.None
+            glyphAt = -1
+            restFrom(now)
+            bump()
+            return if (was) Act.SeekEnd else Act.Draw
+        }
+        glyph = Hit.None
+        glyphAt = -1
         val isTap = drag == Drag.Tap && tap(x, y)
         tiltUp(now, isTap)
         holdEnd(now)
@@ -543,6 +655,105 @@ class VolumeHud(var board: TokBoard.Board = TokBoard.v1, var w: Float = Tok.canv
                 hide(now)
                 Act.None
             }
+        }
+    }
+
+    private fun glyphHit(x: Float, y: Float): Hit {
+        val h = hit(x, y)
+        return if (h == Hit.Prev || h == Hit.Next) h else Hit.None
+    }
+
+    fun holdDue(now: Long): Int {
+        if (!owns || holdDir != 0 || glyph == Hit.None || glyphAt < 0 || drag != Drag.Tap || now < glyphAt + Tok.seekHoldMs.toLong()) return 0
+        holdDir = if (glyph == Hit.Next) 1 else -1
+        holdTouch = true
+        glyphAt = -1
+        bump()
+        return holdDir
+    }
+
+    fun holdRefuse() {
+        holdDir = 0
+        holdTouch = false
+    }
+
+    private fun seekTextSet(pos: Long) {
+        val t = pos.coerceIn(0, max(0L, seekDur))
+        seekLeft = seekText(t, seekDur)
+        seekRight = "-" + seekText(seekDur - t, seekDur)
+    }
+
+    fun seekShow(dir: Int, pos: Long, dur: Long, now: Long, opened: Boolean) {
+        if (dir == seekDir && pos == seekPos && dur == seekDur) return
+        if (seekDir == 0) {
+            val fade = Tok.motion_volumeNumberFade.toLong()
+            val k = numberK(now)
+            seekIn = now - (seekK(now) * Tok.motion_seekReadoutIn.toLong()).toLong()
+            if (opened) {
+                numCut = now - fade
+            } else if (k >= 1f) {
+                numCut = now - (Tok.seekNumberJoin * fade).toLong()
+            } else if (chgAt >= 0 && numFrom < 1f && now < chgAt + Tok.motion_volumeNumberBack.toLong()) {
+                numCut = now - (fade * max(sqrt(1.0 - k), Tok.seekNumberJoin.toDouble())).roundToLong()
+            }
+            if (heldAt >= 0) {
+                numShift += now - heldAt
+                heldAt = -1
+            }
+            seeking = false
+        }
+        seekDir = dir
+        seekEnd = -1
+        seekOut = -1
+        seekDur = dur
+        seekPos = pos
+        seekTextSet(pos)
+        bump()
+    }
+
+    fun seekFinal(now: Long) {
+        if (seekDir == 0) return
+        seekDir = 0
+        seekEnd = now
+        bump()
+    }
+
+    fun seekDrop(now: Long) {
+        if (seekDir == 0) return
+        seekDir = 0
+        if (seekIn >= 0 && seekOut < 0) seekOut = now
+        bump()
+    }
+
+    fun seekCount(pos: Long): Boolean {
+        val l = seekLeft
+        val r = seekRight
+        seekTextSet(pos)
+        if (l == seekLeft && r == seekRight) return false
+        bump()
+        return true
+    }
+
+    fun lingering(now: Long): Boolean = seekEnd >= 0 && seekK(now) > 0f
+
+    fun keyHold(on: Boolean, now: Long) {
+        if (on == keyHeld) return
+        keyHeld = on
+        if (on) {
+            if (fadeAt >= 0 && now >= fadeAt) revive(now)
+            fadeAt = -1
+        } else {
+            restFrom(now)
+        }
+        bump()
+    }
+
+    fun seekFrame(now: Long) {
+        val after = Tok.seekReadoutHold.toLong() + Tok.motion_volumeNumberFade.toLong()
+        if (seekDir == 0 && ((seekOut >= 0 && now >= seekOut + Tok.motion_seekReadoutIn.toLong()) || (seekEnd >= 0 && now >= seekEnd + after))) {
+            seekIn = -1
+            seekEnd = -1
+            seekOut = -1
         }
     }
 
@@ -639,11 +850,15 @@ class VolumeHud(var board: TokBoard.Board = TokBoard.v1, var w: Float = Tok.canv
         if (!shown) return false
         val out = Tok.motion_volumeRestSlow.toLong() + max(Tok.motion_volumeRestFast.toLong(), Tok.motion_volumeScrimOut.toLong())
         val back = Tok.motion_volumeNumberBack.toLong()
+        val inMs = Tok.motion_seekReadoutIn.toLong()
+        val seekLegs = seekIn >= 0 && seekK(now) > 0f &&
+            (now < seekIn + inMs || (seekOut >= 0 && now < seekOut + inMs) || (seekEnd >= 0 && now >= seekEnd + Tok.seekReadoutHold.toLong()))
         val legs = (closeAt >= 0 && now < closeAt + closeMs()) ||
             (fadeAt >= 0 && now >= fadeAt && now < fadeAt + out) ||
             (!held && now >= numberAt() && now < numberAt() + Tok.motion_volumeNumberFade.toLong()) ||
             (chgAt >= 0 && numFrom < 1f && now < chgAt + back) ||
-            (backAt >= 0 && now < backAt + back) || (pressEnd == Up.Cancelled && now < pressEnd())
+            (backAt >= 0 && now < backAt + back) || (pressEnd == Up.Cancelled && now < pressEnd()) ||
+            (numCut >= 0 && now < numCut + Tok.motion_volumeNumberFade.toLong()) || seekLegs
         return now < endAt() || legs || exitPress.moving(now.toFloat()) || (crossAt >= 0 && now < crossAt + crossMs()) ||
             (tilt && upAt >= 0 && tiltK(now) > 0f)
     }
@@ -654,8 +869,10 @@ class VolumeHud(var board: TokBoard.Board = TokBoard.v1, var w: Float = Tok.canv
         val gone = if (fadeAt >= 0) fast + Tok.motion_volumeScrimOut.toLong() else -1
         val cross = if (crossAt >= 0) crossAt + crossMs() else -1
         val exitDue = exitPress.due(now.toFloat())?.toLong() ?: -1
+        val glyphDue = if (owns && glyphAt >= 0) glyphAt + Tok.seekHoldMs.toLong() else -1
+        val linger = if (seekEnd >= 0) seekEnd + Tok.seekReadoutHold.toLong() else -1
         var w: Long? = null
-        for (c in listOf(r, endAt(), if (shown && !held) numberAt() else -1, fadeAt, fast, gone, cross, pressEnd(), exitDue)) {
+        for (c in listOf(r, endAt(), if (shown && !held) numberAt() else -1, fadeAt, fast, gone, cross, pressEnd(), exitDue, glyphDue, linger)) {
             if (c > now && (w == null || c < w)) w = c
         }
         return w

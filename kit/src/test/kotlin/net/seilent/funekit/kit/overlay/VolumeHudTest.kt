@@ -235,4 +235,101 @@ class VolumeHudTest {
         assertEquals("05", VolumeHud.numberText(5))
         assertEquals("1:02:03", VolumeHud.seekText(3723000, 3600000))
     }
+
+    @Test
+    fun aPreviousHeldPastTheHoldTimeStartsASeekHold() {
+        val h = shown()
+        h.down(1000, PREV_X, RING_Y)
+        assertEquals("no hold at 399 ms", 0, h.holdDue(1399))
+        assertFalse(h.holding)
+        assertEquals("funeOS player/ui/hud.cpp VolumeHud::hold_due :613-622, v0.4.3: a hold at seekHoldMs", -1, h.holdDue(1400))
+        assertTrue(h.holding)
+        assertEquals("one hold per down", 0, h.holdDue(1500))
+    }
+
+    @Test
+    fun aMoveOffTheGlyphEndsTheHold() {
+        val h = shown()
+        h.down(1000, NEXT_X, RING_Y)
+        assertEquals(1, h.holdDue(1400))
+        assertEquals("a move on the held glyph keeps the hold", Act.Draw, h.move(1450, NEXT_X + 2f, RING_Y, 50, VolumeHud.Pos()))
+        assertTrue(h.holding)
+        assertEquals("funeOS player/ui/hud.cpp VolumeHud::event :496-519, v0.4.3", Act.SeekEnd, h.move(1500, OFF_X, OFF_Y, 50, VolumeHud.Pos()))
+        assertFalse(h.holding)
+        assertEquals("the up after an ended hold ends nothing more", Act.Draw, h.up(1600, OFF_X, OFF_Y))
+        val u = shown()
+        u.down(1000, NEXT_X, RING_Y)
+        u.holdDue(1400)
+        assertEquals("an up on a held glyph ends the hold", Act.SeekEnd, u.up(1600, NEXT_X, RING_Y))
+        assertFalse(u.holding)
+    }
+
+    @Test
+    fun theNumberCutStartsEarlyWhenTheNumberIsFull() {
+        val h = shown()
+        assertEquals("premise: the number is full", 1f, h.numberK(500), 0f)
+        h.seekShow(1, 216000, 377000, 500, false)
+        assertEquals("funeOS player/ui/hud.cpp VolumeHud::seek_show :631-656, v0.4.3: 0.53 of the 520 ms fade in", 1f - Curves.easeIn.at(275f / 520f), h.numberK(500), 1e-4f)
+        assertEquals(0f, h.numberK(500 + 245), 0f)
+        val o = shown(10000)
+        o.seekShow(1, 216000, 377000, 10500, true)
+        assertEquals("a plate opened for the seek cuts the number whole", 0f, o.numberK(10500), 0f)
+    }
+
+    @Test
+    fun aPreviousDownLeavesTheNumberLive() {
+        val ring = shown()
+        ring.down(900, 120f, RING_Y)
+        assertEquals("premise: a ring down holds the number", 1f, ring.numberK(982 + 260), 0f)
+        val h = shown()
+        h.down(900, PREV_X, RING_Y)
+        assertEquals("funeOS player/ui/hud.cpp VolumeHud::event :475-477, v0.4.3", 1f - Curves.easeIn.at(0.5f), h.numberK(982 + 260), 0.0001f)
+    }
+
+    @Test
+    fun theSeekReadoutCountsElapsedAndRemaining() {
+        val h = shown()
+        h.seekShow(1, 216000, 377000, 500, false)
+        assertEquals("3:36", h.seekLeft)
+        assertEquals("-2:41", h.seekRight)
+        assertTrue(h.seekCount(219000))
+        assertEquals("3:39", h.seekLeft)
+        assertEquals("-2:38", h.seekRight)
+        assertFalse("the same position redraws nothing", h.seekCount(219000))
+    }
+
+    @Test
+    fun theSeekReadoutFadesInThenOutAfterItsHold() {
+        val h = shown()
+        h.seekShow(1, 216000, 377000, 500, false)
+        assertEquals(0f, h.seekK(500), 0f)
+        assertEquals(1f, h.seekK(500 + 214), 0f)
+        h.seekFinal(1000)
+        assertEquals("held for seekReadoutHold", 1f, h.seekK(1000 + 960), 0f)
+        assertTrue(h.lingering(1000 + 960))
+        assertEquals(1f - Curves.easeIn.at(0.5f), h.seekK(1000 + 960 + 260), 0.0001f)
+        assertEquals(0f, h.seekK(1000 + 960 + 520), 0f)
+        assertFalse(h.lingering(1000 + 960 + 520))
+        assertEquals("the linger wakes the frame loop at its fade", 1000L + 960, h.wakeAt(1500))
+    }
+
+    @Test
+    fun aHeldKeyHoldsTheRestTimer() {
+        val h = shown()
+        h.keyHold(true, 100)
+        h.show(200, 55, true, "artist", "title")
+        assertEquals("a step while the key is held keeps the rest timer off", 1f, h.rest(5000), 0f)
+        assertTrue(h.visible(5000))
+        h.keyHold(false, 5000)
+        assertEquals(1f, h.rest(5000 + 2026), 0f)
+        assertTrue(h.rest(5000 + 2027 + 325) < 1f)
+    }
+
+    private companion object {
+        const val RING_Y = 159.4f
+        const val PREV_X = 120f - 88.2f
+        const val NEXT_X = 120f + 88.2f
+        const val OFF_X = 60f
+        const val OFF_Y = 100f
+    }
 }

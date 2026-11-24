@@ -84,6 +84,7 @@ object Roles {
     val toastTitle = role(Tok.type_toastTitle_size, Tok.type_toastTitle_style, Tok.type_toastTitle_case, Tok.type_toastTitle_alpha)
     val volArtist = role(Tok.type_volArtist_size, Tok.type_volArtist_style, Tok.type_volArtist_case, Tok.type_volArtist_alpha)
     val volTitle = role(Tok.type_volTitle_size, Tok.type_volTitle_style, Tok.type_volTitle_case, Tok.type_volTitle_alpha)
+    val volSeek = role(Tok.type_volSeek_size, Tok.type_volSeek_style, Tok.type_volSeek_case, Tok.type_volSeek_alpha)
     val saverClock = mixed(Tok.type_saverClock_size, Tok.type_saverClock_style, Tok.type_saverClock_alpha)
     val lockTitle = mixed(Tok.type_lockTitle_size, Tok.type_lockTitle_style, Tok.type_lockTitle_alpha)
     val lockArtist = mixed(Tok.type_lockArtist_size, Tok.type_lockArtist_style, Tok.type_lockArtist_alpha)

@@ -365,6 +365,39 @@ class VolumeLayerTest {
         assertArrayEquals(tiltMatrix(g.plate(), 1.0, 360.0, 640.0, 2592.0), a105.plate(g, 1f), 1.0)
     }
 
+    @Test
+    fun theSeekReadoutSitsAtItsTokens() {
+        val h = shown(true)
+        val bare = pixels(h, ink(h), 300L)
+        h.seekShow(1, 216000, 377000, 0L, false)
+        val ink = ink(h)
+        val box = v.partBox(VolumePart.Seek, ink)
+        assertNotNull(box)
+        assertEquals("the elapsed time's ink starts at vol.seekX", 8, box!![0])
+        assertEquals("the remaining time's ink ends at the canvas width less vol.seekRight", 231, box[2])
+        assertEquals("the baseline is vol.plusY plus vol.seekDrop plus the cap middle (funeOS player/ui/hud.cpp VolumeHud::build_seek :1116-1133, v0.4.3)", 67, v.seekBase())
+        assertEquals(Tok.overlayLit, v.alpha(VolumePart.Seek, h.look(300L), h), 1e-6f)
+        assertNull("premise: nothing is drawn right of the plus at the seek baseline", inkBox(bare, 160, 45, W, 75))
+        val drawn = inkBox(pixels(h, ink, 300L), 160, 45, W, 75)
+        assertNotNull("the seek part draws the remaining time", drawn)
+        assertTrue("its ink ends at 231, ${drawn!![2]}", abs(drawn[2] - 231) <= 1)
+    }
+
+    @Test
+    fun theDimReadoutHidesUnderTheSeekReadout() {
+        val h = shown(true)
+        h.seekShow(1, 216000, 377000, 100L, false)
+        h.seekFinal(300L)
+        h.down(400L, Tok.canvasW / 2, TokBoard.v1.vol_ringY)
+        h.move(450L, Tok.canvasW / 2 + 40f, TokBoard.v1.vol_ringY, 50, VolumeHud.Pos(true, 1000, 377000, 1))
+        assertTrue("premise: a drag seek runs", h.seeking)
+        assertTrue("premise: the seek readout fades out", h.look(500L).seek > 0f)
+        assertEquals("funeOS player/ui/hud.cpp VolumeHud::part_alpha :1296-1299, v0.4.3", 0f, v.alpha(VolumePart.Readout, h.look(500L), h), 0f)
+        val l = h.look(450L + 214)
+        assertEquals(0f, l.seek, 0f)
+        assertEquals(l.group * Tok.overlayDim, v.alpha(VolumePart.Readout, l, h), 1e-6f)
+    }
+
     companion object {
         private const val W = 240
         private const val H = 320

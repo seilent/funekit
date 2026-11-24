@@ -18,6 +18,7 @@ import net.seilent.funekit.kit.overlay.VolumeHud
 import net.seilent.funekit.kit.overlay.VolumeParts
 import net.seilent.funekit.kit.overlay.volumeInk
 import net.seilent.funekit.kit.overlay.volumePlate
+import net.seilent.funekit.kit.scrub.SeekRamp
 import net.seilent.funekit.scale
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -30,6 +31,7 @@ import net.seilent.funekit.kit.Ink as KitInk
 
 private class VolHost(val hud: VolumeHud) {
     var percent = 40
+    private val ramp = SeekRamp()
 
     fun show(t: Long) = hud.show(t, percent, true, "An Artist Name", "A Song Title")
 
@@ -53,6 +55,26 @@ private class VolHost(val hud: VolumeHud) {
             }
             else -> Unit
         }
+    }
+
+    fun hold(t: Long) {
+        val d = hud.holdDue(t)
+        if (d != 0) ramp.start(d, t, t, HOLD_DUR)
+        if (!ramp.on) return
+        if (!hud.holding && !ramp.released) ramp.release(t)
+        if (ramp.finalDue() >= 0) {
+            if (t < ramp.finalDue()) return
+            ramp.finalStep()
+            ramp.stop()
+            hud.seekFinal(t)
+            return
+        }
+        ramp.step(t)
+        hud.seekShow(ramp.dir, ramp.target, ramp.dur, t, false)
+    }
+
+    companion object {
+        const val HOLD_DUR = 377000L
     }
 }
 
@@ -96,7 +118,9 @@ class VolumeSheetTest {
         val times = (steps.map { it.at } + (0L..sc.shot step FRAME) + sc.shot).filter { it <= sc.shot }.distinct().sorted()
         for (t in times) {
             for (s in steps) if (s.at == t) s.run(host, t)
+            host.hold(t)
             host.hud.tiltFrame(t)
+            host.hud.seekFrame(t)
         }
         return host.hud
     }
@@ -139,7 +163,11 @@ class VolumeSheetTest {
         val swipe = listOf(0L, 17L, 283L, 867L, 883L, 1083L, 1183L, 1283L).map { ms ->
             VolScene("vol-300-swipe-164-159-$ms-accentoff", "funeOS vol:300:swipe:164:159:$ms (main.cpp:8609-8626): a down at (164, 159) u at 500 ms, 54 moves 16 ms apart, 5 u down a step for 18 steps then back up, the up 880 ms after the down; the shot $ms ms after the down", SWIPE + ms, knob() + swipe())
         }
-        val cases = listOf("tilt" to tilt, "close" to close, "plus" to plus, "swipe" to swipe)
+        val glyphAt = at(AT + 1200) { h, t -> h.act(h.hud.down(t, Tok.canvasW / 2 + Tok.vol_skipX, TokBoard.v1.vol_ringY), t) }
+        val hold = listOf(0L, 383L, 400L, 417L, 450L, 517L).map { ms ->
+            VolScene("vol-$ms-holdglyph-accentoff", "funeOS vol:$ms:holdglyph (main.cpp:8519-8524, :8569-8572): a down on the next glyph at 1200 ms, held; the hold starts seekHoldMs after it and the seek readout counts the ramp from the 6:17 track's elapsed time, now playing opened at 0 ms, 1000 ms before the scene's at (main.cpp:8498); the shot $ms ms after the down", AT + 1200 + ms, knob() + glyphAt)
+        }
+        val cases = listOf("tilt" to tilt, "close" to close, "plus" to plus, "swipe" to swipe, "hold" to hold)
         for ((case, scenes) in cases) {
             render.write(Sheet(FOLDER, case, listOf("Kit volume HUD on V1 (funeOS VolumeHud compose, the vol scenes of main.cpp)."), scenes.map { tile(it) }))
         }
@@ -149,6 +177,7 @@ class VolumeSheetTest {
             "- `volume/close.png`: the tap close at 0, 67 and 150 ms at V1",
             "- `volume/plus.png`: a plus tap at 0, 50, 150, 250 and 400 ms at V1",
             "- `volume/swipe.png`: a volume drag from (164, 159) u at 0, 17, 283, 867, 883, 1083, 1183 and 1283 ms at V1",
+            "- `volume/hold.png`: a held next glyph at 0, 383, 400, 417, 450 and 517 ms at V1",
             "- every tile has `<tile>.regions.json` beside it for `tools/inkband.py`",
         ))
     }
