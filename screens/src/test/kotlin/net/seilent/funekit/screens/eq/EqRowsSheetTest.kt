@@ -61,6 +61,7 @@ class EqRowsSheetTest {
             EqRow(EqKind.Mode, "parametric"),
             EqRow(EqKind.Profile, "custom"),
             EqRow(EqKind.SavePreset),
+            EqRow(EqKind.ResetCustom),
             EqRow(EqKind.Import),
             EqRow(EqKind.Preamp),
             EqRow(EqKind.Peak, PEAK_ROW),

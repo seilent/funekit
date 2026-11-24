@@ -122,6 +122,8 @@ class TestEqRows(start: List<EqPivot>) : EqRows {
 
     override suspend fun delete(slot: String, key: String): EqOutcome = send(slot, "delete $slot $key") { it }
 
+    override suspend fun resetCustom(slot: String): EqOutcome = send(slot, "reset $slot") { it }
+
     override suspend fun rename(slot: String, key: String, name: String): EqOutcome = send(slot, "rename $slot $key $name") { it }
 
     override suspend fun preamp(slot: String, preamp10: Int): EqOutcome = send(slot, "preamp $slot $preamp10") { it.copy(preamp10 = preamp10) }

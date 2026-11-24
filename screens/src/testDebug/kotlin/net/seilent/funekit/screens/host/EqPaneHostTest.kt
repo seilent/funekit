@@ -31,6 +31,7 @@ import net.seilent.funekit.screens.eq.EqOutcome
 import net.seilent.funekit.screens.eq.EqPage
 import net.seilent.funekit.screens.eq.EqPaneLine
 import net.seilent.funekit.screens.eq.EqPivot
+import net.seilent.funekit.screens.eq.EqRow
 import net.seilent.funekit.screens.eq.EqRowsPane
 import net.seilent.funekit.screens.eq.RowEnter
 import net.seilent.funekit.screens.music.nowplaying.AdjustHit
@@ -422,6 +423,33 @@ class EqPaneHostTest {
         val m = open(app)
         val s = spyTap(app, m, "$HP_SLOT:SavePreset")
         assertEquals("premise: the save went out", listOf("save $HP_SLOT"), rows.sends)
+        assertEquals(listOf("too many presets / "), s.toasts)
+    }
+
+    @Test
+    fun theResetCustomRowAsksItsSupplier() {
+        val rows = TestEqRows(outputs().map { it.copy(rows = it.rows + EqRow(EqKind.ResetCustom)) })
+        val app = app(rows)
+        val m = open(app)
+        assertEquals("reset custom", rule.runOnIdle { (line(m, "$HP_SLOT:ResetCustom") as EqPaneLine).title })
+        tapRow(app, m, "$HP_SLOT:ResetCustom")
+        assertEquals("the row asks first", listOf<Any>("reset custom?", listOf("reset custom", "keep custom")), rule.runOnIdle { listOf(app.menu.title, app.menu.items) })
+        pick(app, 1)
+        assertEquals("keep custom sends nothing", emptyList<String>(), rows.sends)
+        tapRow(app, m, "$HP_SLOT:ResetCustom")
+        pick(app, 0)
+        assertEquals("reset custom asks the supplier", listOf("reset $HP_SLOT"), rows.sends)
+    }
+
+    @Test
+    fun aFullStoreAnswerShowsTooManyPresets() {
+        val rows = TestEqRows(outputs()).also { it.answer = EqOutcome.NoSpace }
+        profiles(rows)
+        val app = app(rows)
+        val m = open(app)
+        val s = spyTap(app, m, "$HP_SLOT:Profile")
+        pick(app, 2)
+        assertEquals("premise: the pick went out", listOf("pick $HP_SLOT Profile $CARD"), rows.sends)
         assertEquals(listOf("too many presets / "), s.toasts)
     }
 

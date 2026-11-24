@@ -60,6 +60,9 @@ private const val DELETE = "delete preset"
 private const val KEEP = "keep preset"
 private const val RENAME = "rename preset"
 private const val TOO_MANY = "too many presets"
+private const val RESET_ASK = "reset custom?"
+private const val RESET = "reset custom"
+private const val KEEP_CUSTOM = "keep custom"
 private const val NAME_TAKEN = "name taken"
 private const val NAME_NOT_ALLOWED = "name not allowed"
 private const val NOT_SAVED = "preset not saved"
@@ -131,6 +134,7 @@ class EqRowsPane(private val header: String, private val rows: EqRows) : EqPane 
         EqKind.Gain -> p.gains.getOrNull(r.band)?.let { eqFreqText(eqGridMilliHz(it.grid), it.grid) } ?: ""
         EqKind.AddBand -> "add band"
         EqKind.RemoveBand -> "remove band"
+        EqKind.ResetCustom -> RESET
     }
 
     private fun valueOf(p: EqPivot, r: EqRow): String = when (r.kind) {
@@ -309,6 +313,7 @@ class EqRowsPane(private val header: String, private val rows: EqRows) : EqPane 
         acts.launch {
             val r = call()
             if (enters) settle(name, r, acts.now())
+            if (r == EqOutcome.NoSpace) acts.toast(TOO_MANY, "")
             after(r)
         }
     }
@@ -346,12 +351,12 @@ class EqRowsPane(private val header: String, private val rows: EqRows) : EqPane 
             EqKind.RemoveBand -> remove(p, acts)
             EqKind.SavePreset -> send(acts, p.name, false, { rows.save(p.slot) }) { r ->
                 when (r) {
-                    EqOutcome.Done, EqOutcome.Stale, EqOutcome.Refused -> Unit
-                    EqOutcome.NoSpace -> acts.toast(TOO_MANY, "")
+                    EqOutcome.Done, EqOutcome.Stale, EqOutcome.Refused, EqOutcome.NoSpace -> Unit
                     else -> acts.toast(NOT_SAVED, "")
                 }
             }
             EqKind.DeletePreset -> delete(p, acts)
+            EqKind.ResetCustom -> reset(p, acts)
             EqKind.RenamePreset -> presetOf(p)?.let { (key, name) -> rename(p, key, name, name, acts) }
             EqKind.Import -> rows.import(p.slot)
             EqKind.ExportPreset -> rows.export(p.slot)
@@ -434,6 +439,13 @@ class EqRowsPane(private val header: String, private val rows: EqRows) : EqPane 
             if (i == 0) {
                 send(acts, p.name, false, { rows.delete(p.slot, key) }) { r -> if (r == EqOutcome.Failed) acts.toast(NOT_DELETED, name) }
             }
+            true
+        }) {}
+    }
+
+    private fun reset(p: EqPivot, acts: EqActs) {
+        showSheet(p, acts, SettingSheet(MenuForm.Dlg, RESET_ASK, listOf(RESET, KEEP_CUSTOM), focus = 1, confirm = true), { i ->
+            if (i == 0) send(acts, p.name, false, { rows.resetCustom(p.slot) })
             true
         }) {}
     }

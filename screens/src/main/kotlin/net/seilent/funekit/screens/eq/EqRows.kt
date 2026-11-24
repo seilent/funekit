@@ -2,7 +2,7 @@ package net.seilent.funekit.screens.eq
 
 import androidx.compose.runtime.State
 
-enum class EqKind { On, Mode, Profile, Preset, SavePreset, DeletePreset, RenamePreset, ExportPreset, Import, Preamp, AutoPreamp, Total, Peak, Band, Gain, AddBand, RemoveBand }
+enum class EqKind { On, Mode, Profile, Preset, SavePreset, DeletePreset, RenamePreset, ExportPreset, Import, Preamp, AutoPreamp, Total, Peak, Band, Gain, AddBand, RemoveBand, ResetCustom }
 
 enum class EqField { Type, Freq, Gain, Q }
 
@@ -63,6 +63,8 @@ interface EqRows {
     suspend fun pick(slot: String, kind: EqKind, key: String): EqOutcome
 
     suspend fun save(slot: String): EqOutcome = EqOutcome.Refused
+
+    suspend fun resetCustom(slot: String): EqOutcome = EqOutcome.Refused
 
     suspend fun delete(slot: String, key: String): EqOutcome = EqOutcome.Refused
 
