@@ -1,4 +1,4 @@
-from funeOS v0.4.3
+from funeOS v0.4.4
 player/lib/lrc.cpp 1175539d971b8eb976915e1a2dbc342d69ae639caf046a68910b9389c6e16618
 player/lib/lrc.h 7f285d60b70ddbcb08187afe40fdd970582a9db33980e0db2d992dd6e97ff49c
-player/lib/util.cpp 1ee2d7a1e69e740ea9a7a3494de2ae807667359c4d421d6b51885541a3683dfa
+player/lib/util.cpp c226609f8fc45d4344f6de0c587ba6af17938e919e58d8b4bda1da01a48f041f

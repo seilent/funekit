@@ -9,7 +9,7 @@ class LrcSourceTest {
 
     @Test
     fun theSourceNamesTheReleaseAndHashesTheThreeLrcFiles() {
-        assertEquals("from funeOS v0.4.3", lines.first())
+        assertEquals("from funeOS v0.4.4", lines.first())
         assertTrue(lines.none { it.startsWith("commit") })
         val rows = lines.drop(1).map { it.split(' ') }
         assertEquals(listOf("player/lib/lrc.cpp", "player/lib/lrc.h", "player/lib/util.cpp"), rows.map { it[0] })
@@ -21,7 +21,7 @@ class LrcSourceTest {
             listOf(
                 "1175539d971b8eb976915e1a2dbc342d69ae639caf046a68910b9389c6e16618",
                 "7f285d60b70ddbcb08187afe40fdd970582a9db33980e0db2d992dd6e97ff49c",
-                "1ee2d7a1e69e740ea9a7a3494de2ae807667359c4d421d6b51885541a3683dfa",
+                "c226609f8fc45d4344f6de0c587ba6af17938e919e58d8b4bda1da01a48f041f",
             ),
             rows.map { it[1] },
         )
