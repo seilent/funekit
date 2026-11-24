@@ -362,6 +362,8 @@ a105/vol-300 no funeOS reference in the set
 a105/vol-3000 no funeOS reference in the set
 a105/vol-300-tilt-200-60 no funeOS reference in the set
 a105/vol-300-tiltup-200-60-250 no funeOS reference in the set
+a105/vol-hold-450 no funeOS reference in the set: the hold tiles draw the plate over the fake library's now playing, and the funeOS vol:450:holdglyph shot draws it over its shot library's 6:17 track and art
+a105/vol-hold-517 no funeOS reference in the set: the hold tiles draw the plate over the fake library's now playing, and the funeOS vol:517:holdglyph shot draws it over its shot library's 6:17 track and art
 a105/press-0-volexit-down no funeOS reference in the set
 a105/press-0-volexit-held no funeOS reference in the set
 a105/press-0-volexit-up no funeOS reference in the set
@@ -370,6 +372,8 @@ r1/vol-300 no funeOS reference in the set
 r1/vol-3000 no funeOS reference in the set
 r1/vol-300-tilt-200-60 no funeOS reference in the set
 r1/vol-300-tiltup-200-60-250 no funeOS reference in the set
+r1/vol-hold-450 no funeOS reference in the set: the hold tiles draw the plate over the fake library's now playing, and the funeOS vol:450:holdglyph shot draws it over its shot library's 6:17 track and art
+r1/vol-hold-517 no funeOS reference in the set: the hold tiles draw the plate over the fake library's now playing, and the funeOS vol:517:holdglyph shot draws it over its shot library's 6:17 track and art
 r1/press-0-volexit-down no funeOS reference in the set
 r1/press-0-volexit-held no funeOS reference in the set
 r1/press-0-volexit-up no funeOS reference in the set

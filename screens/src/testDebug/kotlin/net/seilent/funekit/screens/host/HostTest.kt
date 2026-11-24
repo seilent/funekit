@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
+import androidx.lifecycle.Lifecycle
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.Dispatchers
@@ -28,6 +29,7 @@ import net.seilent.funekit.Surface
 import net.seilent.funekit.Window
 import net.seilent.funekit.fxInt
 import net.seilent.funekit.kept
+import net.seilent.funekit.api.Anchor
 import net.seilent.funekit.api.ArtRef
 import net.seilent.funekit.api.Card
 import net.seilent.funekit.api.Kind
@@ -37,6 +39,7 @@ import net.seilent.funekit.api.Listing
 import net.seilent.funekit.api.LyricCopy
 import net.seilent.funekit.api.Lyrics
 import net.seilent.funekit.api.Player
+import net.seilent.funekit.api.PlayerState
 import net.seilent.funekit.api.Row
 import net.seilent.funekit.core.Section
 import net.seilent.funekit.gen.Tok
@@ -3041,6 +3044,192 @@ class HostTest {
         assertEquals("both keys step", START + 2 * STEP, level.pct)
     }
 
+    private class HeldPlayer(base: Player, st: PlayerState) : Player by base {
+        override val state = MutableStateFlow(st)
+        val seeks = mutableListOf<Long>()
+
+        override suspend fun seek(ms: Long) {
+            seeks += ms
+            state.value = state.value.copy(anchor = Anchor(ms, 1000, 0, false, state.value.durationMs))
+        }
+    }
+
+    private fun holdApp(): Pair<TestApp, HeldPlayer> {
+        val f = testFake(FakeSet.Demo)
+        val id = runBlocking { f.library.view().page(Listing.Songs, 0, ART_SONGS).rows.first().id }
+        val p = HeldPlayer(f.player, PlayerState(queueSize = 3, index = 0, track = id, playing = true, anchor = Anchor(HOLD_POS, 1000, 0, false, HOLD_DUR)))
+        val src = MusicSource(f.library, p, f.quickplay, f.favorites, f.playlists, f.lyrics)
+        val app = TestApp(page, np, src, Level(START, null)) { rule.mainClock.currentTime }.also {
+            it.compose(rule, root = true)
+            rule.waitForIdle()
+            rule.mainClock.autoAdvance = false
+            rule.runOnIdle { it.host.resetNp(listOf(TestScreen.Music(MusicEntry(it.stack.entry(), MusicPage.Hub)))) }
+            frames(OPEN_FRAMES)
+        }
+        return app to p
+    }
+
+    private val nextAt = Offset((Tok.canvasW / 2 + Tok.vol_skipX) * np.ppu + (np.left - page.left), np.board.vol_ringY * np.ppu)
+
+    private fun secs(t: String): Long = t.split(":").let { it[0].toLong() * 60 + it[1].toLong() }
+
+    private fun heldNext(app: TestApp): Long {
+        rule.runOnIdle { app.host.openVolume(rule.mainClock.currentTime) }
+        frames(OPEN_FRAMES)
+        assertEquals("premise: the plate is up", OverKind.Volume, app.stack.overlay?.kind)
+        val down = rule.mainClock.currentTime
+        rule.onRoot().performTouchInput { down(nextAt) }
+        frames(HOLD_FRAMES)
+        return down
+    }
+
+    @Test
+    fun aHeldNextOnThePlateStepsTheRampAndSeeks() {
+        val (app, p) = holdApp()
+        heldNext(app)
+        assertEquals("the hold's first step seeks a tick step on (funeOS player/ui/app.cpp App::seek_start :14393-14422, seek_tick :14424-14504, v0.4.3)", HOLD_POS + 1000, p.seeks.firstOrNull())
+        frames(HOLD_FRAMES)
+        assertTrue("the ramp seeks on at the tick rate, ${p.seeks}", p.seeks.size >= 2 && p.seeks.zipWithNext().all { (a, b) -> b > a })
+        assertTrue("the readout leads the last seek, ${app.host.hud.seekLeft}", secs(app.host.hud.seekLeft) * 1000 >= p.seeks.last())
+        rule.onRoot().performTouchInput { up() }
+        frames(OPEN_FRAMES)
+    }
+
+    @Test
+    fun aReleaseTakesOneLastStepAndNoMore() {
+        val (app, p) = holdApp()
+        heldNext(app)
+        frames(TICK_FRAMES)
+        rule.onRoot().performTouchInput { up() }
+        frames(PRESS_OFF_FRAMES)
+        val last = app.host.hud.seekLeft
+        assertEquals("the one last step is seeked", secs(last) * 1000, p.seeks.last())
+        val n = p.seeks.size
+        frames(OPEN_FRAMES)
+        assertEquals("no step after the last one, ${p.seeks}", n, p.seeks.size)
+        assertEquals(last, app.host.hud.seekLeft)
+    }
+
+    @Test
+    fun theStatusRowShowsTheSeekStateDuringAHold() {
+        val (app, _) = holdApp()
+        assertEquals("premise: no seek state", Play.None, app.host.npStatus?.state?.play)
+        heldNext(app)
+        frames(CUT_FRAMES)
+        assertEquals("funeOS player/ui/nowplaying.cpp status_play, player/ui/rows.cpp draw_status :1270-1279, v0.4.3", Play.SeekForward, app.host.npStatus?.state?.play)
+        rule.onRoot().performTouchInput { up() }
+        frames(OPEN_FRAMES)
+        assertEquals("the end clears the seek state", Play.None, app.host.npStatus?.state?.play)
+    }
+
+    @Test
+    fun aSeekKeyHeldOnNowPlayingOpensThePlate() {
+        val (app, p) = holdApp()
+        var down = true
+        rule.runOnIdle { app.host.seekKey(1) { down } }
+        frames(OPEN_FRAMES)
+        assertEquals("a held key on a settled now playing opens the plate (funeOS player/ui/app.cpp App::seek_start :14403-14408, v0.4.3)", OverKind.Volume, app.stack.overlay?.kind)
+        assertTrue("the key hold seeks, ${p.seeks}", p.seeks.isNotEmpty())
+        down = false
+        frames(OPEN_FRAMES)
+        val n = p.seeks.size
+        frames(OPEN_FRAMES)
+        assertEquals("a key read up ends the hold", n, p.seeks.size)
+    }
+
+    @Test
+    fun aSeekTickOnNowPlayingWakesItsIdle() {
+        val (app, _) = holdApp()
+        val down = heldNext(app)
+        frames(TICK_FRAMES)
+        val wake = app.music.np.idleWake()
+        assertTrue(
+            "the tick stamps the idle later than the glyph down, $wake against ${down + NowPlayingModel.IDLE} (funeOS player/ui/app.cpp App::seek_tick :14433-14434, v0.4.3)",
+            wake > down + NowPlayingModel.IDLE + Tok.seekHoldMs.toLong() - FRAME_MS,
+        )
+        rule.onRoot().performTouchInput { up() }
+        frames(OPEN_FRAMES)
+    }
+
+    @Test
+    fun aHeldGlyphOnAPhoneVariantSkipsNothing() {
+        val (app, p) = holdApp()
+        var skips = 0
+        val track = PhoneTrack("Radio", "Song", "Artist", "Album", true, false, DURATION, 0L, 0L, 1f, false, PhoneRepeat.Off, 0, 0, null)
+        rule.runOnIdle {
+            p.state.value = p.state.value.copy(playing = false)
+            app.phone.value = PhoneSession(track, {}) { skips++ }
+        }
+        frames(OPEN_FRAMES)
+        assertTrue("premise: the phone is the variant", rule.runOnIdle { app.music.np.variant })
+        heldNext(app)
+        rule.onRoot().performTouchInput { up() }
+        frames(OPEN_FRAMES)
+        assertEquals("a held glyph on the phone's track skips nothing (funeOS player/ui/app.cpp App::vol_glyph_hold :14384-14391, v0.4.3)", 0, skips)
+        assertEquals("and seeks nothing", emptyList<Long>(), p.seeks)
+    }
+
+    @Test
+    fun aPointerCancelMidHoldEndsTheHold() {
+        val (app, p) = holdApp()
+        heldNext(app)
+        frames(TICK_FRAMES)
+        rule.onRoot().performTouchInput { cancel() }
+        frames(PRESS_OFF_FRAMES)
+        val n = p.seeks.size
+        frames(OPEN_FRAMES)
+        assertEquals("a cancelled touch ends the glyph hold, ${p.seeks}", n, p.seeks.size)
+    }
+
+    @Test
+    fun aCancelledTouchOnThePlateActsNothing() {
+        val level = Level(START, null)
+        val app = app(level)
+        rule.runOnIdle { app.host.openVolume(rule.mainClock.currentTime) }
+        frames(OPEN_FRAMES)
+        rule.onRoot().performTouchInput {
+            down(plusAt)
+            cancel()
+        }
+        frames(OPEN_FRAMES)
+        assertEquals("a cancel is no tap on the plus", START, level.pct)
+    }
+
+    @Test
+    fun aPlateClosedMidHoldTakesOneLastStepThenNoMore() {
+        val (app, p) = holdApp()
+        heldNext(app)
+        frames(TICK_FRAMES)
+        rule.runOnIdle { app.stack.close() }
+        frames(CLOSE_FRAMES)
+        val n = p.seeks.size
+        assertTrue("the close's release takes one last step within the plate's wake, volumePressOff and a frame, ${p.seeks}", n >= 2 && p.seeks[n - 1] > p.seeks[n - 2])
+        frames(OPEN_FRAMES)
+        assertEquals("the plate's close ends the glyph hold, ${p.seeks}", n, p.seeks.size)
+        rule.onRoot().performTouchInput { up() }
+    }
+
+    @Test
+    fun aHostDisposedMidHoldEndsIt() {
+        val (app, _) = holdApp()
+        rule.runOnIdle { app.host.seekKey(1) { true } }
+        frames(OPEN_FRAMES)
+        assertTrue("premise: the key hold runs", app.host.seekOn)
+        rule.runOnIdle { app.hosted = false }
+        frames(CUT_FRAMES)
+        assertFalse("the host's dispose ends the hold", app.host.seekOn)
+    }
+
+    @Test
+    fun aLifecycleStopMidHoldEndsIt() {
+        val (app, _) = holdApp()
+        rule.runOnIdle { app.host.seekKey(1) { true } }
+        frames(OPEN_FRAMES)
+        assertTrue("premise: the key hold runs", app.host.seekOn)
+        rule.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
+        assertFalse("a lifecycle stop ends the hold", app.host.seekOn)
+    }
+
     companion object {
         private const val W = 720
         private const val H = 1280
@@ -3066,6 +3255,12 @@ class HostTest {
         private const val ART_SONGS = 20
         private const val WAIT_MS = 5_000L
         private const val FRAME_MS = 16
+        private const val HOLD_FRAMES = 27
+        private const val TICK_FRAMES = 3
+        private const val CLOSE_FRAMES = 11
+        private const val PRESS_OFF_FRAMES = 9
+        private const val HOLD_POS = 216000L
+        private const val HOLD_DUR = 377000L
         private const val CARRIED = 500
         private const val CARRIED_COPY = "[00:00.50]one\n[00:01.50]two"
         private const val STEP_MS = 100

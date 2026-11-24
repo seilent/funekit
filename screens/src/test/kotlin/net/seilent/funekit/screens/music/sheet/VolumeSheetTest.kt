@@ -30,6 +30,7 @@ import net.seilent.funekit.kit.overlay.VolumeParts
 import net.seilent.funekit.kit.overlay.volumeInk
 import net.seilent.funekit.kit.overlay.volumePlate
 import net.seilent.funekit.kit.roleStyle
+import net.seilent.funekit.kit.scrub.SeekRamp
 import net.seilent.funekit.kit.statusLine
 import net.seilent.funekit.kit.statusRow
 import net.seilent.funekit.kit.toast
@@ -64,7 +65,9 @@ class VolumeSheetTest {
     private val sc = MusicScenes()
     private val boards = listOf(sc.r1, sc.a105)
 
-    private class Hud(val s: Scale, val hud: VolumeHud, val m: NowPlayingModel?, val g: NpLayout)
+    private class Hud(val s: Scale, val hud: VolumeHud, val m: NowPlayingModel?, val g: NpLayout) {
+        var play = Play.Playing
+    }
 
     private fun npScale(dev: Dev): Scale = scale(dev.window(Nav.None), Nav.None, Surface.NowPlaying, false)
 
@@ -101,18 +104,18 @@ class VolumeSheetTest {
         return Hud(s, hud, null, NpLayout(s))
     }
 
-    private fun status(s: Scale): StatusInk {
+    private fun status(s: Scale, play: Play = Play.Playing): StatusInk {
         val box = npStatus(s)
         val line = statusLine(s, box)
         val style = roleStyle(Roles.time, s, sc.density, Ink.white, Tok.alpha_full).merge(Fonts.style(Roles.time, line.textPx, sc.density, Roles.time.tracking * s.ppu))
         fun w(t: String) = sc.measurer.word(t, Roles.time, style, sc.fonts, sc.density, null, s.board.fontHanMinPx)
-        return StatusInk(StatusState(CLOCK, BATTERY, false, Play.Playing, false, -1, -1), StatusText(w(CLOCK), w("$BATTERY%"), null), line, s, box)
+        return StatusInk(StatusState(CLOCK, BATTERY, false, play, false, -1, -1), StatusText(w(CLOCK), w("$BATTERY%"), null), line, s, box)
     }
 
     private fun DrawScope.page(h: Hud, at: Long) {
         val m = h.m ?: return
         val measure = NpMeasure(h.g, sc.measurer, sc.fonts, sc.density, sc.covers)
-        npPage(h.g, npFrame(m, h.g, at, false), measure.ink(m.shownAt(at), false), measure.time(npTimes(h.g, m, at, 0L)), null, status(h.s), sc.accent, false, false, null)
+        npPage(h.g, npFrame(m, h.g, at, false), measure.ink(m.shownAt(at), false), measure.time(npTimes(h.g, m, at, 0L)), null, status(h.s, h.play), sc.accent, false, false, null)
     }
 
     private fun tile(dev: Dev, kind: String, h: Hud, at: Long, note: String): Tile {
@@ -125,7 +128,7 @@ class VolumeSheetTest {
         return sc.tile(FOLDER, dev, kind, h.s, listOf(note, NO_REF), rec) {
             page(h, at)
             volumePlate(h.hud, v, ink, glow, at)
-            h.m?.let { statusRow(status(h.s), sc.accent, false, npStatusAlpha(it, at)) }
+            h.m?.let { statusRow(status(h.s, h.play), sc.accent, false, npStatusAlpha(it, at)) }
         }
     }
 
@@ -153,7 +156,22 @@ class VolumeSheetTest {
                 if (form == "up") h.hud.up(EXIT_AT + EXIT_HELD, Tok.vol_exitX, h.s.board.vol_exitY)
                 tile(dev, "press-0-volexit-$form", h, EXIT_AT + ms, "the exit $form on the hud opened from home, home drawn as its ground")
             }
-            rest + tilt + tiltUp + exits
+            val hold = listOf(HOLD_SHOT, HOLD_LATE).map { ms ->
+                val h = onNp(dev)
+                val down = AT + HOLD_DOWN
+                val ramp = SeekRamp()
+                h.hud.down(down, Tok.canvasW / 2 + Tok.vol_skipX, h.s.board.vol_ringY)
+                for (t in down..down + ms step FRAME) {
+                    val d = h.hud.holdDue(t)
+                    if (d != 0) ramp.start(d, t, 0, h.m?.state?.durationMs ?: 0)
+                    if (!ramp.on) continue
+                    ramp.step(t)
+                    h.hud.seekShow(ramp.dir, ramp.target, ramp.dur, t, false)
+                    h.play = Play.SeekForward
+                }
+                tile(dev, "vol-hold-$ms", h, down + ms, "a down on the next glyph held from 1200 ms, the hold from seekHoldMs on, the ramp from the page's own position on 16 ms frames, the shot $ms ms after the down; unpaired: funeOS vol:$ms:holdglyph draws the plate over its shot library's 6:17 track with its art, which no fake set holds, so the page under the scrim can never match")
+            }
+            rest + tilt + tiltUp + exits + hold
         }
         sc.render.write(Sheet(FOLDER, "volume", listOf(TITLE), tiles))
     }
@@ -198,6 +216,10 @@ class VolumeSheetTest {
         const val LONG = 3000L
         const val HELD_FOR = 50L
         const val UP_AFTER = 250L
+        const val HOLD_DOWN = 1200L
+        const val HOLD_SHOT = 450L
+        const val HOLD_LATE = 517L
+        const val FRAME = 16L
         const val TILT_X = 200f
         const val TILT_Y = 60f
         const val HOME_OPEN = 1000L

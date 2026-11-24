@@ -33,9 +33,13 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.IntOffset
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -55,6 +59,7 @@ import net.seilent.funekit.api.FailFast
 import net.seilent.funekit.api.Kind as ApiKind
 import net.seilent.funekit.api.Listing
 import net.seilent.funekit.api.NoCard
+import net.seilent.funekit.api.PlayerState
 import net.seilent.funekit.api.Refused
 import net.seilent.funekit.api.Row
 import net.seilent.funekit.api.Stale
@@ -330,6 +335,8 @@ class MusicHost<S : Any> internal constructor(
         private set
     private var opens = 0
     val hud = VolumeHud(env.np.board, env.np.w, env.np.h)
+    private val seekHold = SeekHold(scope, hud, { app.log(it) }, { now() })
+    private var seekLoop: Job? = null
     private val volumeOverlay = Overlay(OverKind.Volume, hud) { if (hud.pendingSeek() != null) volSeek() }
     private val menuOvers = ArrayList<Overlay>()
     private val libraryOvers = ArrayList<Overlay>()
@@ -897,6 +904,55 @@ class MusicHost<S : Any> internal constructor(
         scope.launch(FailFast) { quiet { s.player.seek(ms) } }
     }
 
+    private fun posOf(st: PlayerState): Long = st.anchor.ms(SystemClock.elapsedRealtimeNanos())
+
+    private fun seekTick(t: Long) {
+        val st = src?.player?.state?.value
+        if (st == null) {
+            seekHold.end(false, t)
+            return
+        }
+        if (stack.top?.let(::isNp) == true) np.touched(t)
+        seekHold.tick(t, st, posOf(st), np.variant, stack.overlay === volumeOverlay && hud.visible(t))
+    }
+
+    private fun seekStart(dir: Int, h: Hold, t: Long, held: () -> Boolean, open: () -> Boolean) {
+        val s = src ?: return
+        val st = s.player.state.value
+        if (!seekHold.start(dir, h, t, s.player, st, posOf(st), Refuse(np.variant, s.library.state.value.card), held, open)) return
+        if (seekLoop?.isActive != true) {
+            seekLoop = scope.launch(FailFast) {
+                while (seekHold.on) {
+                    val f = withFrameMillis { it }
+                    seekTick(f)
+                    if (seekHold.on) seekHold.idle(f)
+                }
+            }
+        }
+        seekTick(t)
+    }
+
+    private fun glyphHold(d: Int, t: Long): Boolean {
+        seekStart(d, Hold.Glyph, t, { false }) { false }
+        return seekHold.holds(Hold.Glyph) || np.variant
+    }
+
+    fun seekKey(dir: Int, held: () -> Boolean) {
+        val t = now()
+        seekStart(dir, Hold.Key, t, held) {
+            val o = stack.overlay
+            val open = stack.phase == Phase.Rest && stack.top?.let(::isNp) == true && (o == null || o === volumeOverlay) && !holding()
+            if (open) openVolume(t)
+            open && o == null
+        }
+    }
+
+    internal fun seekStop() = seekHold.end(false, now())
+
+    internal val npStatus: StatusInk? get() = npStatusShown
+
+    internal val seekOn: Boolean get() = seekHold.on
+
     private fun volAct(act: VolumeHud.Act) {
         val s = src
         when (act) {
@@ -925,6 +981,7 @@ class MusicHost<S : Any> internal constructor(
                 }
             }
             VolumeHud.Act.Seek -> volSeek()
+            VolumeHud.Act.SeekEnd -> seekHold.endHold(Hold.Glyph, now())
             else -> Unit
         }
     }
@@ -1623,7 +1680,13 @@ class MusicHost<S : Any> internal constructor(
         NpBackdropFeed()
         NpFollow()
         val npStatusScale = npHalves.holding(NpPart.Status).g.s
-        val npStatusInk = rememberStatusInk(status, npStatusScale, npStatus(npStatusScale))
+        val held = seekHold.dir
+        val shownStatus = if (held == 0) {
+            status
+        } else {
+            StatusState(status.clock, status.battery, status.percent, if (held > 0) Play.SeekForward else Play.SeekBack, status.bluetooth, status.wifi, status.volume)
+        }
+        val npStatusInk = rememberStatusInk(shownStatus, npStatusScale, npStatus(npStatusScale))
         SideEffect { npStatusShown = npStatusInk }
         val rest = stack.phase == Phase.Rest
         for ((sc, sh) in pages) {
@@ -2192,8 +2255,16 @@ class MusicHost<S : Any> internal constructor(
         LaunchedEffect(hud, rev) {
             while (true) {
                 val t = withFrameMillis { it }
+                if (seekHold.holds(Hold.Glyph) && !hud.holding) seekHold.endHold(Hold.Glyph, t)
                 blocks = hud.visible(t) && !hud.closing(t)
                 if (!blocks) break
+                val d = hud.holdDue(t)
+                if (d != 0 && !glyphHold(d, t)) hud.holdRefuse()
+                val st = src?.player?.state?.value
+                if (st != null && hud.lingering(t)) {
+                    hud.seekCount(posOf(st))
+                    continue
+                }
                 val w = hud.wakeAt(t) ?: return@LaunchedEffect
                 delay((w - t).coerceAtLeast(0L))
             }
@@ -2219,6 +2290,7 @@ class MusicHost<S : Any> internal constructor(
                         while (true) {
                             val e = awaitPointerEvent(PointerEventPass.Initial)
                             val c = e.changes.firstOrNull { it.id == d.id } ?: break
+                            if (c.isConsumed && !c.pressed) break
                             c.consume()
                             val (x, y) = u(c.position)
                             hud.setStep(volume.stepPct())
@@ -2233,7 +2305,10 @@ class MusicHost<S : Any> internal constructor(
                             volAct(hud.move(now(), x, y, p, volPos()))
                         }
                     } finally {
-                        if (!ended) hud.cancel(now())
+                        if (!ended) {
+                            hud.cancel(now())
+                            seekHold.endHold(Hold.Glyph, now())
+                        }
                     }
                 }
             },
@@ -2297,6 +2372,15 @@ fun <S : Any> rememberMusicHost(
     val navGround = remember(env.bands, env.accent) { NavGround(env.bands, env.accent) }
     remember(np) { np.lyrics.also { it.seed(app.lyricsMode) } }
     val host = remember { MusicHost(music, models, toast, jump, menuHost, movePaint, scope, app, env, src, volume, types, npGeo, npHalves, npHalfInks, navGround, split, view) }
+    val life = LocalLifecycleOwner.current
+    DisposableEffect(host, life) {
+        val stop = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_STOP) host.seekStop() }
+        life.lifecycle.addObserver(stop)
+        onDispose {
+            life.lifecycle.removeObserver(stop)
+            host.seekStop()
+        }
+    }
     DisposableEffect(host, np) {
         val held: (Long) -> Int? = host::heldOffset
         np.lyrics.held = held
