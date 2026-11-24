@@ -31,6 +31,7 @@ import net.seilent.funekit.api.Row
 import net.seilent.funekit.screens.host.PhoneSession
 import net.seilent.funekit.screens.host.nextPhoneRepeat
 import net.seilent.funekit.screens.host.npAct
+import net.seilent.funekit.screens.host.npInfoTrack
 import net.seilent.funekit.screens.host.npMark
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -43,6 +44,7 @@ import org.junit.Test
 
 private const val HELD_AT = 1000L
 private const val AT = 1000L
+private const val SERVICE = 9L
 private const val HOLD_POS = 216000L
 private const val HOLD_TO = 250000L
 private const val HOLD_DUR = 377000L
@@ -250,6 +252,33 @@ class NowPlayingTest {
         assertEquals((HOLD_TO * a105.bar.w / HOLD_DUR).toInt(), t.fill)
         m.keySeek(0, 0, 0)
         assertEquals("the end gives the times back to the player", npTime(HOLD_POS), npTimes(a105, m, AT, 0L).left)
+    }
+
+    private fun service(m: NowPlayingModel) {
+        m.feed(PlayerState(queueSize = 1, index = 0, service = SERVICE, playing = true))
+        m.sync(NpShown.of(listOf(Row(SERVICE, Kind.Service, "A Stream", "A Station", null))), 0)
+    }
+
+    @Test
+    fun aServiceRowShowsNoHeart() {
+        val lib = NowPlayingModel()
+        lib.feed(PlayerState(queueSize = 1, index = 0, track = 1L, playing = true))
+        lib.sync(shown(1), 0)
+        assertTrue("premise: a library row shows its heart", lib.heartShown())
+        val m = NowPlayingModel()
+        service(m)
+        assertFalse("a service row's heart state has no seam source (FB-serviceheart)", m.heartShown())
+    }
+
+    @Test
+    fun aServiceRowOffersNoInfo() {
+        val lib = NowPlayingModel()
+        lib.feed(PlayerState(queueSize = 1, index = 0, track = 1L, playing = true))
+        lib.sync(shown(1), 0)
+        assertEquals("premise: a library row's info reads its track", 1L, npInfoTrack(lib))
+        val m = NowPlayingModel()
+        service(m)
+        assertNull("no info off the library for a service row (funeOS player/ui/app.cpp App::sheet_target :13544-13552, v0.4.3)", npInfoTrack(m))
     }
 
     private fun titleDown(m: NowPlayingModel, now: Long) = m.down(a105, Tok.npTextX + TITLE_DX, a105.s.board.npTitleY - TITLE_DY, now)

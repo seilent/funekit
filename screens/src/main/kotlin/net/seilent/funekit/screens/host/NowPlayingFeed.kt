@@ -48,7 +48,7 @@ private val noLibrary = MutableStateFlow(LibraryState())
 private val noRevision = MutableStateFlow(0L)
 
 fun playOf(feed: NpFeed?): Play = when (feed) {
-    is NpFeed.Own -> if (feed.state.track == null) Play.None else if (feed.state.playing) Play.Playing else Play.Paused
+    is NpFeed.Own -> if (feed.state.queueSize == 0) Play.None else if (feed.state.playing) Play.Playing else Play.Paused
     is NpFeed.Phone -> if (feed.track.playing) Play.Playing else if (feed.track.paused) Play.Paused else Play.None
     null -> Play.None
 }
@@ -66,6 +66,8 @@ fun nextPhoneRepeat(r: PhoneRepeat): PhoneRepeat = when (r) {
 }
 
 fun npHasTrack(np: NowPlayingModel): Boolean = np.shown.track != null
+
+internal fun npInfoTrack(np: NowPlayingModel): Long? = if (np.state.service != null) null else np.shown.track
 
 fun npReadIn(np: NowPlayingModel, src: MusicSource): Boolean {
     val k = np.readKey ?: return false

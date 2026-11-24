@@ -4,3 +4,4 @@ FB-thumb-reads pending a thumb strip reads at most twice its slots
 FB-stack-fields pending a saved music entry holds the push source row, the album head row and the page model state beside the pivot and anchor, and the anchor its clamped index
 FB-settings-spot pending a saved settings spot holds the pivot name, the focus row key and the scroll
 FB-nopress 2026-11-15 a settings row its supplier marks takes the focus on a down with no lit title and no glow
+FB-serviceheart pending a service row shows no heart: its heart state has no seam source

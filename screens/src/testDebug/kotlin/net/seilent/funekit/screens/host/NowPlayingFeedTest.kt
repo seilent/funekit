@@ -30,17 +30,20 @@ import net.seilent.funekit.api.Listing
 import net.seilent.funekit.api.NoCard
 import net.seilent.funekit.api.Page
 import net.seilent.funekit.api.Player
+import net.seilent.funekit.api.PlayerState
 import net.seilent.funekit.api.Repeat
 import net.seilent.funekit.api.Stale
 import net.seilent.funekit.core.Lrc
 import net.seilent.funekit.fake.Fake
 import net.seilent.funekit.fake.FakeSet
+import net.seilent.funekit.kit.Play
 import net.seilent.funekit.kit.Toast
 import net.seilent.funekit.kit.np.NpLayout
 import net.seilent.funekit.scale
 import net.seilent.funekit.screens.music.MusicSource
 import net.seilent.funekit.screens.music.nowplaying.NowPlayingModel
 import net.seilent.funekit.screens.music.nowplaying.NpAct
+import net.seilent.funekit.screens.music.nowplaying.NpFeed
 import net.seilent.funekit.screens.music.nowplaying.NpQueueRead
 import net.seilent.funekit.screens.music.nowplaying.NpReadKey
 import net.seilent.funekit.screens.music.nowplaying.NpShown
@@ -627,6 +630,14 @@ class NowPlayingFeedTest {
         assertTrue(checkNotNull(np.readKey).serial > r.key.serial)
         fresh<NpQueueRead>(np, r)
         assertTrue(npReadIn(np, readSrc))
+    }
+
+    @Test
+    fun aServiceEntryPlaysAsTheQueueSays() {
+        val st = PlayerState(queueSize = 1, index = 0, service = 9L, playing = true)
+        assertEquals("funeOS player/ui/nowplaying.cpp NowPlaying::status_play :1807-1814, v0.4.3", Play.Playing, playOf(NpFeed.Own(st)))
+        assertEquals(Play.Paused, playOf(NpFeed.Own(st.copy(playing = false))))
+        assertEquals("an empty queue plays nothing", Play.None, playOf(NpFeed.Own(PlayerState())))
     }
 
     private companion object {

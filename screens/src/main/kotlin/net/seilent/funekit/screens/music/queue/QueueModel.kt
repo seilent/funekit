@@ -155,7 +155,7 @@ class QueueModel(entry: Long) : PageModel(entry, MusicPage.Queue) {
         index = st.index
         size = st.queueSize
         stated = true
-        untracked = st.track == null
+        untracked = st.track == null && st.service == null
     }
 
     suspend fun show(v: LibraryView, first: Int, last: Int) {
@@ -164,7 +164,7 @@ class QueueModel(entry: Long) : PageModel(entry, MusicPage.Queue) {
     }
 
     fun open(st: PlayerState, now: Long): Boolean {
-        if (opened || st.track == null || paging.window == null) return false
+        if (opened || (st.track == null && st.service == null) || paging.window == null) return false
         opened = true
         state(st)
         shown = count()

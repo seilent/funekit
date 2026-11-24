@@ -57,6 +57,20 @@ class QueueModelTest {
     }
 
     @Test
+    fun aServiceEntryOpensAtItsSlot() {
+        val ids = songs(5)
+        runBlocking { src.player.play(ids, 2, 0) }
+        val st = src.player.state.value.copy(track = null, service = 9L)
+        val m = QueueModel(0)
+        m.geometry(RowSpec(PITCH, VIEW))
+        m.state(st)
+        runBlocking { src.viewed { v -> m.show(v, 0, ids.size) } }
+        assertFalse("a service entry waits for its open as a track does", m.ready)
+        assertTrue("the queue opens on a service entry (funeOS player/ui/detail.cpp QueuePage::open :1786-1793, v0.4.3)", m.open(st, 0L))
+        assertEquals("focused at its slot", 2, m.focus.row)
+    }
+
+    @Test
     fun openFocusesTheCurrentSlotAndScrollsItIntoTheList() {
         val ids = songs(8)
         val m = opened(ids, 5)

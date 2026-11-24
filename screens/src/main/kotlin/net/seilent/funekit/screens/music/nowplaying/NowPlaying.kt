@@ -309,7 +309,7 @@ class NowPlayingModel {
         return if (variant && ((i == 1 && !phoneShuffle) || (i > 1 && !phoneRepeat))) -1 else i
     }
 
-    fun heartShown(): Boolean = variant || shown.track != null
+    fun heartShown(): Boolean = variant || (shown.track != null && state.service == null)
 
     fun rings(): Int = if (heartShown()) NP_RINGS else NP_RINGS - 1
 

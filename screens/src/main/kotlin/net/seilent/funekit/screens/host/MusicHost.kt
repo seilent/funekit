@@ -1400,7 +1400,7 @@ class MusicHost<S : Any> internal constructor(
     }
 
     private fun npInfo() {
-        val track = np.shown.track ?: return
+        val track = npInfoTrack(np) ?: return
         openInfo(np.shown.title, SheetDone.Info(track, true, 0L), false)
     }
 
