@@ -10,12 +10,16 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.withContext
+import net.seilent.funekit.api.Busy
+import net.seilent.funekit.api.Disconnected
 import net.seilent.funekit.api.LibraryState
 import net.seilent.funekit.api.Listing
 import net.seilent.funekit.api.Lyrics
+import net.seilent.funekit.api.NoCard
 import net.seilent.funekit.api.PlayerState
 import net.seilent.funekit.api.Repeat
 import net.seilent.funekit.api.Row
+import net.seilent.funekit.api.Stale
 import net.seilent.funekit.kit.Play
 import net.seilent.funekit.kit.Toast
 import net.seilent.funekit.kit.art.configFor
@@ -27,6 +31,8 @@ import net.seilent.funekit.screens.music.nowplaying.NowPlayingModel
 import net.seilent.funekit.screens.music.nowplaying.NpAct
 import net.seilent.funekit.screens.music.nowplaying.NpFeed
 import net.seilent.funekit.screens.music.nowplaying.NpInks
+import net.seilent.funekit.screens.music.nowplaying.NpQueueRead
+import net.seilent.funekit.screens.music.nowplaying.NpReadKey
 import net.seilent.funekit.screens.music.nowplaying.NpShown
 import net.seilent.funekit.screens.music.nowplaying.PhoneLyrics
 import net.seilent.funekit.screens.music.nowplaying.PhoneRepeat
@@ -61,6 +67,14 @@ fun nextPhoneRepeat(r: PhoneRepeat): PhoneRepeat = when (r) {
 
 fun npHasTrack(np: NowPlayingModel): Boolean = np.shown.track != null
 
+fun npReadIn(np: NowPlayingModel, src: MusicSource): Boolean {
+    val k = np.readKey ?: return false
+    if (np.queueRead?.key != k) return false
+    val s = src.player.state.value
+    return k.track == s.track && k.index == s.index && k.queueRevision == s.queueRevision && k.queueSize == s.queueSize &&
+        k.repeat == s.repeat && k.generation == src.library.generation.value && k.library == src.library.state.value
+}
+
 private suspend fun <T> quietly(block: suspend () -> T): T? = try {
     block()
 } catch (e: CancellationException) {
@@ -80,6 +94,21 @@ suspend fun queueRows(source: MusicSource, s: PlayerState, next: Int): Pair<Long
     return prev to rows
 }
 
+internal suspend fun npQueueRead(np: NowPlayingModel, source: MusicSource, s: PlayerState, key: NpReadKey, log: (String) -> Unit, now: () -> Long) {
+    val (prev, rows) = try {
+        queueRows(source, s, key.next)
+    } catch (e: Exception) {
+        if (e !is Busy && e !is Disconnected && e !is NoCard && e !is Stale) throw e
+        log("now playing queue read at ${s.index}: ${e.message}")
+        np.readEnds(NpQueueRead.Failed(key, e))
+        return
+    }
+    np.prevId = prev
+    val n = NpShown.of(rows)
+    if (np.shown.track == null) np.sync(n, now()) else np.changed(n, now())
+    np.readEnds(if (rows.isEmpty()) NpQueueRead.NoRow(key) else NpQueueRead.Shown(key, rows))
+}
+
 internal suspend fun npMark(np: NowPlayingModel, l: Lyrics, track: Long): Boolean {
     if (!np.lyricsView) return l.lyrics(track) != null
     np.lyrics.read(l, track, np.workContext)
@@ -93,7 +122,7 @@ internal suspend fun npPhoneMark(np: NowPlayingModel, pl: PhoneLyrics, t: PhoneT
 }
 
 @Composable
-fun NowPlayingFeed(np: NowPlayingModel, g: NpLayout, src: MusicSource?, phone: PhoneSession?, phoneLyrics: PhoneLyrics? = null, now: () -> Long): NpFeed? {
+fun NowPlayingFeed(np: NowPlayingModel, g: NpLayout, src: MusicSource?, phone: PhoneSession?, phoneLyrics: PhoneLyrics? = null, log: (String) -> Unit, now: () -> Long): NpFeed? {
     val own by (src?.player?.state ?: noState).collectAsState()
     val generation by (src?.library?.generation ?: noRevision).collectAsState()
     val library by (src?.library?.state ?: noLibrary).collectAsState()
@@ -114,12 +143,14 @@ fun NowPlayingFeed(np: NowPlayingModel, g: NpLayout, src: MusicSource?, phone: P
     }
     val fed = (feed as? NpFeed.Own)?.state
     LaunchedEffect(fed?.track, fed?.index, fed?.queueRevision, fed?.queueSize, fed?.repeat, src, g.nextTracks, generation, library) {
-        val s = fed ?: return@LaunchedEffect
-        val source = src ?: return@LaunchedEffect
-        val (prev, rows) = quietly { queueRows(source, s, g.nextTracks) } ?: return@LaunchedEffect
-        np.prevId = prev
-        val n = NpShown.of(rows)
-        if (np.shown.track == null) np.sync(n, now()) else np.changed(n, now())
+        val s = fed
+        val source = src
+        if (s == null || source == null) {
+            np.noRead()
+            return@LaunchedEffect
+        }
+        val key = np.readStarts { NpReadKey(it, s.track, s.index, s.queueRevision, s.queueSize, s.repeat, generation, library, g.nextTracks) }
+        npQueueRead(np, source, s, key, log, now)
     }
     val track = np.shown.track
     LaunchedEffect(track, src, np.variant, lyricsRevision, favoritesRevision, phoneLyrics, phoneRevision) {

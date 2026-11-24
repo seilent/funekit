@@ -403,6 +403,16 @@ class HostTest {
     }
 
     @Test
+    fun aFailedQueueReadWritesItsLineThroughTheApp() {
+        val (app, f) = cardApp { listOf(music(it, MusicPage.Hub)) }
+        val id = runBlocking { f.library.view().page(Listing.Songs, 0, 1).rows.first().id }
+        f.busyNext("scan running", Listing.Queue)
+        runBlocking { f.player.play(listOf(id), 0, 0) }
+        frames(OPEN_FRAMES)
+        assertEquals(1, app.logs.count { it == "now playing queue read at 0: scan running" })
+    }
+
+    @Test
     fun aSetThatWaitsForTheDeviceShowsItsNumberOnlyOnceItCompletesAndASetTheDeviceHoldsReturnsWithTheLevelUnchanged() {
         val level = SlowLevel(START)
         val app = app(level)

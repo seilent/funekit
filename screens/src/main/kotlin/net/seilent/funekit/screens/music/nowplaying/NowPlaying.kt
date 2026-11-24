@@ -58,6 +58,11 @@ private val sameEdges = object : SnapshotMutationPolicy<Edges?> {
 class NowPlayingModel {
     var shown by mutableStateOf(NpShown.None)
         private set
+    var readKey by mutableStateOf<NpReadKey?>(null)
+        private set
+    var queueRead by mutableStateOf<NpQueueRead?>(null)
+        private set
+    private var starts = 0L
     var state by mutableStateOf(PlayerState())
         private set
     var phone: PhoneTrack? by mutableStateOf(null)
@@ -134,6 +139,16 @@ class NowPlayingModel {
         if (p == phone) return
         phoneIs(p)
         bump()
+    }
+
+    internal fun readStarts(key: (Long) -> NpReadKey): NpReadKey = key(++starts).also { readKey = it }
+
+    internal fun noRead() {
+        readKey = null
+    }
+
+    internal fun readEnds(r: NpQueueRead) {
+        queueRead = r
     }
 
     fun sync(n: NpShown, now: Long) {
@@ -259,6 +274,8 @@ class NowPlayingModel {
         phoneIs(null)
         state = PlayerState()
         shown = NpShown.None
+        readKey = null
+        queueRead = null
         slide = NpSlide()
         favorite = false
         mark = false

@@ -1,6 +1,8 @@
 package net.seilent.funekit.screens.music.nowplaying
 
 import net.seilent.funekit.api.ArtRef
+import net.seilent.funekit.api.LibraryState
+import net.seilent.funekit.api.Repeat
 import net.seilent.funekit.api.Row
 
 private const val SECOND = 1000L
@@ -49,6 +51,28 @@ data class NpShown(
 
         private const val BYTE = 0xFFL
     }
+}
+
+data class NpReadKey(
+    val serial: Long,
+    val track: Long?,
+    val index: Int,
+    val queueRevision: Long,
+    val queueSize: Int,
+    val repeat: Repeat,
+    val generation: Long,
+    val library: LibraryState,
+    val next: Int,
+)
+
+sealed interface NpQueueRead {
+    val key: NpReadKey
+
+    data class Shown(override val key: NpReadKey, val rows: List<Row>) : NpQueueRead
+
+    data class NoRow(override val key: NpReadKey) : NpQueueRead
+
+    data class Failed(override val key: NpReadKey, val cause: Exception) : NpQueueRead
 }
 
 fun npTime(ms: Long): String {

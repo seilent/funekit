@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,6 +20,8 @@ import net.seilent.funekit.Surface
 import net.seilent.funekit.Window
 import net.seilent.funekit.api.ArtRef
 import net.seilent.funekit.api.Busy
+import net.seilent.funekit.api.Card
+import net.seilent.funekit.api.Disconnected
 import net.seilent.funekit.api.Favorites
 import net.seilent.funekit.api.Library
 import net.seilent.funekit.api.LibraryState
@@ -28,6 +31,7 @@ import net.seilent.funekit.api.NoCard
 import net.seilent.funekit.api.Page
 import net.seilent.funekit.api.Player
 import net.seilent.funekit.api.Repeat
+import net.seilent.funekit.api.Stale
 import net.seilent.funekit.core.Lrc
 import net.seilent.funekit.fake.Fake
 import net.seilent.funekit.fake.FakeSet
@@ -37,6 +41,8 @@ import net.seilent.funekit.scale
 import net.seilent.funekit.screens.music.MusicSource
 import net.seilent.funekit.screens.music.nowplaying.NowPlayingModel
 import net.seilent.funekit.screens.music.nowplaying.NpAct
+import net.seilent.funekit.screens.music.nowplaying.NpQueueRead
+import net.seilent.funekit.screens.music.nowplaying.NpReadKey
 import net.seilent.funekit.screens.music.nowplaying.NpShown
 import net.seilent.funekit.screens.music.nowplaying.PhoneRepeat
 import net.seilent.funekit.screens.music.nowplaying.PhoneTrack
@@ -48,6 +54,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -57,7 +64,9 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.ByteArrayOutputStream
 import java.io.IOException
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -125,7 +134,7 @@ class NowPlayingFeedTest {
         val g = NpLayout(s)
         assertEquals("premise: one next row on V1", 1, g.nextTracks)
         runBlocking { fake.player.play(ids, 0, 0) }
-        rule.setContent { NowPlayingFeed(np, g, src, null) { 0L } }
+        rule.setContent { NowPlayingFeed(np, g, src, null, log = {}) { 0L } }
         rule.waitForIdle()
         val n = reads.get()
         assertTrue("premise: the first index reads the queue", n >= 1)
@@ -203,7 +212,7 @@ class NowPlayingFeedTest {
     private fun artPlayed(np: NowPlayingModel, n: Int = 2): List<Long> {
         val ids = runBlocking { fake.library.view().page(Listing.Songs, 0, ART_SONGS).rows.filter { it.art != null }.map { it.id }.take(n) }
         runBlocking { fake.player.play(ids, 0, 0) }
-        rule.setContent { NowPlayingFeed(np, NpLayout(s), artSrc, phone) { 0L } }
+        rule.setContent { NowPlayingFeed(np, NpLayout(s), artSrc, phone, log = {}) { 0L } }
         artFor(np, ids[0])
         return ids
     }
@@ -272,7 +281,7 @@ class NowPlayingFeedTest {
             f.player.play(listOf(t), 0, 0)
         }
         val source = MusicSource(f.library, f.player, f.quickplay, f.favorites, f.playlists, f.lyrics)
-        rule.setContent { NowPlayingFeed(np, NpLayout(s), source, null) { 0L } }
+        rule.setContent { NowPlayingFeed(np, NpLayout(s), source, null, log = {}) { 0L } }
         settle()
         assertEquals("premise: the lyric track shows", t, np.shown.track)
         return f to t
@@ -312,6 +321,314 @@ class NowPlayingFeedTest {
         assertEquals(MOVED, np.lyrics.offsetMs)
     }
 
+    private val past = AtomicBoolean()
+    private val gate = AtomicReference<CompletableDeferred<Unit>?>()
+    private val fail = AtomicReference<Exception?>()
+    private val logs = mutableListOf<String>()
+
+    private fun queued(v: LibraryView): LibraryView = object : LibraryView by v {
+        override suspend fun page(listing: Listing, offset: Int, count: Int): Page {
+            if (listing != Listing.Queue) return v.page(listing, offset, count)
+            gate.get()?.await()
+            fail.getAndSet(null)?.let { throw it }
+            return v.page(listing, if (past.get()) offset + PAST else offset, count)
+        }
+    }
+
+    private fun gatedSource(): MusicSource {
+        val l = object : Library by fake.library {
+            override fun view(): LibraryView = queued(fake.library.view())
+
+            override fun view(generation: Long): LibraryView = queued(fake.library.view(generation))
+        }
+        return MusicSource(l, fake.player, fake.quickplay, fake.favorites, fake.playlists, fake.lyrics)
+    }
+
+    private var layout by mutableStateOf(NpLayout(s))
+    private var readSrc by mutableStateOf(gatedSource())
+
+    private fun reading(np: NowPlayingModel) {
+        rule.setContent { NowPlayingFeed(np, layout, readSrc, phone, log = { logs += it }) { 0L } }
+        rule.waitForIdle()
+    }
+
+    private fun shownRead(np: NowPlayingModel, ids: List<Long>): NpQueueRead.Shown {
+        runBlocking { fake.player.play(ids, 0, 0) }
+        reading(np)
+        return fresh<NpQueueRead.Shown>(np, null)
+    }
+
+    private inline fun <reified T : NpQueueRead> fresh(np: NowPlayingModel, before: NpQueueRead?): T {
+        val r = np.queueRead
+        assertTrue("${T::class.simpleName} expected, $r read", r is T)
+        assertNotSame("a new report", before, r)
+        assertEquals("the report is the running read's", np.readKey, r?.key)
+        return r as T
+    }
+
+    private fun shut(): CompletableDeferred<Unit> = CompletableDeferred<Unit>().also { gate.set(it) }
+
+    private fun release(d: CompletableDeferred<Unit>) {
+        d.complete(Unit)
+        rule.waitForIdle()
+    }
+
+    @Test
+    fun aFailedReadReportsItsCauseAndKeepsTheRowsItHad() {
+        val ids = songs()
+        val np = NowPlayingModel()
+        fake.busyNext("scan running", Listing.Queue)
+        runBlocking { fake.player.play(ids, 1, 0) }
+        reading(np)
+        val failed = fresh<NpQueueRead.Failed>(np, null)
+        assertTrue("the cause is the busy answer", failed.cause is Busy)
+        assertEquals(listOf("now playing queue read at 1: scan running"), logs)
+        assertNull("a failed first read shows nothing", np.shown.track)
+
+        player { repeat(Repeat.All) }
+        val shown = fresh<NpQueueRead.Shown>(np, failed)
+        assertEquals(listOf(ids[1], ids[2]), shown.rows.map { it.id })
+        assertEquals(ids[0], np.prevId)
+
+        fake.busyNext("scan running", Listing.Queue)
+        player { next() }
+        fresh<NpQueueRead.Failed>(np, shown)
+        assertEquals("a failed read keeps the track it had", ids[1], np.shown.track)
+        assertEquals("a failed read keeps the row before it", ids[0], np.prevId)
+        assertEquals(listOf("now playing queue read at 1: scan running", "now playing queue read at 2: scan running"), logs)
+    }
+
+    @Test
+    fun eachSeamOutcomeReportsFailedWithItsLine() {
+        val ids = songs()
+        val np = NowPlayingModel()
+        var last: NpQueueRead = shownRead(np, ids)
+        val outcomes = listOf(
+            Busy("scan running") to "now playing queue read at 0: scan running",
+            Disconnected() to "now playing queue read at 0: player disconnected",
+            NoCard() to "now playing queue read at 0: card not available",
+            Stale(7) to "now playing queue read at 0: revision 7 stale",
+        )
+        for ((e, _) in outcomes) {
+            fail.set(e)
+            player { repeat(nextRepeat(state.value.repeat)) }
+            val failed = fresh<NpQueueRead.Failed>(np, last)
+            assertSame(e, failed.cause)
+            last = failed
+        }
+        assertEquals(outcomes.map { it.second }, logs)
+        assertEquals("the failed reads keep the shown track", ids[0], np.shown.track)
+    }
+
+    @Test
+    fun aShownReadReportsItsRowsOncePerRead() {
+        val ids = songs()
+        val np = NowPlayingModel()
+        val first = shownRead(np, ids)
+        assertEquals(listOf(ids[0], ids[1]), first.rows.map { it.id })
+        assertEquals(first.rows.first().id, np.shown.track)
+        val key = np.readKey
+
+        player { toggle() }
+        assertSame("a play toggle reads nothing", first, np.queueRead)
+        assertSame(key, np.readKey)
+
+        player { next() }
+        val second = fresh<NpQueueRead.Shown>(np, first)
+        assertEquals(listOf(ids[1], ids[2]), second.rows.map { it.id })
+        assertEquals(ids[1], np.readKey?.track)
+    }
+
+    @Test
+    fun aReadWithNoRowAtTheIndexReportsNoRow() {
+        val ids = songs()
+        val np = NowPlayingModel()
+        val shown = shownRead(np, ids)
+
+        past.set(true)
+        player { repeat(Repeat.All) }
+        val noRow = fresh<NpQueueRead.NoRow>(np, shown)
+        assertNull("no row shows nothing", np.shown.track)
+
+        past.set(false)
+        player { repeat(Repeat.Off) }
+        fresh<NpQueueRead.Shown>(np, noRow)
+    }
+
+    @Test
+    fun aReadALaterKeyCancelsReportsNothing() {
+        val ids = songs()
+        val np = NowPlayingModel()
+        val r = shownRead(np, ids)
+        val cancelled = shut()
+        player { next() }
+        assertSame("the waiting read has not reported", r, np.queueRead)
+        assertNotEquals("the waiting read holds its own key", r.key, np.readKey)
+
+        gate.set(null)
+        player { next() }
+        val later = fresh<NpQueueRead.Shown>(np, r)
+        assertEquals(ids[2], later.rows.first().id)
+
+        release(cancelled)
+        assertSame("the cancelled read reports nothing", later, np.queueRead)
+        assertEquals(emptyList<String>(), logs)
+    }
+
+    @Test
+    fun aReportOfRevisionRDoesNotMatchTheReadAtRPlusOne() {
+        val ids = songs()
+        val np = NowPlayingModel()
+        val r = shownRead(np, ids)
+        val q = fake.player.state.value.queueRevision
+        assertTrue("the shown read is in", npReadIn(np, readSrc))
+        val d = shut()
+
+        runBlocking { fake.player.move(1, 2, q) }
+        val moved = fake.player.state.value
+        assertTrue("premise: the move is a later revision", moved.queueRevision > q)
+        assertEquals("premise: the same index", r.key.index, moved.index)
+        assertEquals("premise: the same size", r.key.queueSize, moved.queueSize)
+        assertEquals("premise: the feed has not taken the move", r.key, np.readKey)
+        assertFalse("a report of revision r is not in at r + 1", npReadIn(np, readSrc))
+
+        rule.waitForIdle()
+        assertSame("the waiting read has not reported", r, np.queueRead)
+        assertNotEquals(r.key, np.readKey)
+        assertTrue("the running read keys on the move", checkNotNull(np.readKey).queueRevision > q)
+        assertFalse(npReadIn(np, readSrc))
+
+        release(d)
+        val read = fresh<NpQueueRead.Shown>(np, r)
+        assertEquals(listOf(ids[0], ids[2]), read.rows.map { it.id })
+        assertTrue(npReadIn(np, readSrc))
+    }
+
+    @Test
+    fun aRescanReportsForTheNewGeneration() {
+        val ids = songs()
+        val np = NowPlayingModel()
+        val r = shownRead(np, ids)
+        val gen = fake.library.generation.value
+        player { pause() }
+        val revision = fake.player.state.value.queueRevision
+        runBlocking { fake.library.rescan() }
+        scheduler.advanceUntilIdle()
+        rule.waitForIdle()
+        assertEquals("premise: the rescan keeps the queue revision", revision, fake.player.state.value.queueRevision)
+        assertEquals("premise: the rescan moves the generation one step", gen + 1, fake.library.generation.value)
+
+        val read = fresh<NpQueueRead.Shown>(np, r)
+        assertEquals(gen + 1, read.key.generation)
+        assertEquals(r.key, read.key.copy(serial = r.key.serial, generation = gen))
+    }
+
+    @Test
+    fun aClearedQueueNullsTheReportAndTheKey() {
+        val ids = songs()
+        val np = NowPlayingModel()
+        val r = shownRead(np, ids)
+        player { clear() }
+        assertNull("a cleared queue has no report", np.queueRead)
+        assertNull("a cleared queue runs no read", np.readKey)
+
+        player { play(ids, 0, 0) }
+        fresh<NpQueueRead.Shown>(np, r)
+    }
+
+    @Test
+    fun aReadFailureOutsideTheSeamOutcomesIsThrown() {
+        val ids = songs()
+        val np = NowPlayingModel()
+        runBlocking { fake.player.play(ids, 0, 0) }
+        val state = fake.player.state.value
+        val key = NpReadKey(1, state.track, state.index, state.queueRevision, state.queueSize, state.repeat, fake.library.generation.value, fake.library.state.value, layout.nextTracks)
+        fail.set(IllegalStateException("bad page"))
+        assertThrows(IllegalStateException::class.java) { runBlocking { npQueueRead(np, readSrc, state, key, { logs += it }) { 0L } } }
+        assertNull(np.queueRead)
+        assertEquals(emptyList<String>(), logs)
+    }
+
+    @Test
+    fun aCardChangeAfterABusyReadLeavesTheFailedReportUnmatchedUntilTheNewReadReports() {
+        val ids = songs()
+        val np = NowPlayingModel()
+        fail.set(Busy("scan running"))
+        runBlocking { fake.player.play(ids, 0, 0) }
+        reading(np)
+        val failed = fresh<NpQueueRead.Failed>(np, null)
+        assertEquals(Card.Present, failed.key.library.card)
+
+        val d = shut()
+        rule.runOnIdle { fake.card(Card.Out) }
+        rule.waitForIdle()
+        assertSame("the failed report stays while the read waits", failed, np.queueRead)
+        assertNotEquals(failed.key, np.readKey)
+        assertEquals(Card.Out, np.readKey?.library?.card)
+
+        release(d)
+        fresh<NpQueueRead>(np, failed)
+    }
+
+    @Test
+    fun aNextCountChangeLeavesTheShownReportUnmatchedUntilTheNewReadReports() {
+        val ids = songs()
+        val np = NowPlayingModel()
+        val r = shownRead(np, ids)
+        assertEquals(1, r.key.next)
+
+        val d = shut()
+        val a105 = NpLayout(scale(Window(A105_W, A105_H, SDK, none, none, none, none, none), Nav.None, Surface.NowPlaying, false))
+        assertEquals("premise: three next rows on the A105 board", 3, a105.nextTracks)
+        rule.runOnIdle { layout = a105 }
+        rule.waitForIdle()
+        assertNotEquals(r.key, np.readKey)
+        assertEquals(3, np.readKey?.next)
+
+        release(d)
+        val read = fresh<NpQueueRead.Shown>(np, r)
+        assertEquals(listOf(ids[0], ids[1], ids[2]), read.rows.map { it.id })
+    }
+
+    @Test
+    fun aSourceChangeWithEqualFieldsLeavesTheShownReportUnmatchedUntilTheNewReadReports() {
+        val ids = songs()
+        val np = NowPlayingModel()
+        val r = shownRead(np, ids)
+
+        val d = shut()
+        rule.runOnIdle { readSrc = gatedSource() }
+        rule.waitForIdle()
+        val k = checkNotNull(np.readKey)
+        assertNotEquals(r.key, k)
+        assertTrue(k.serial > r.key.serial)
+        assertEquals("every other field is equal", r.key, k.copy(serial = r.key.serial))
+
+        release(d)
+        fresh<NpQueueRead>(np, r)
+    }
+
+    @Test
+    fun aPhoneSessionOverAPausedOwnTrackRunsNoReadAndItsEndReadsAgain() {
+        val ids = songs()
+        val np = NowPlayingModel()
+        val r = shownRead(np, ids)
+        player { pause() }
+
+        rule.runOnIdle { phone = PhoneSession(PhoneTrack("Radio", "Song", "Artist", "Album", true, false, PHONE_MS, 0L, 0L, 1f, false, PhoneRepeat.Off, 0, 0, null), {}) {} }
+        rule.waitForIdle()
+        assertTrue("premise: the phone's feed", np.variant)
+        assertNull("the phone's feed runs no own read", np.readKey)
+        assertFalse(npReadIn(np, readSrc))
+        assertSame(r, np.queueRead)
+
+        rule.runOnIdle { phone = null }
+        rule.waitForIdle()
+        assertTrue(checkNotNull(np.readKey).serial > r.key.serial)
+        fresh<NpQueueRead>(np, r)
+        assertTrue(npReadIn(np, readSrc))
+    }
+
     private companion object {
         const val SDK = 35
         const val V1_W = 240
@@ -326,5 +643,8 @@ class NowPlayingFeedTest {
         const val ART_TRACKS = 3
         const val WAIT_MS = 5_000L
         const val PHONE_MS = 180_000L
+        const val PAST = 10_000
+        const val A105_W = 720
+        const val A105_H = 1280
     }
 }
