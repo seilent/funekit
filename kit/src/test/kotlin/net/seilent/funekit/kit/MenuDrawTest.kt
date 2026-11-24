@@ -92,6 +92,12 @@ class MenuDrawTest {
     private val line33 = (2027 * 33 + 2047) / 2048 + (431 * 33 + 2047) / 2048
 
     @Test
+    fun aDialogScalesAboutTheCentreOfTheScreenCentresPixel() {
+        assertEquals(Offset(360.5f, 640.5f), dialogPivot(720, 1280))
+        assertEquals(Offset(120.5f, 160.5f), dialogPivot(241, 321))
+    }
+
+    @Test
     fun theMenuTakesItsSizesFromTheTokensAtPagePx() {
         val ink = menuInk(measurer, fonts, menu(MenuForm.Sheet), a105, unitDensity, true, covers)
         assertEquals(43 * 3, ink.pitch)

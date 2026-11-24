@@ -21,6 +21,7 @@ import net.seilent.funekit.kit.Menu
 import net.seilent.funekit.kit.MenuForm
 import net.seilent.funekit.kit.MenuInk
 import net.seilent.funekit.kit.MenuPlan
+import net.seilent.funekit.kit.dialogPivot
 import net.seilent.funekit.kit.Metrics
 import net.seilent.funekit.kit.RowInk
 import net.seilent.funekit.kit.RowKind
@@ -563,7 +564,8 @@ fun Regions.menuLayer(name: String, menu: Menu, ink: MenuInk, plan: MenuPlan, o:
         fade(sh.alpha) { move(0f, dy) { on(KitInk.elevated) { menuRegions(name, menu, ink, plan, s, now, w, h, accent, accentOff) } } }
     } else {
         val md = o.dialog(now)
-        zoom(md.scale, w / 2f, h / 2f) { fade(md.alpha) { menuRegions(name, menu, ink, plan, s, now, w, h, accent, accentOff) } }
+        val c = dialogPivot(w, h)
+        zoom(md.scale, c.x, c.y) { fade(md.alpha) { menuRegions(name, menu, ink, plan, s, now, w, h, accent, accentOff) } }
     }
     overlap(from)
 }

@@ -37,7 +37,10 @@ import net.seilent.funekit.kit.touch.Tap
 import net.seilent.funekit.kit.touch.tapTarget
 import kotlin.math.roundToInt
 
-private const val HALF = 2f
+private const val HALF = 2
+private const val PX_CENTRE = 0.5f
+
+fun dialogPivot(w: Int, h: Int): Offset = Offset(w / HALF + PX_CENTRE, h / HALF + PX_CENTRE)
 
 private fun DrawScope.faded(alpha: Float, paint: Paint, block: DrawScope.() -> Unit) {
     if (alpha >= 1f) {
@@ -61,7 +64,7 @@ fun DrawScope.menuLayer(menu: Menu, ink: MenuInk, plan: MenuPlan, o: Overlay, s:
     } else {
         val md = o.dialog(now)
         drawRect(Ink.bg, Offset.Zero, size, md.scrim)
-        withTransform({ scale(md.scale, md.scale, Offset(size.width / HALF, size.height / HALF)) }) {
+        withTransform({ scale(md.scale, md.scale, dialogPivot(size.width.toInt(), size.height.toInt())) }) {
             faded(md.alpha, paint) { menu(menu, ink, plan, s, now, accent, accentOff) }
         }
     }
