@@ -355,6 +355,7 @@ class HubModel(entry: Long, page: MusicPage = MusicPage.Hub, private val st: Hub
     val path: List<String> get() = st.levels.map { it.name }
     var playing by mutableStateOf(HubPlaying())
     var scanning by mutableStateOf(false)
+    val carded: Boolean get() = set == HubSet.Music && cardLine(card).isNotEmpty()
     var found by mutableIntStateOf(0)
     var songs: Int
         get() = st.songs
@@ -482,12 +483,12 @@ class HubModel(entry: Long, page: MusicPage = MusicPage.Hub, private val st: Hub
         q.shut(t)
     }
 
-    fun line(p: Int): String = hubLine(set, p, scanning, found, songs, panes[p].map?.count ?: 0, generation)
+    fun line(p: Int): String = if (carded) cardLine(card) else hubLine(set, p, scanning, found, songs, panes[p].map?.count ?: 0, generation)
 
     override val ready: Boolean
         get() {
             if (search != null && committed().isEmpty()) return true
-            if (scanShown(scanning, scanSongs(generation, songs))) return true
+            if (carded || scanShown(scanning, scanSongs(generation, songs))) return true
             val pn = pane
             val m = pn.map ?: return false
             for (row in pn.track.first until m.count) {
@@ -653,7 +654,7 @@ class HubModel(entry: Long, page: MusicPage = MusicPage.Hub, private val st: Hub
     }
 
     fun target(p: Int, row: Int, col: Int): SheetTarget? {
-        if (scanShown(scanning, scanSongs(generation, songs))) return null
+        if (carded || scanShown(scanning, scanSongs(generation, songs))) return null
         val pn = panes[p]
         val v = pn.cell(row, col)
         if (letterOf(v) >= 0 || v == NO_CELL || v == LABEL_CELL || v == NOW_CELL) return null

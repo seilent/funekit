@@ -38,6 +38,8 @@ import net.seilent.funekit.screens.music.MusicSource
 import net.seilent.funekit.screens.music.pivots
 import net.seilent.funekit.screens.music.testFake
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -110,6 +112,38 @@ class HubBusyTest {
         assertEquals(pn.map!!.rowOfIndex(SAVED_INDEX), pn.track.first)
         assertTrue("premise: the busy restore keeps its anchor", pn.pending != null)
         return r
+    }
+
+    private fun carded(card: Card): Rig {
+        val r = compose(premise = false, ask = {})
+        rule.runOnIdle {
+            r.f.card(card)
+            r.m.card = card
+        }
+        settle()
+        return r
+    }
+
+    @Test
+    fun aCardOutShowsNoCard() {
+        val m = carded(Card.Out).m
+        assertEquals("no card", m.line(m.pivot))
+        assertNull("the rows go with the line", hubThumbAt(m, HubGeo(s), m.pivot, 0))
+        assertNull(m.target(m.pivot, m.pane.track.first, 0))
+    }
+
+    @Test
+    fun aCardErrorShowsCardError() {
+        val m = carded(Card.Error).m
+        assertEquals("card error", m.line(m.pivot))
+        assertNull(m.target(m.pivot, m.pane.track.first, 0))
+    }
+
+    @Test
+    fun aHeldCardShowsNoLine() {
+        val m = carded(Card.Held).m
+        assertEquals("", m.line(m.pivot))
+        assertNotNull("the rows stay: the song row the list opens on", m.target(m.pivot, m.pane.track.first, 0))
     }
 
     @Test

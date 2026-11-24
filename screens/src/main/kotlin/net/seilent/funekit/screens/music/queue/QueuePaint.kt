@@ -56,8 +56,8 @@ class QueueDraw(
         rec?.row(name, k, s, size.width.toInt(), look.alpha, look.focused, 1f, glow != null, accent, accentOff, focusShown)
     }
 
-    fun DrawScope.lines(count: CountLine?, empty: Boolean, rec: DrawRecord?, name: String) {
-        listLines(geo, words, count?.text, count?.alpha ?: 1f, if (empty) QUEUE_EMPTY else null, rec, name)
+    fun DrawScope.lines(count: CountLine?, line: String?, rec: DrawRecord?, name: String) {
+        listLines(geo, words, count?.text, count?.alpha ?: 1f, line, rec, name)
     }
 }
 
@@ -79,7 +79,7 @@ class QueuePaint(
     override val kind: PageKind = PageKind.Plain
     override val top: Int = geo.top
     override val bottom: Int = geo.bottom
-    override val count: Int get() = m.size
+    override val count: Int get() = m.rowsShown
     override val scroll: Int get() = m.track.q
 
     override fun rowY(i: Int): Int = geo.top + i * geo.pitch
@@ -93,11 +93,11 @@ class QueuePaint(
     }
 
     override fun DrawScope.rest(now: Long, rec: DrawRecord?, name: String) {
-        with(d) { lines(m.countLine(now), m.empty(), rec, name) }
+        with(d) { lines(m.countLine(now), m.line(), rec, name) }
         val off = m.track.q
-        if (m.size == 0) return
+        if (m.rowsShown == 0) return
         val first = maxOf(0, off / geo.pitch)
-        val last = minOf(m.size - 1, (off + geo.view - 1) / geo.pitch)
+        val last = minOf(m.rowsShown - 1, (off + geo.view - 1) / geo.pitch)
         for (r in first..last) {
             clipped(rec, 0f, geo.top.toFloat(), size.width, geo.bottom.toFloat()) { row(r, geo.top + r * geo.pitch - off, now, rec, name) }
         }
@@ -106,7 +106,7 @@ class QueuePaint(
     override fun thumbFade(at: Long): Float = m.fade.at(at)
 
     override fun DrawScope.thumb(fade: Float, rec: DrawRecord?, name: String) {
-        val r = geo.thumb(m.size, scroll) ?: return
+        val r = geo.thumb(m.rowsShown, scroll) ?: return
         drawThumb(r, fade)
         rec?.thumbParts("$name.thumb", r, Tok.scrollbar_alpha * fade, bands, accent)
     }

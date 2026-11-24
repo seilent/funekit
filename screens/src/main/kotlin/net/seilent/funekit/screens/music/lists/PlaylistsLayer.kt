@@ -86,8 +86,8 @@ fun PlaylistsLayer(
             }
         },
         lines = { _, covered ->
-            val count = rememberLook(m, covered = covered) { if (m.ready) m.count() else null }
-            Canvas(Modifier.pxSize(s.widthPx, s.heightPx)) { with(draw) { lines(count.value, null, "playlists") } }
+            val count = rememberLook(m, covered = covered) { (if (m.ready && m.status() == null) m.count() else null) to m.status() }
+            Canvas(Modifier.pxSize(s.widthPx, s.heightPx)) { with(draw) { lines(count.value.first, count.value.second, null, "playlists") } }
         },
         item = { r, frame, covered ->
             val look = rememberLook(r, m, hideFocus, pageCovered, snap, covered = covered) { m.look(r, frame(), focusShown) }

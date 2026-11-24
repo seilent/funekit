@@ -7,6 +7,7 @@ import net.seilent.funekit.Surface
 import net.seilent.funekit.Window
 import net.seilent.funekit.kit.touch.RowSpec
 import net.seilent.funekit.scale
+import net.seilent.funekit.api.Card
 import net.seilent.funekit.api.Listing
 import net.seilent.funekit.api.TrackSet
 import net.seilent.funekit.fake.Fake
@@ -44,6 +45,21 @@ class PlaylistsTest {
     private fun songs(f: Fake, n: Int): List<Long> = runBlocking { f.library.view().page(Listing.Songs, 0, n).rows.map { it.id } }
 
     private fun row(m: PlaylistsModel, title: String): Int = (0 until m.size).first { m.rowModel(it)?.primary == title }
+
+    @Test
+    fun aCardOutShowsItsLineAndNoRows() {
+        val f = fake()
+        val m = model()
+        load(m, f)
+        assertTrue("premise: the page holds rows", m.size > 0)
+        m.card = Card.Out
+        assertEquals("no card", m.status())
+        assertEquals(0, m.size)
+        assertTrue("the line counts as ready", m.ready)
+        m.card = Card.Held
+        assertEquals(null, m.status())
+        assertTrue("a held card keeps the rows", m.size > 0)
+    }
 
     @Test
     fun theRowsAreNowPlayingFavoritesAndTheListsInMergeOrder() {

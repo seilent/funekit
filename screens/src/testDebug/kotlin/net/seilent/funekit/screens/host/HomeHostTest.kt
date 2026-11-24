@@ -69,6 +69,8 @@ import net.seilent.funekit.kit.touch.Swipe
 import net.seilent.funekit.scale
 import net.seilent.funekit.screens.music.MusicPage
 import net.seilent.funekit.screens.music.MusicSource
+import net.seilent.funekit.screens.music.hub.CARD_ERROR
+import net.seilent.funekit.screens.music.hub.NO_CARD
 import net.seilent.funekit.screens.music.nowplaying.NowPlayingModel
 import net.seilent.funekit.screens.music.overlay.ADD
 import net.seilent.funekit.screens.music.overlay.ADD_TO_PLAYLIST
@@ -850,7 +852,7 @@ class HomeHostTest {
         launcher(waits, MusicSource(lib, player, fake.quickplay, fake.favorites, fake.playlists, fake.lyrics))
         val s = state
         assertEquals("premise: the pane holds its data", loaded, s.quickplay.data)
-        assertEquals(CARD_OUT, s.quickplay.status)
+        assertEquals(NO_CARD, s.quickplay.status)
         val px = drawn(s)
         val w = s.qpLayout.s.widthPx
         val base = s.qpLayout.pxOf(s.qpLayout.hintTop(0))
@@ -876,7 +878,7 @@ class HomeHostTest {
             override suspend fun play(item: QpItem) = true
         }
         launcher(cold, MusicSource(lib, player, fake.quickplay, fake.favorites, fake.playlists, fake.lyrics))
-        assertEquals(CARD_OUT, state.quickplay.status)
+        assertEquals(NO_CARD, state.quickplay.status)
         assertFalse("the card status leaves the waiting form", state.quickplay.waiting)
         assertEquals(QpData.EMPTY, state.quickplay.data)
         card.value = LibraryState(Card.Present)
@@ -891,9 +893,9 @@ class HomeHostTest {
             override val state: StateFlow<LibraryState> get() = card
         }
         launcher(qpSource(QpData.EMPTY), MusicSource(lib, player, fake.quickplay, fake.favorites, fake.playlists, fake.lyrics))
-        assertEquals(CARD_OUT, state.quickplay.status)
+        assertEquals(NO_CARD, state.quickplay.status)
         assertEquals("the pane lays out the status line", QpLayout(home, qpTiles(QpData.EMPTY), 1).sectionTop(1), state.qpLayout.sectionTop(1))
-        assertEquals(listOf(CARD_OUT), state.qpWords.hint.map { it.text.lowercase() })
+        assertEquals(listOf(NO_CARD), state.qpWords.hint.map { it.text.lowercase() })
         card.value = LibraryState(Card.Error)
         settle()
         assertEquals(CARD_ERROR, state.quickplay.status)

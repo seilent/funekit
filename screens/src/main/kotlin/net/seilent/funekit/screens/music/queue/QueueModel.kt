@@ -23,6 +23,7 @@ import net.seilent.funekit.api.PlayerState
 import net.seilent.funekit.api.Row
 import net.seilent.funekit.api.Stale
 import net.seilent.funekit.screens.music.MusicPage
+import net.seilent.funekit.screens.music.hub.cardLine
 import net.seilent.funekit.screens.music.MusicSource
 import net.seilent.funekit.screens.music.PageModel
 import net.seilent.funekit.screens.music.Paging
@@ -65,6 +66,7 @@ class QueueModel(entry: Long) : PageModel(entry, MusicPage.Queue) {
         private set
     var size by mutableIntStateOf(0)
         private set
+    val rowsShown: Int get() = if (cardLine(card).isNotEmpty()) 0 else size
     var loaded by mutableStateOf(false)
     private var stated = false
     private var untracked = false
@@ -105,6 +107,7 @@ class QueueModel(entry: Long) : PageModel(entry, MusicPage.Queue) {
     }
 
     fun countLine(now: Long): CountLine? {
+        if (cardLine(card).isNotEmpty()) return null
         val c = count() ?: return null
         val at = countAt
         if (at < 0) return CountLine(shown ?: c, 1f)
@@ -127,6 +130,8 @@ class QueueModel(entry: Long) : PageModel(entry, MusicPage.Queue) {
     }
 
     fun empty(): Boolean = loaded && size == 0
+
+    fun line(): String? = cardLine(card).ifEmpty { null } ?: QUEUE_EMPTY.takeIf { empty() }
 
     fun look(i: Int, now: Long, focusShown: Boolean): ListLook = pane.look(i, now, focusShown, Tok.type_listPrimary_alpha, Tok.type_listPrimary_alphaDim)
 

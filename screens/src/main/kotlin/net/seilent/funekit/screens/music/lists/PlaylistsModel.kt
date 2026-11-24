@@ -14,6 +14,7 @@ import net.seilent.funekit.api.PlayerState
 import net.seilent.funekit.screens.music.MusicPage
 import net.seilent.funekit.screens.music.PageModel
 import net.seilent.funekit.screens.music.hub.HubAct
+import net.seilent.funekit.screens.music.hub.cardLine
 import net.seilent.funekit.screens.music.overlay.SheetFrom
 import net.seilent.funekit.screens.music.overlay.SheetTarget
 import kotlin.math.max
@@ -31,14 +32,16 @@ class PlaylistsModel(entry: Long) : PageModel(entry, MusicPage.Playlists) {
     private var keep = 0L
     private var keepOff = 0f
     val track: RowTrack get() = pane.track
-    val size: Int get() = if (loaded == null) 0 else rows.size
+    val size: Int get() = if (loaded == null || status() != null) 0 else rows.size
     override var lists: List<ListTouch>
         get() = pane.lists
         set(v) {
             pane.lists = v
         }
 
-    override val ready: Boolean get() = loaded != null
+    override val ready: Boolean get() = loaded != null || status() != null
+
+    fun status(): String? = cardLine(card).ifEmpty { null }
 
     fun poke() = pane.poke()
 

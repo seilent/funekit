@@ -289,7 +289,7 @@ class HubDraw(
         val map = pn.map
         val text = m.line(p)
         if (text.isNotEmpty()) statusLine(s, line(text), rec, "$name.line")
-        if (map == null || map.count == 0 || scanShown(m.scanning, scanSongs(m.generation, m.songs))) return
+        if (map == null || map.count == 0 || m.carded || scanShown(m.scanning, scanSongs(m.generation, m.songs))) return
         val t = pn.track
         val off = t.q
         val first = t.drawFirst
@@ -324,7 +324,7 @@ class HubPaint(
     override val top: Int = geo.top
     override val above: Int = geo.above
     override val bottom: Int = geo.bottom
-    override val count: Int get() = if (scanShown(m.scanning, scanSongs(m.generation, m.songs))) 0 else m.panes[p].map?.count ?: 0
+    override val count: Int get() = if (m.carded || scanShown(m.scanning, scanSongs(m.generation, m.songs))) 0 else m.panes[p].map?.count ?: 0
     override val scroll: Int get() = m.panes[p].track.q
 
     override fun rowY(i: Int): Int = geo.top + m.panes[p].track.topOf(i)

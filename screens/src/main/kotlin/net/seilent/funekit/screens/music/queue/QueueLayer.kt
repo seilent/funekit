@@ -49,7 +49,7 @@ fun QueueLayer(
     val titleShown = accentShown(hideFocus, pageCovered)
     val rows: suspend (Int, Int) -> Unit = { f, l -> source?.let { src -> quiet { src.viewed { v -> m.show(v, f - AHEAD_ROWS, l + AHEAD_ROWS) } } } }
     ListPaneLayer(
-        m.pane, geo, chrome, a, bands, draw.accent, { m.size }, now, live, visible, frozen, snap, onBack, leavesLit,
+        m.pane, geo, chrome, a, bands, draw.accent, { m.rowsShown }, now, live, visible, frozen, snap, onBack, leavesLit,
         onTap = { r ->
             val open = onPlay
             val src = source
@@ -93,7 +93,7 @@ fun QueueLayer(
             }
         },
         lines = { frame, covered ->
-            val lines = rememberLook(m, covered = covered) { m.countLine(frame()) to m.empty() }
+            val lines = rememberLook(m, covered = covered) { m.countLine(frame()) to m.line() }
             Canvas(Modifier.pxSize(s.widthPx, s.heightPx)) { with(draw) { lines(lines.value.first, lines.value.second, null, "queue") } }
         },
         item = { r, frame, covered ->

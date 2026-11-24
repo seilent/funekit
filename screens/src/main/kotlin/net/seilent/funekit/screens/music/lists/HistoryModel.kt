@@ -17,6 +17,7 @@ import net.seilent.funekit.api.Row
 import net.seilent.funekit.api.TrackIds
 import net.seilent.funekit.screens.music.MusicPage
 import net.seilent.funekit.screens.music.PivotPage
+import net.seilent.funekit.screens.music.hub.cardLine
 import net.seilent.funekit.screens.music.overlay.SheetFrom
 import net.seilent.funekit.screens.music.overlay.SheetKind
 import net.seilent.funekit.screens.music.overlay.SheetTarget
@@ -73,11 +74,12 @@ class HistoryModel(entry: Long) : PivotPage(entry, MusicPage.History) {
 
     fun rows(p: Int): List<Row>? = panes[p].whole
 
-    fun count(p: Int): Int = rows(p)?.size ?: 0
 
-    override val ready: Boolean get() = rows(pivot) != null
+    fun count(p: Int): Int = if (cardLine(card).isNotEmpty()) 0 else rows(p)?.size ?: 0
 
-    fun empty(p: Int): String? = if (rows(p)?.isEmpty() == true) (if (p == HISTORY_RECENT) NOTHING_PLAYED else QUEUE_EMPTY) else null
+    override val ready: Boolean get() = rows(pivot) != null || cardLine(card).isNotEmpty()
+
+    fun empty(p: Int): String? = cardLine(card).ifEmpty { null } ?: if (rows(p)?.isEmpty() == true) (if (p == HISTORY_RECENT) NOTHING_PLAYED else QUEUE_EMPTY) else null
 
     fun rowModel(p: Int, i: Int): RowModel? {
         val r = rows(p)?.getOrNull(i) ?: return null

@@ -40,6 +40,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import net.seilent.funekit.Case
@@ -124,6 +125,7 @@ import net.seilent.funekit.screens.music.artist.artistAdd
 import net.seilent.funekit.screens.music.artist.artistPlay
 import net.seilent.funekit.screens.music.hub.HubModel
 import net.seilent.funekit.screens.music.hub.LibraryMark
+import net.seilent.funekit.screens.music.hub.cardLine
 import net.seilent.funekit.screens.music.hub.hubPickAtDrop
 import net.seilent.funekit.screens.music.hub.hubPicked
 import net.seilent.funekit.screens.music.lists.ListViewModel
@@ -490,6 +492,17 @@ class MusicHost<S : Any> internal constructor(
 
     fun isNp(s: S): Boolean = entryOf(s)?.page == MusicPage.NowPlaying
 
+    private fun cardRun(s: S): Boolean = when (entryOf(s)?.page) {
+        is MusicPage.Artist, is MusicPage.Album, is MusicPage.AlbumCol, is MusicPage.ListView, is MusicPage.Search -> true
+        else -> false
+    }
+
+    private fun cardGone(s: MusicSource) {
+        for (e in models.entries) (models[e] as? HubModel)?.colPick = -1
+        colFireAt = null
+        stack.leave({ p -> cardLine(s.library.state.value.card).isNotEmpty() && p in stack.pages.takeLastWhile(::cardRun) }, popKind)
+    }
+
     private fun npReady(): Boolean {
         if (opened?.state != PlayOpen.State.Released) return true
         val cur = src?.player?.state?.value?.track ?: return false
@@ -512,7 +525,9 @@ class MusicHost<S : Any> internal constructor(
         val e = entryOf(s)
         if (e != null) {
             if (e.page == MusicPage.NowPlaying) np.lyrics.open(np.shown.track, np.variant)
-            types.enter(models.enter(e.entry, e.page), e)
+            val m = models.enter(e.entry, e.page)
+            src?.let { m.card = it.library.state.value.card }
+            types.enter(m, e)
             return
         }
         val sc = app.settings(s) ?: return enterEq(s)
@@ -1441,6 +1456,20 @@ class MusicHost<S : Any> internal constructor(
             val s = src ?: return@LaunchedEffect
             combine(s.library.generation, s.library.state, s.library.scan) { g, state, scan -> g to LibraryMark(state, scan) }.distinctUntilChanged().collect { (_, mark) ->
                 if (mark.state.card != Card.Present) dropExits() else readExits(s)
+            }
+        }
+        LaunchedEffect(src) {
+            val s = src ?: return@LaunchedEffect
+            var line = ""
+            s.library.state.map { it.card }.distinctUntilChanged().collect { c ->
+                for (e in models.entries) {
+                    val m = models[e] ?: continue
+                    m.card = c
+                    (m as? HubModel)?.poke()
+                }
+                val was = line
+                line = cardLine(c)
+                if (line.isNotEmpty() && line != was) cardGone(s)
             }
         }
         LaunchedEffect(searchAt) {

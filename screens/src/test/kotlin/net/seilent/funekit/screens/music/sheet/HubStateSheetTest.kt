@@ -6,6 +6,7 @@ import net.seilent.funekit.Nav
 import net.seilent.funekit.Role
 import net.seilent.funekit.Roles
 import net.seilent.funekit.Scale
+import net.seilent.funekit.api.Card
 import net.seilent.funekit.api.Kind
 import net.seilent.funekit.api.Listing
 import net.seilent.funekit.api.Row
@@ -37,6 +38,7 @@ import net.seilent.funekit.screens.music.headerWord
 import net.seilent.funekit.screens.music.hub.HUB_ARTISTS
 import net.seilent.funekit.screens.music.hub.HUB_FOLDERS
 import net.seilent.funekit.screens.music.hub.HUB_GENRES
+import net.seilent.funekit.screens.music.hub.HUB_PLAYLISTS
 import net.seilent.funekit.screens.music.hub.HUB_SONGS
 import net.seilent.funekit.screens.music.hub.HubAct
 import net.seilent.funekit.screens.music.hub.HubDraw
@@ -205,6 +207,23 @@ class HubStateSheetTest {
             }
         }
         sc.render.write(Sheet(FOLDER, "scan", listOf("The hub status line while a scan runs on a library with no songs, beside funeOS scan-0, scan-1 and scan-12873-albums."), scans))
+    }
+
+    @Test
+    fun funeOsCardScenes() {
+        val cards = listOf(Card.Out to "nocard", Card.Error to "cardbad")
+        val pivots = mapOf(Card.Out to listOf(HUB_ARTISTS, HUB_ALBUMS, HUB_SONGS, HUB_GENRES, HUB_PLAYLISTS, HUB_FOLDERS), Card.Error to listOf(HUB_ARTISTS, HUB_ALBUMS, HUB_SONGS))
+        val tiles = boards.flatMap { dev ->
+            cards.flatMap { (card, word) ->
+                pivots.getValue(card).map { p ->
+                    val name = MusicPage.Hub.pivots[p]
+                    val h = shot(sc, dev, p)
+                    h.m.card = card
+                    tile("$word-500-$name", h, EMPTY_SHOT, "as funeOS $word:500:$name: the card ${if (card == Card.Out) "out" else "unreadable"}, the $name pivot set at 2400, its status line; shot at 3600", CARD_LOUD)
+                }
+            }
+        }
+        sc.render.write(Sheet(FOLDER, "card", listOf("The hub with no card or a card error beside funeOS nocard-500-* and cardbad-500-*."), tiles))
     }
 
     @Test
@@ -418,6 +437,7 @@ class HubStateSheetTest {
         private const val ALBUMS_QUIET = "the ALBUMS grid tiles draw this fixture's covers, gated on their edges only"
         private const val LIST_LOUD = "the pane shows only list rows, every one drawn, besides the chrome and the thumb"
         private const val EMPTY_LOUD = "the pane with no songs draws only the chrome and the status line"
+        private const val CARD_LOUD = "the pane with no card draws only the chrome and the status line"
         private const val TOAST_LOUD = "the pane shows only list rows, every one drawn, besides the chrome, the thumb and the track toast, whose strip covers the rows under it"
         private const val JUMP_LOUD = "the opaque jump grid covers the page, so every funeOS mark on it is a kit element"
     }

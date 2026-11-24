@@ -2,9 +2,11 @@ package net.seilent.funekit.screens.music
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import net.seilent.funekit.kit.stack.PageKind
 import net.seilent.funekit.kit.touch.ListTouch
+import net.seilent.funekit.api.Card
 import net.seilent.funekit.api.Kind
 
 const val HUB_ALBUMS = 0
@@ -16,6 +18,7 @@ interface PageId
 open class PageModel(val entry: Long, val page: PageId) {
     var pivot by mutableIntStateOf(0)
     var anchor: Anchor? = null
+    var card by mutableStateOf(Card.Present)
 
     open val kind: PageKind
         get() = when (page) {

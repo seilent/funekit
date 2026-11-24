@@ -8,6 +8,7 @@ import net.seilent.funekit.Window
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.touch.RowSpec
 import net.seilent.funekit.scale
+import net.seilent.funekit.api.Card
 import net.seilent.funekit.api.Kind
 import net.seilent.funekit.api.LibraryView
 import net.seilent.funekit.api.Listing
@@ -60,6 +61,18 @@ class HistoryTest {
         assertEquals(cap, m.count(HISTORY_NEW))
         assertEquals(recent.take(cap).map { it.title }, (0 until cap).map { m.rowModel(HISTORY_RECENT, it)?.primary })
         assertEquals(newest.take(cap).map { it.title }, (0 until cap).map { m.rowModel(HISTORY_NEW, it)?.primary })
+    }
+
+    @Test
+    fun aCardErrorShowsItsLineAndNoRows() {
+        val m = model()
+        load(m)
+        assertTrue("premise: recent holds rows", m.count(HISTORY_RECENT) > 0)
+        m.card = Card.Error
+        assertEquals(0, m.count(HISTORY_RECENT))
+        assertEquals(0, m.count(HISTORY_NEW))
+        assertEquals("card error", m.empty(HISTORY_RECENT))
+        assertTrue("the line counts as ready", m.ready)
     }
 
     @Test

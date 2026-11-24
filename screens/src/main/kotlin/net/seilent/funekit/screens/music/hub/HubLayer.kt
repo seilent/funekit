@@ -196,7 +196,7 @@ fun hubTopRing(m: HubModel, geo: HubGeo, over: Float, focusShown: Boolean, now: 
 }
 
 fun hubThumbAt(m: HubModel, geo: HubGeo, p: Int, off: Int): ThumbRect? {
-    if (scanShown(m.scanning, scanSongs(m.generation, m.songs))) return null
+    if (m.carded || scanShown(m.scanning, scanSongs(m.generation, m.songs))) return null
     val n = m.panes[p].map?.count ?: return null
     return thumbOf(geo.s, geo.top, geo.bottom, geo.view.toLong(), m.panes[p].track.topOf(n).toLong(), off.toLong())
 }
@@ -626,7 +626,7 @@ fun HubLayer(
         }
     }
 
-    val count = if (scanShown(m.scanning, scanSongs(m.generation, m.songs))) 0 else pn.map?.count ?: 0
+    val count = if (m.carded || scanShown(m.scanning, scanSongs(m.generation, m.songs))) 0 else pn.map?.count ?: 0
     val text = m.line(p)
     val buckets = remember { (0 until Section.count).toList() }
     val scrubs = live && count > 0 && buckets.any { pn.map?.has(it) == true }
@@ -695,7 +695,7 @@ fun HubLayer(
         }
         if (text.isNotEmpty() && !switching) Canvas(Modifier.pxSize(s.widthPx, s.heightPx)) { statusLine(s, draw.line(text), null, "") }
         val found = m.found(p)
-        if (found.isNotEmpty() && !switching && !scanShown(m.scanning, scanSongs(m.generation, m.songs))) {
+        if (found.isNotEmpty() && !switching && !m.carded && !scanShown(m.scanning, scanSongs(m.generation, m.songs))) {
             Canvas(Modifier.pxSize(s.widthPx, s.heightPx)) { statusLine(s, draw.line(found), null, "", draw.foundBase(m, p).toFloat()) }
         }
         if (q != null && insets != null) {

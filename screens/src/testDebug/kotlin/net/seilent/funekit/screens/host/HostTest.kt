@@ -28,6 +28,7 @@ import net.seilent.funekit.Surface
 import net.seilent.funekit.Window
 import net.seilent.funekit.fxInt
 import net.seilent.funekit.api.ArtRef
+import net.seilent.funekit.api.Card
 import net.seilent.funekit.api.Kind
 import net.seilent.funekit.api.Library
 import net.seilent.funekit.api.LibraryView
@@ -36,6 +37,7 @@ import net.seilent.funekit.api.LyricCopy
 import net.seilent.funekit.api.Lyrics
 import net.seilent.funekit.api.Player
 import net.seilent.funekit.api.Row
+import net.seilent.funekit.core.Section
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.MenuForm
 import net.seilent.funekit.kit.np.NpLayout
@@ -56,9 +58,11 @@ import net.seilent.funekit.screens.posture.Fold
 import net.seilent.funekit.scale
 import net.seilent.funekit.fake.Fake
 import net.seilent.funekit.fake.FakeSet
+import net.seilent.funekit.screens.music.HUB_ALBUMS
 import net.seilent.funekit.screens.music.MusicPage
 import net.seilent.funekit.screens.music.MusicSource
 import net.seilent.funekit.screens.music.album.AlbumModel
+import net.seilent.funekit.screens.music.hub.HubModel
 import net.seilent.funekit.screens.music.nowplaying.AdjustHit
 import net.seilent.funekit.screens.music.nowplaying.NowPlayingModel
 import net.seilent.funekit.screens.music.nowplaying.NpAct
@@ -69,6 +73,7 @@ import net.seilent.funekit.screens.music.nowplaying.OffsetEdit
 import net.seilent.funekit.screens.music.nowplaying.PhoneLyrics
 import net.seilent.funekit.screens.music.nowplaying.PhoneRepeat
 import net.seilent.funekit.screens.music.nowplaying.PhoneTrack
+import net.seilent.funekit.screens.music.queue.QueueModel
 import net.seilent.funekit.screens.music.testFake
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -270,6 +275,131 @@ class HostTest {
             up()
         }
         frames(OPEN_FRAMES)
+    }
+
+    private fun until(what: String, ok: () -> Boolean) {
+        var n = 0
+        while (!rule.runOnIdle(ok)) {
+            frames(1)
+            assertTrue(what, ++n < MAX_FRAMES)
+        }
+    }
+
+    private fun cardApp(root: Boolean = false, stack: (TestApp) -> List<TestScreen>): Pair<TestApp, Fake> {
+        val f = testFake(FakeSet.Demo)
+        val src = MusicSource(f.library, f.player, f.quickplay, f.favorites, f.playlists, f.lyrics)
+        return TestApp(page, np, src, Level(START, null)) { rule.mainClock.currentTime }.also {
+            it.compose(rule, root)
+            rule.waitForIdle()
+            rule.mainClock.autoAdvance = false
+            rule.runOnIdle { it.stack.reset(stack(it)) }
+            frames(OPEN_FRAMES)
+        } to f
+    }
+
+    private fun music(app: TestApp, p: MusicPage) = TestScreen.Music(MusicEntry(app.stack.entry(), p))
+
+    private fun pages(app: TestApp): List<Any?> = rule.runOnIdle { app.stack.pages.map { it.page } }
+
+    @Test
+    fun aCardOutOverQueueThenAlbumPopsToQueue() {
+        val (app, f) = cardApp { listOf(music(it, MusicPage.Hub), music(it, MusicPage.Queue), music(it, MusicPage.Album(ALBUM))) }
+        assertEquals("premise", listOf(MusicPage.Hub, MusicPage.Queue, MusicPage.Album(ALBUM)), pages(app))
+        rule.runOnIdle { f.card(Card.Out) }
+        frames(OPEN_FRAMES)
+        assertEquals(listOf<Any?>(MusicPage.Hub, MusicPage.Queue), pages(app))
+    }
+
+    @Test
+    fun aCardOutDuringAMovePopsAtTheSettle() {
+        val (app, f) = cardApp { listOf(music(it, MusicPage.Hub), music(it, MusicPage.Queue)) }
+        rule.runOnIdle { app.stack.push(music(app, MusicPage.Album(ALBUM)), MoveKind.T2) }
+        frames(CUT_FRAMES)
+        assertTrue("premise: the push moves", rule.runOnIdle { app.stack.moving })
+        rule.runOnIdle { f.card(Card.Out) }
+        frames(CUT_FRAMES)
+        assertTrue("the card out leaves the push moving", rule.runOnIdle { app.stack.moving })
+        assertEquals("nothing pops during the move, the album still arrives", MusicPage.Album(ALBUM), rule.runOnIdle { app.stack.turn?.to?.page })
+        var landed = false
+        repeat(OPEN_FRAMES) {
+            frames(1)
+            if (pages(app).size == STACKED) landed = true
+        }
+        assertTrue("the album lands before the pop", landed)
+        until("the pop lands") { !app.stack.moving }
+        assertEquals(listOf<Any?>(MusicPage.Hub, MusicPage.Queue), pages(app))
+    }
+
+    @Test
+    fun aCardBackBeforeTheSettleWithdrawsThePop() {
+        val (app, f) = cardApp { listOf(music(it, MusicPage.Hub), music(it, MusicPage.Queue)) }
+        rule.runOnIdle { app.stack.push(music(app, MusicPage.Album(ALBUM)), MoveKind.T2) }
+        frames(CUT_FRAMES)
+        rule.runOnIdle { f.card(Card.Out) }
+        frames(CUT_FRAMES)
+        rule.runOnIdle { f.card(Card.Present) }
+        frames(CUT_FRAMES)
+        assertTrue("premise: the push still moves", rule.runOnIdle { app.stack.moving })
+        until("the moves settle") { !app.stack.moving }
+        assertEquals("the card came back before the pop could run", listOf<Any?>(MusicPage.Hub, MusicPage.Queue, MusicPage.Album(ALBUM)), pages(app))
+    }
+
+    @Test
+    fun theQueueACardOutPopRevealsShowsNoRowsFromItsFirstFrame() {
+        val (app, f) = cardApp(root = true) { listOf(music(it, MusicPage.Hub), music(it, MusicPage.Queue)) }
+        runBlocking { f.player.play(Listing.Songs, f.library.view().generation, 0, 0L) }
+        val q = rule.runOnIdle { app.models[app.stack.pages.last().entry] as QueueModel }
+        until("premise: the queue shows rows") { q.rowsShown > 0 }
+        rule.runOnIdle { app.stack.push(music(app, MusicPage.Album(ALBUM)), MoveKind.T2) }
+        until("premise: the album lands") { app.stack.pages.size == STACKED && !app.stack.moving }
+        rule.runOnIdle { f.card(Card.Out) }
+        var first = -1
+        repeat(OPEN_FRAMES) {
+            frames(1)
+            if (first < 0 && rule.runOnIdle { app.stack.turn != null }) first = rule.runOnIdle { q.rowsShown }
+        }
+        assertEquals("the queue under the pop takes the card before its first frame", 0, first)
+        until("the pop lands") { !app.stack.moving }
+        assertEquals(listOf<Any?>(MusicPage.Hub, MusicPage.Queue), pages(app))
+    }
+
+    @Test
+    fun aQueueOpenedWhileTheCardIsOutShowsNoRows() {
+        val (app, f) = cardApp(root = true) { listOf(music(it, MusicPage.Hub)) }
+        runBlocking { f.player.play(Listing.Songs, f.library.view().generation, 0, 0L) }
+        rule.runOnIdle { f.card(Card.Out) }
+        frames(OPEN_FRAMES)
+        val queue = rule.runOnIdle { music(app, MusicPage.Queue).also { app.stack.push(it, MoveKind.T2) } }
+        until("premise: the queue opens") { app.models[queue.entry] != null }
+        val q = rule.runOnIdle { app.models[queue.entry] as QueueModel }
+        assertEquals("a model made after the card went out takes the card", Card.Out, rule.runOnIdle { q.card })
+        until("premise: the queue takes the player state") { q.size > 0 }
+        assertEquals(0, rule.runOnIdle { q.rowsShown })
+    }
+
+    @Test
+    fun aCardOutDropsAnAlbumColumnPickWaitingForItsDrop() {
+        val (app, f) = cardApp(root = true) { listOf(music(it, MusicPage.Hub)) }
+        val hub = rule.runOnIdle { app.stack.pages.single() }
+        val h = rule.runOnIdle { app.models[hub.entry] as HubModel }
+        rule.runOnIdle { h.select(HUB_ALBUMS) }
+        until("premise: the albums pane loads") { h.pane.map != null }
+        val letter = rule.runOnIdle { (0 until Section.count).first { h.pane.map?.has(it) == true } }
+        rule.runOnIdle { h.colPick = letter }
+        rule.runOnIdle { f.card(Card.Out) }
+        frames(OPEN_FRAMES)
+        rule.runOnIdle { app.host.dropped(hub, rule.mainClock.currentTime) }
+        frames(OPEN_FRAMES)
+        assertFalse("no column push moves", rule.runOnIdle { app.stack.moving })
+        assertEquals("the pick went with the card", listOf<Any?>(MusicPage.Hub), pages(app))
+    }
+
+    @Test
+    fun aCardOutOverARootRunPopsToTheRoot() {
+        val (app, f) = cardApp { listOf(music(it, MusicPage.AlbumCol(0)), music(it, MusicPage.Album(ALBUM))) }
+        rule.runOnIdle { f.card(Card.Error) }
+        frames(OPEN_FRAMES)
+        assertEquals(emptyList<Any?>(), pages(app))
     }
 
     @Test
@@ -2880,6 +3010,8 @@ class HostTest {
         private const val STEPS = 10
         private const val OPEN_FRAMES = 30
         private const val CUT_FRAMES = 2
+        private const val STACKED = 3
+        private const val MAX_FRAMES = 400
         private const val BLUR_FRAMES = 4
         private const val COVER = 64
         private const val DURATION = 180_000L

@@ -42,8 +42,8 @@ class PlaylistsDraw(
 
     fun DrawScope.row(look: ListLook, k: RowInk?, rec: DrawRecord?, name: String, focusShown: Boolean) = paneRow(m.pane.glow, look, k, rec, name, focusShown)
 
-    fun DrawScope.lines(count: String?, rec: DrawRecord?, name: String) {
-        listLines(geo, words, count, 1f, null, rec, name)
+    fun DrawScope.lines(count: String?, status: String?, rec: DrawRecord?, name: String) {
+        listLines(geo, words, count, 1f, status, rec, name)
     }
 }
 
@@ -80,7 +80,7 @@ class PlaylistsPaint(
 
     override fun DrawScope.rest(now: Long, rec: DrawRecord?, name: String) {
         if (!m.ready) return
-        with(d) { lines(m.count(), rec, name) }
+        with(d) { lines(if (m.status() == null) m.count() else null, m.status(), rec, name) }
         val off = m.track.q
         val first = maxOf(0, off / geo.pitch)
         val last = minOf(m.size - 1, (off + geo.view - 1) / geo.pitch)

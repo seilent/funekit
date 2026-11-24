@@ -35,7 +35,6 @@ import kotlinx.coroutines.withContext
 import net.seilent.funekit.Scale
 import net.seilent.funekit.api.ArtRef
 import net.seilent.funekit.api.Busy
-import net.seilent.funekit.api.Card
 import net.seilent.funekit.api.Disconnected
 import net.seilent.funekit.api.FailFast
 import net.seilent.funekit.api.Listing
@@ -106,6 +105,7 @@ import net.seilent.funekit.kit.touch.Tap
 import net.seilent.funekit.kit.touch.rememberListTouch
 import net.seilent.funekit.kit.touch.tapTarget
 import net.seilent.funekit.screens.music.MusicSource
+import net.seilent.funekit.screens.music.hub.cardLine
 import net.seilent.funekit.screens.music.lists.playlistsCount
 import net.seilent.funekit.screens.music.lists.quiet
 import net.seilent.funekit.screens.music.overlay.SheetFrom
@@ -120,15 +120,6 @@ private const val CUT_GROW = 2
 private const val PEEK = 1
 
 private val cutPaint by lazy { Paint().apply { colorFilter = ColorFilter.tint(Ink.bg) } }
-
-internal const val CARD_OUT = "no card"
-internal const val CARD_ERROR = "card error"
-
-internal fun cardStatus(card: Card): String = when (card) {
-    Card.Out -> CARD_OUT
-    Card.Error -> CARD_ERROR
-    Card.Present, Card.Held -> ""
-}
 
 fun playlistsSub(lists: Int, none: HomeEntry): String = if (lists > 0) playlistsCount(lists) else none.sub
 
@@ -681,7 +672,7 @@ fun <S : Any> HomeLayer(
             qp.status = ""
             return@LaunchedEffect
         }
-        lib.state.collect { qp.status = cardStatus(it.card) }
+        lib.state.collect { qp.status = cardLine(it.card) }
     }
     fun qpHold(tile: QpTile): Boolean {
         if (tile.section == QP_PLAYING) return false

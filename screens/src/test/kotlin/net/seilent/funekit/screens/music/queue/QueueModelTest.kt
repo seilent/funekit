@@ -2,6 +2,7 @@ package net.seilent.funekit.screens.music.queue
 
 import kotlinx.coroutines.runBlocking
 import net.seilent.funekit.kit.touch.RowSpec
+import net.seilent.funekit.api.Card
 import net.seilent.funekit.api.Kind
 import net.seilent.funekit.api.Listing
 import net.seilent.funekit.api.PlayerState
@@ -42,6 +43,17 @@ class QueueModelTest {
         val st = src.player.state.value
         assertTrue(m.changed(st))
         src.viewed { v -> m.sync(v, st, 0L) }
+    }
+
+    @Test
+    fun aCardOutShowsNoRows() {
+        val m = opened(songs(8), 0)
+        assertEquals("premise: the queue shows its rows", m.size, m.rowsShown)
+        assertTrue(m.size > 0)
+        m.card = Card.Out
+        assertEquals(0, m.rowsShown)
+        m.card = Card.Present
+        assertEquals(m.size, m.rowsShown)
     }
 
     @Test

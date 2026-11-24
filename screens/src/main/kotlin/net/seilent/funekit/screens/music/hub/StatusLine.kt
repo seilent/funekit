@@ -3,6 +3,7 @@ package net.seilent.funekit.screens.music.hub
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import net.seilent.funekit.Roles
 import net.seilent.funekit.Scale
+import net.seilent.funekit.api.Card
 import net.seilent.funekit.fx
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.Ink
@@ -16,6 +17,15 @@ import net.seilent.funekit.px
 import net.seilent.funekit.px64
 import net.seilent.funekit.screens.music.MusicPage
 import net.seilent.funekit.screens.music.pivots
+
+const val NO_CARD = "no card"
+const val CARD_ERROR = "card error"
+
+fun cardLine(card: Card): String = when (card) {
+    Card.Out -> NO_CARD
+    Card.Error -> CARD_ERROR
+    Card.Present, Card.Held -> ""
+}
 
 fun scanShown(scanning: Boolean, songs: Int): Boolean = scanning && songs == 0
 

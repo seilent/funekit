@@ -1,6 +1,7 @@
 package net.seilent.funekit.screens.music.sheet
 
 import kotlinx.coroutines.runBlocking
+import net.seilent.funekit.api.Card
 import net.seilent.funekit.api.Listing
 import net.seilent.funekit.fake.FakeSet
 import net.seilent.funekit.screens.music.lists.HISTORY_NEW
@@ -23,8 +24,9 @@ class HistorySheetTest {
 
     private fun funeOs(kind: String) = kind.removePrefix("large-").replace('-', ':')
 
-    private fun page(dev: Dev, kind: String, large: Boolean, steps: Int = 0, newPane: Boolean = false, play: Boolean = false, noPlays: Boolean = false, noNew: Boolean = false, note: String): Tile {
+    private fun page(dev: Dev, kind: String, large: Boolean, steps: Int = 0, newPane: Boolean = false, play: Boolean = false, noPlays: Boolean = false, noNew: Boolean = false, card: Card = Card.Present, note: String): Tile {
         val h = HistoryShot(sc, dev, large = large, noPlays = noPlays, noNew = noNew)
+        h.m.card = card
         if (newPane) h.switch(HISTORY_NEW, HISTORY_AT)
         for (i in 0 until steps) h.knob(i + 1, HISTORY_AT + i * SHEET_KNOB)
         val base = if (newPane) HISTORY_AT + NEW_REST else HISTORY_AT + steps * SHEET_KNOB + SHEET_SHOT
@@ -88,6 +90,8 @@ class HistorySheetTest {
             "history-500-new" -> page(dev, k, large, newPane = true, note = "switch_pivot to NEW at $HISTORY_AT, NEW row 0")
             "history-500-new-play" -> page(dev, k, large, newPane = true, play = true, note = "switch_pivot to NEW at $HISTORY_AT, NEW row 0 played in place, its album whole")
             "history-500-sheet" -> sheet(dev, k, large)
+            "nocard-500-history" -> page(dev, k, large, card = Card.Out, note = "the card out: RECENT with the line no card and no rows")
+            "cardbad-500-history" -> page(dev, k, large, card = Card.Error, note = "a card error: RECENT with the line card error and no rows")
             "history-150-t5" -> t5(dev, k, large)
             else -> error("no scene $kind")
         }
@@ -109,7 +113,7 @@ class HistorySheetTest {
         private const val T5_IN = 150L
         val KINDS = listOf(
             "history-500", "history-500-3", "history-500-3-play", "history-500-empty", "history-500-empty-new",
-            "history-500-new", "history-500-new-play", "history-500-sheet", "history-150-t5",
+            "history-500-new", "history-500-new-play", "history-500-sheet", "history-150-t5", "nocard-500-history", "cardbad-500-history",
         ) + PRESS_PHASES.map { "rowpress-0-history-${it.first}" }
         val LARGE = listOf("history-500", "history-500-empty", "history-500-empty-new", "history-500-sheet", "history-500-new-play") +
             PRESS_PHASES.map { "rowpress-0-history-${it.first}" }

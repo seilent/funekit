@@ -3,6 +3,7 @@ package net.seilent.funekit.screens.music.sheet
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import net.seilent.funekit.Nav
 import net.seilent.funekit.Scale
+import net.seilent.funekit.api.Card
 import net.seilent.funekit.api.Kind
 import net.seilent.funekit.api.Listing
 import net.seilent.funekit.api.Row
@@ -30,9 +31,10 @@ class ListsSheetTest {
 
     private fun head(l: Row): Row = Row(l.id, Kind.Playlist, l.title, "", null, writable = l.writable)
 
-    private fun listTile(board: Dev, kind: String, large: Boolean, rows: Int, shot: Long, note: String, scenes: MusicScenes = sc): Tile {
+    private fun listTile(board: Dev, kind: String, large: Boolean, rows: Int, shot: Long, note: String, scenes: MusicScenes = sc, card: Card = Card.Present): Tile {
         val dev = scenes.same(board)
         val h = PlaylistsShot(scenes, dev, large = large)
+        h.m.card = card
         for (i in 0 until rows) h.knob(i + 1, LISTS_AT + i * SHEET_KNOB)
         val rec = scenes.regionsOn(dev, h.s, true, S6_LOUD)
         return scenes.s6Tile(FOLDER, dev, kind, h.s, listOf("as funeOS ${kind.removePrefix("large-").replace('-', ':')}: $note; shot at $shot"), rec) { with(h) { page(shot, rec) } }
@@ -158,6 +160,7 @@ class ListsSheetTest {
             "playlists-500-none" -> listTile(dev, k, large, 0, LISTS_AT + SHEET_SHOT, "no lists loaded (this fixture's DemoNoPlaylists): now playing and FAVORITES, 0 playlists", bare)
             "playlists-500-sheet" -> favsSheet(dev, k, large)
             "playlists-500-play" -> listPlay(dev, k, large)
+            "nocard-500-plpage" -> listTile(dev, k, large, 0, LISTS_AT + SHEET_SHOT, "the card out, the Playlists page with its status line and no count", card = Card.Out)
             "plview-500" -> viewTile(dev, k, large, fav = false, play = false)
             "plview-500-play" -> viewTile(dev, k, large, fav = false, play = true)
             "plview-500-sheet" -> viewSheet(dev, k, large)
@@ -210,7 +213,7 @@ class ListsSheetTest {
         private const val FAV_AT = 6160L
         private const val EMPTY_REST = 600L
         val KINDS = listOf(
-            "playlists-500", "playlists-500-1", "playlists-500-2", "playlists-500-3", "playlists-500-none", "playlists-500-sheet", "playlists-500-play",
+            "playlists-500", "playlists-500-1", "playlists-500-2", "playlists-500-3", "playlists-500-none", "playlists-500-sheet", "playlists-500-play", "nocard-500-plpage",
             "plview-500", "plview-500-play", "plview-500-sheet", "plview-500-fav", "plview-500-fav-play", "plview-500-empty",
         ) + listOf("playlists", "favorites").flatMap { i -> PRESS_PHASES.map { "rowpress-0-$i-${it.first}" } }
         val LARGE = listOf("playlists-500", "playlists-500-sheet", "playlists-500-play", "plview-500", "plview-500-sheet", "plview-500-empty") +

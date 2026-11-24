@@ -557,7 +557,7 @@ class DeleteHostTest {
     }
 
     @Test
-    fun aSourceChangeACardOutAndANewCardDropTheOwedExit() {
+    fun aSourceChangeAHeldCardAndANewCardDropTheOwedExit() {
         launch()
         val albums = rows(Listing.Albums)
         val hub = screen(MusicPage.Hub)
@@ -571,12 +571,12 @@ class DeleteHostTest {
         val second = screen(MusicPage.Album(albums[1].id))
         on(hub, second)
         delete(albumTarget(albums[1]))
-        fake.card(Card.Out)
+        fake.card(Card.Held)
         frames(OPEN_FRAMES)
         fake.card(Card.Present)
         frames(OPEN_FRAMES)
         rescan(albums[1].id)
-        assertSame("a card out drops the owed exit", second, top())
+        assertSame("a held card drops the owed exit", second, top())
         val third = screen(MusicPage.Album(albums[2].id))
         on(hub, third)
         delete(albumTarget(albums[2]))
@@ -587,7 +587,7 @@ class DeleteHostTest {
     }
 
     @Test
-    fun aCardOutWhileTheLeaveWaitsUnderASheetPopsNothing() {
+    fun aHeldCardWhileTheLeaveWaitsUnderASheetPopsNothing() {
         launch()
         val a = rows(Listing.Albums).first()
         val album = screen(MusicPage.Album(a.id))
@@ -597,7 +597,7 @@ class DeleteHostTest {
         frames(OPEN_FRAMES)
         rescan(a.id)
         assertSame("premise: the leave waits under the sheet", album, top())
-        fake.card(Card.Out)
+        fake.card(Card.Held)
         frames(OPEN_FRAMES)
         rule.runOnIdle { stack.close() }
         frames(LEAVE_FRAMES)

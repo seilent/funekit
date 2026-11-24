@@ -1,6 +1,7 @@
 package net.seilent.funekit.screens.music.sheet
 
 import kotlinx.coroutines.runBlocking
+import net.seilent.funekit.api.Card
 import net.seilent.funekit.kit.MenuForm
 import net.seilent.funekit.kit.stack.Phase
 import net.seilent.funekit.screens.music.overlay.sheetItems
@@ -47,10 +48,12 @@ class QueueSheetTest {
                 r.resync(MOVE_AT)
             }))
         }
+        val nocard = rig(dev, large).also { r -> r.run(MOVE_AT + EMPTY_SHOT, listOf(MOVE_AT to { r.q.card = Card.Out })) }
         val tiles = mutableListOf(
             tile("${pre}queue-1500", rest, "as funeOS queue:1500: ALBUMS cell 2's album playing from track 1 (this fixture's album at that cell, 8 tracks as funeOS's), now playing opened at 4240, its title tapped at 5240 with the up at 5290, the queue pushed with T3 and at rest on the current slot; shot 1500 ms after the up", LIST_LOUD),
             tile("${pre}queue-2500-7", seven, "as funeOS queue:2500:7: the queue at rest, seven knob steps from 6240 120 ms apart to row 7, scrolled into view; shot 2500 ms after the up", LIST_LOUD),
             tile("${pre}queue-500-empty", empty, "as funeOS queue:500:empty: the queue at rest, the player cleared at 6240, so no count line and the line nothing here; shot 500 ms after the clear", EMPTY_LOUD),
+            tile("${pre}nocard-500-queue", nocard, "as funeOS nocard:500:queue: the queue at rest, the card out at 6240, so no rows, no count line and the line no card; shot 500 ms after", EMPTY_LOUD),
         )
         if (!large) {
             val push = rig(dev, false).also { it.run(QueueRig.TAP_UP + EARLY) }
@@ -102,7 +105,7 @@ class QueueSheetTest {
         sc.render.write(Sheet(FOLDER, "queue", listOf("The queue page, its T3 push and T4 pop, its row sheets and a row press beside funeOS queue-*, queuex-*, queuesheet-500-* and rowpress-0-queue-*."), tiles))
         sc.render.index(FOLDER, listOf(
             "# Queue", "",
-            "- `$FOLDER/queue.png`: R1 and A105 `queue-150`, `-1500`, `-1500-@1`, `-2500-7`, `-500-empty`, `queuex-150`, `-500`, `queuesheet-500-0`, `-1`, `-3`, `rowpress-0-queue-down`, `-held`, `-tap`, `-up`; V1 `large-queue-1500`, `-2500-7`, `-500-empty`, `large-queuesheet-500-3`",
+            "- `$FOLDER/queue.png`: R1 and A105 `queue-150`, `-1500`, `-1500-@1`, `-2500-7`, `-500-empty`, `nocard-500-queue`, `queuex-150`, `-500`, `queuesheet-500-0`, `-1`, `-3`, `rowpress-0-queue-down`, `-held`, `-tap`, `-up`; V1 `large-queue-1500`, `-2500-7`, `-500-empty`, `large-nocard-500-queue`, `large-queuesheet-500-3`",
             "- the queue is this fixture's album at ALBUMS cell 2, 8 tracks as funeOS's 15 Dorro; the STATUS row is not drawn",
         ))
     }

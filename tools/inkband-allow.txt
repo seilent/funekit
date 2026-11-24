@@ -384,3 +384,33 @@ a105/eq-parametric no funeOS reference in the set: the v0.4.3 EQ shots are eq-50
 a105/eq-graphic no funeOS reference in the set: the v0.4.3 EQ shots are eq-500 and eqrows kinds, none of them this scene
 a105/eq-preamp-edit no funeOS reference in the set: the v0.4.3 EQ shots are eq-500 and eqrows kinds, none of them this scene
 a105/eq-parametric-large no funeOS reference in the set: the v0.4.3 EQ shots are eq-500 and eqrows kinds, none of them this scene
+a105/cardbad-500-albums the hub under a card error draws only the chrome and the line card error, all text, and the residual pass gates the rest, so no region gates
+a105/cardbad-500-artists the hub under a card error draws only the chrome and the line card error, all text, and the residual pass gates the rest, so no region gates
+a105/cardbad-500-history History under a card error draws only the chrome and the line card error, all text, and the residual pass gates the rest, so no region gates
+a105/cardbad-500-songs the hub under a card error draws only the chrome and the line card error, all text, and the residual pass gates the rest, so no region gates
+a105/nocard-500-albums the hub under a card out draws only the chrome and the line no card, all text, and the residual pass gates the rest, so no region gates
+a105/nocard-500-artists the hub under a card out draws only the chrome and the line no card, all text, and the residual pass gates the rest, so no region gates
+a105/nocard-500-folders the hub under a card out draws only the chrome and the line no card, all text, and the residual pass gates the rest, so no region gates
+a105/nocard-500-genres the hub under a card out draws only the chrome and the line no card, all text, and the residual pass gates the rest, so no region gates
+a105/nocard-500-history History under a card out draws only the chrome and the line no card, all text, and the residual pass gates the rest, so no region gates
+a105/nocard-500-playlists the hub under a card out draws only the chrome and the line no card, all text, and the residual pass gates the rest, so no region gates
+a105/nocard-500-plpage the Playlists page under a card out draws only its header and the line no card, both text, so no region gates
+a105/nocard-500-queue the queue under a card out draws only its header and the line no card, both text, so no region gates
+a105/nocard-500-songs the hub under a card out draws only the chrome and the line no card, all text, and the residual pass gates the rest, so no region gates
+r1/cardbad-500-albums the hub under a card error draws only the chrome and the line card error, all text, and the residual pass gates the rest, so no region gates
+r1/cardbad-500-artists the hub under a card error draws only the chrome and the line card error, all text, and the residual pass gates the rest, so no region gates
+r1/cardbad-500-history History under a card error draws only the chrome and the line card error, all text, and the residual pass gates the rest, so no region gates
+r1/cardbad-500-songs the hub under a card error draws only the chrome and the line card error, all text, and the residual pass gates the rest, so no region gates
+r1/nocard-500-albums the hub under a card out draws only the chrome and the line no card, all text, and the residual pass gates the rest, so no region gates
+r1/nocard-500-artists the hub under a card out draws only the chrome and the line no card, all text, and the residual pass gates the rest, so no region gates
+r1/nocard-500-folders the hub under a card out draws only the chrome and the line no card, all text, and the residual pass gates the rest, so no region gates
+r1/nocard-500-genres the hub under a card out draws only the chrome and the line no card, all text, and the residual pass gates the rest, so no region gates
+r1/nocard-500-history History under a card out draws only the chrome and the line no card, all text, and the residual pass gates the rest, so no region gates
+r1/nocard-500-playlists the hub under a card out draws only the chrome and the line no card, all text, and the residual pass gates the rest, so no region gates
+r1/nocard-500-plpage the Playlists page under a card out draws only its header and the line no card, both text, so no region gates
+r1/nocard-500-queue the queue under a card out draws only its header and the line no card, both text, so no region gates
+r1/nocard-500-songs the hub under a card out draws only the chrome and the line no card, all text, and the residual pass gates the rest, so no region gates
+v1/cardbad-500-history History under a card error draws only the chrome and the line card error, all text, and the residual pass gates the rest, so no region gates
+v1/large-nocard-500-queue the queue under a card out draws only its header and the line no card, both text, so no region gates
+v1/nocard-500-history History under a card out draws only the chrome and the line no card, all text, and the residual pass gates the rest, so no region gates
+v1/nocard-500-plpage the Playlists page under a card out draws only its header and the line no card, both text, so no region gates
