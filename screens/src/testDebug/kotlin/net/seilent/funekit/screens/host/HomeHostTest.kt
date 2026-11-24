@@ -62,6 +62,7 @@ import net.seilent.funekit.kit.quickplay.QpKind
 import net.seilent.funekit.kit.quickplay.QpLayout
 import net.seilent.funekit.kit.quickplay.QuickplayState
 import net.seilent.funekit.kit.quickplay.peekHit
+import net.seilent.funekit.kit.quickplay.qpPos
 import net.seilent.funekit.kit.quickplay.qpTiles
 import net.seilent.funekit.kit.quickplay.quickplay
 import net.seilent.funekit.kit.stack.Phase
@@ -558,6 +559,30 @@ class HomeHostTest {
         val s = state
         assertEquals("the pressed tile is lit at the last frame", 1f, qp.look(s.qpLayout, s.frame).lit[1], 0f)
         rule.onRoot().performTouchInput { up() }
+    }
+
+    @Test
+    fun aT8ToTheFrontStopsThePaneScrollAtItsStart() {
+        val ids = songs(SCROLL_TILES)
+        runBlocking { fake.player.play(listOf(ids[0]), 0, 0) }
+        val qp = front(songData(ids))
+        rule.runOnUiThread { app.host.openNp(npOpenForm(true, true)) }
+        until("now playing is over the front") { npOnTop() }
+        settle()
+        val l = state.qpLayout
+        val pos = qpPos(state.qpTouch, qp, l)
+        rule.runOnUiThread {
+            qp.focus = l.count - 1
+            qp.into(l, pos)
+        }
+        assertTrue("premise: the pane has a scroll to run", qp.aiming && qp.aim != pos)
+        systemBack()
+        until("the T8 starts") { stack.turn?.kind == MoveKind.T8 }
+        assertFalse("the T8 stops the pane's scroll at its start", qp.aiming)
+        until("the T8 lands at the front") { stack.turn == null && stack.phase == Phase.Rest }
+        settle()
+        assertTrue("premise: the pane is in front", qp.pan.front && stack.top == null)
+        assertEquals("the front lands on the scroll it showed", pos, qpPos(state.qpTouch, qp, l))
     }
 
     @Test
@@ -1097,6 +1122,7 @@ class HomeHostTest {
         private const val HOLD = 300L
         private const val TAP_MS = 50L
         private const val TILES = 3
+        private const val SCROLL_TILES = 16
         private const val LOAD_TILES = 8
         private const val RGB = 0xFFFFFF
         private const val HINT_PX = 6

@@ -57,6 +57,8 @@ import net.seilent.funekit.kit.home.homeInk
 import net.seilent.funekit.kit.home.homeMenu
 import net.seilent.funekit.kit.home.homeRingRect
 import net.seilent.funekit.kit.motion.Curves
+import net.seilent.funekit.kit.motion.MoveKind
+import net.seilent.funekit.kit.motion.NpForm
 import net.seilent.funekit.kit.motion.OverKind
 import net.seilent.funekit.kit.motion.lerp
 import net.seilent.funekit.kit.proj.M3
@@ -377,6 +379,10 @@ class HomeState internal constructor(
     fun starting(t: Turn<*>) {
         held = entries
         homeStarting(t, menu, homeTouch)
+        if (t.kind == MoveKind.T8 && npCloseForm(t.to == null, qp.pan.front) == NpForm.Front) {
+            qp.stopAim()
+            qpTouch.halt()
+        }
     }
 
     fun cancel() = homeTouch.cancel()
