@@ -58,6 +58,7 @@ private const val TAIL_STEP = 4L
 private const val REACH_STEP = 16L
 private const val REACH_PAD = 2
 private const val NP_LEAVE_BANDS = 9
+private const val PANE_TILES = 2
 
 class Bands(val first: Int, val y: IntArray, val dy: IntArray, val dx: Float)
 
@@ -81,6 +82,8 @@ class TileHide(val album: Long, val ring: Boolean)
 
 class NpBands(val form: NpLeave, val bands: List<Pair<Edges, Part>>)
 
+class KeyTile(val reach: Int, val tile: Edges?)
+
 class HomeMove(val items: Float, val sel: Int, val selAlpha: Float, val sub: Float, val off: Float, val watermark: Boolean = true)
 
 interface HomePaint {
@@ -101,6 +104,8 @@ interface HomePaint {
     fun DrawScope.frontPeek(alpha: Float, now: Long) {}
 
     fun itemWord(item: Int): Word? = null
+
+    fun keyTile(): KeyTile? = null
 }
 
 interface PagePaint {
@@ -493,6 +498,9 @@ class TurnEye(val out: NpEye, val inD: Float, val inEye: Float, val cx: Float)
 internal const val NP_OUT = "np.out"
 internal const val NP_PEEK = "np.peek"
 internal const val NP_PANE = "np.pane"
+internal const val NP_PANE_REACH = "np.pane.reach"
+internal const val NP_PEEK_CUT = "np.peek.cut"
+internal const val NP_LEAVE_REACH = "np.leave.reach"
 internal const val NP_HOME = "np.home"
 internal const val NP_UNDER = "np.under."
 internal const val NP_LEAVE = "np.leave"
@@ -570,6 +578,8 @@ internal fun t8PeekEye(h: HomeSide, rect: Edges): Float {
 }
 
 internal fun npPeekRect(menu: Edges, pane: Edges, src: Edges): Edges = Edges(max(max(menu.x0, pane.x1), src.x1), menu.y0, menu.x1, menu.y1)
+
+private fun meet(a: Edges, b: Edges): Edges? = a.and(b).takeIf { it.w > 0 && it.h > 0 }
 
 fun npEye(stdPpu: Float, heightPx: Int, hinge: Float, eye: Float): NpEye =
     NpEye(max(1f, whole(Tok.motion_perspective, stdPpu)), whole(hinge, stdPpu), Math.round(eye * heightPx).toFloat())
@@ -1037,10 +1047,24 @@ class MovePaint(private val move: PageMove) {
         val x1 = px(Tok.qpEdge, p)
         val x2 = px(Tok.qpEdge + Tok.qpTile + Tok.qpGutter, p)
         val side = px(Tok.qpTile, p)
-        val src = Edges(max(0, x1), 0, min(s.widthPx, x2 + side), s.heightPx)
+        val key = h?.paint?.keyTile()
+        val reach = key?.reach ?: 0
+        val end = max(x2 + side, x1 + px(PANE_TILES * Tok.qpTile + Tok.qpGutter, p))
+        val src = Edges(max(0, x1 - reach), 0, min(s.widthPx, end + reach), s.heightPx)
         val pane = h?.paint?.frontPane()
         val front = e.npForm == NpForm.Front && h != null && pane != null
         val peekR = if (front && h != null && pane != null) npPeekRect(menuPeek(h.scale, pane.x1), pane, src) else null
+        val band = if (peekR != null && pane != null && src.x1 > pane.x1) Edges(pane.x1, 0, src.x1, s.heightPx) else null
+        val paneSrc = if (band != null) Edges(src.x0, src.y0, band.x0, src.y1) else src
+        val g = key?.tile?.let { Edges(it.x0 - reach, it.y0 - reach, it.x1 + reach, it.y1 + reach) }
+        val reachR = if (band == null || g == null || g.x1 <= band.x0) null else meet(band, Edges(band.x0, g.y0, band.x1, g.y1))
+        val cuts = if (band == null || peekR == null) {
+            emptyList()
+        } else {
+            val y0 = reachR?.y0?.coerceIn(peekR.y0, peekR.y1) ?: peekR.y1
+            val y1 = reachR?.y1?.coerceIn(peekR.y0, peekR.y1) ?: peekR.y1
+            listOf(meet(band, Edges(band.x0, peekR.y0, band.x1, y0)), meet(band, Edges(band.x0, y1, band.x1, peekR.y1)))
+        }
         fun DrawScope.peek() {
             if (h == null || peekR == null) return
             val r = v.at(Part.NpPeek, Prop.R, now)
@@ -1050,7 +1074,9 @@ class MovePaint(private val move: PageMove) {
                 v.kind == MoveKind.T8 -> sh * turn(r, x1 + whole(Tok.motion_t8PeekHinge, p), t8PeekEye(h, peekR), max(1f, whole(Tok.motion_t8PeekD, p)))
                 else -> sh * turn(r, peekR.x0.toFloat(), ((peekR.y0 + peekR.y1) / MID).toFloat(), d)
             }
-            quadAt(rec, NP_PEEK, v.at(Part.NpPeek, Prop.A, now), t, peekR) { with(h.paint) { frontPeek(Tok.motion_quickplayAlpha, now) } }
+            val a = v.at(Part.NpPeek, Prop.A, now)
+            quadAt(rec, NP_PEEK, a, t, peekR) { with(h.paint) { frontPeek(Tok.motion_quickplayAlpha, now) } }
+            cuts.forEachIndexed { i, c -> if (c != null) quadAt(rec, NP_PEEK_CUT + i, a, t, c) { with(h.paint) { frontPeek(Tok.motion_quickplayAlpha, now) } } }
         }
         if (v.kind == MoveKind.T8) {
             val out = npEye(p, s.heightPx, Tok.motion_t8OutHinge, Tok.motion_t8OutEye)
@@ -1060,7 +1086,9 @@ class MovePaint(private val move: PageMove) {
             when {
                 front && h != null -> {
                     peek()
-                    quadAt(rec, NP_PANE, ua, underXf(m, now), src) { with(h.paint) { front(now) } }
+                    val t = underXf(m, now)
+                    quadAt(rec, NP_PANE, ua, t, paneSrc) { with(h.paint) { front(now) } }
+                    if (reachR != null) quadAt(rec, NP_PANE_REACH, ua, t, reachR) { with(h.paint) { front(now) } }
                 }
                 to != null -> {
                     val t = underXf(m, now)
@@ -1083,7 +1111,10 @@ class MovePaint(private val move: PageMove) {
             val t = cam(Part.NpLeave, max(1f, whole(Tok.motion_t7PaneD, p)), peye, cx, now)
             val from = m.from
             when {
-                front && h != null -> quadAt(rec, NP_LEAVE, la, t, src) { with(h.paint) { front(now) } }
+                front && h != null -> {
+                    quadAt(rec, NP_LEAVE, la, t, paneSrc) { with(h.paint) { front(now) } }
+                    if (reachR != null) quadAt(rec, NP_LEAVE_REACH, la, t, reachR) { with(h.paint) { front(now) } }
+                }
                 from != null -> quadAt(rec, NP_LEAVE, la, t) { restOf(from, now, null, "leave") }
                 h != null -> quadAt(rec, NP_LEAVE, la, t) { npHomeAt(h, v.t0, now) }
                 else -> Unit

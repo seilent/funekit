@@ -277,10 +277,13 @@ class MovePaintTest {
         var peekA = -1f
         var peekX = 0f
         var word: Word? = null
+        var key: KeyTile? = null
         val where = mutableListOf<Pair<String, String?>>()
         override val quickplay = true
 
         override fun frontPane(): Edges? = pane
+
+        override fun keyTile(): KeyTile? = key
 
         override fun itemWord(item: Int): Word? = if (item == 0) word else null
 
@@ -1188,10 +1191,11 @@ class MovePaintTest {
         assertEquals(0.79f, rec.quads[2].a, 1e-3f)
     }
 
-    private fun frontRun(off: Float = 0f, word: Word? = null): Run {
+    private fun frontRun(off: Float = 0f, word: Word? = null, key: KeyTile? = null): Run {
         val r = Run(off = { off })
         r.homePaint.pane = Edges(0, 0, 400, 1280)
         r.homePaint.word = word
+        r.homePaint.key = key
         r.paint.npForm = NpForm.Front
         r.stack.pages.add("np")
         r.stack.back { MoveKind.T8 }
@@ -1204,10 +1208,11 @@ class MovePaintTest {
         val r = frontRun()
         val at = 284L
         val rec = r.draw(at)
-        assertEquals(listOf(NP_PEEK, NP_PANE), rec.quads.map { it.name })
+        assertEquals(listOf(NP_PEEK, NP_PEEK_CUT + 0, NP_PANE), rec.quads.map { it.name })
+        assertEquals(listOf(400, 398, 552, 986), requireNotNull(rec.quad(NP_PEEK_CUT + 0).src).let { listOf(it.x0, it.y0, it.x1, it.y1) })
         val q = rec.quad(NP_PANE)
         assertEquals(17f / 33f, q.a, 1e-3f)
-        assertEquals(listOf(101, 0, 551, 1280), requireNotNull(q.src).let { listOf(it.x0, it.y0, it.x1, it.y1) })
+        assertEquals(listOf(101, 0, 400, 1280), requireNotNull(q.src).let { listOf(it.x0, it.y0, it.x1, it.y1) })
         assertEquals(-66.2f, Tok.motion_t8QpHinge, 0f)
         assertEquals(835.2f, Tok.motion_t8QpD, 0f)
         assertEquals(0.5052f, Tok.motion_t8QpEye, 0f)
@@ -1224,7 +1229,26 @@ class MovePaintTest {
             assertEquals("pane x ($x, $y)", x, bx, 0.05)
             assertEquals("pane y ($x, $y)", y, by, 0.05)
         }
-        assertEquals(listOf("frontPeek" to NP_PEEK, "front" to NP_PANE), r.homePaint.where)
+        assertEquals(listOf("frontPeek" to NP_PEEK, "frontPeek" to NP_PEEK_CUT + 0, "front" to NP_PANE), r.homePaint.where)
+    }
+
+    @Test
+    fun aT8FrontReachBandFollowsTheFocusedTileRows() {
+        val at = 284L
+        val r = frontRun(key = KeyTile(6, Edges(329, 500, 551, 722)))
+        val rec = r.draw(at)
+        assertEquals(listOf(NP_PEEK, NP_PEEK_CUT + 0, NP_PEEK_CUT + 1, NP_PANE, NP_PANE_REACH), rec.quads.map { it.name })
+        fun src(name: String) = requireNotNull(rec.quad(name).src).let { listOf(it.x0, it.y0, it.x1, it.y1) }
+        assertEquals("the pane stops at its edge", listOf(95, 0, 400, 1280), src(NP_PANE))
+        assertEquals("the reach band past it takes the focused tile's rows", listOf(400, 494, 558, 728), src(NP_PANE_REACH))
+        assertEquals("the peek starts past the reach", listOf(558, 398, 720, 986), src(NP_PEEK))
+        assertEquals("the peek band above the rows", listOf(400, 398, 558, 494), src(NP_PEEK_CUT + 0))
+        assertEquals("the peek band below the rows", listOf(400, 728, 558, 986), src(NP_PEEK_CUT + 1))
+        assertEquals(rec.quad(NP_PANE).t.map(450f, 600f), rec.quad(NP_PANE_REACH).t.map(450f, 600f))
+        assertEquals(rec.quad(NP_PEEK).t.map(450f, 450f), rec.quad(NP_PEEK_CUT + 0).t.map(450f, 450f))
+        val left = frontRun(key = KeyTile(6, Edges(101, 500, 323, 722))).draw(at)
+        assertEquals("a focus in the first column reaches no band", listOf(NP_PEEK, NP_PEEK_CUT + 0, NP_PANE), left.quads.map { it.name })
+        assertEquals(listOf(400, 398, 558, 986), requireNotNull(left.quad(NP_PEEK_CUT + 0).src).let { listOf(it.x0, it.y0, it.x1, it.y1) })
     }
 
     private fun t8PeekEyeAt(off: Double, w: Double): Double {
@@ -1240,7 +1264,7 @@ class MovePaintTest {
     private fun assertT8PeekTurn(r: Run, at: Long, eye: Double) {
         val rec = r.draw(at)
         val q = rec.quad(NP_PEEK)
-        assertEquals(listOf(551, 398, 720, 986), requireNotNull(q.src).let { listOf(it.x0, it.y0, it.x1, it.y1) })
+        assertEquals(listOf(552, 398, 720, 986), requireNotNull(q.src).let { listOf(it.x0, it.y0, it.x1, it.y1) })
         assertEquals(-132.9f, Tok.motion_t8PeekHinge, 0f)
         assertEquals(1042.6f, Tok.motion_t8PeekD, 0f)
         assertEquals(52f, Tok.motion_t8PeekEye, 0f)
@@ -1290,17 +1314,32 @@ class MovePaintTest {
         val rec = r.draw(at)
         val deg = r.move.at(Part.NpPeek, Prop.R, at).toDouble()
         assertEquals(25.84, deg, 1e-3)
-        val pr = Edges(551, 398, 720, 986)
+        val pr = Edges(552, 398, 720, 986)
         val q = rec.quad(NP_PEEK)
         assertEquals(listOf(pr.x0, pr.y0, pr.x1, pr.y1), requireNotNull(q.src).let { listOf(it.x0, it.y0, it.x1, it.y1) })
         val dx = Math.round(r.move.at(Part.NpPeek, Prop.X, at)).toDouble()
         val dy = Math.round(r.move.at(Part.NpPeek, Prop.Y, at)).toDouble()
-        val (wx, wy) = turnAt(640.0, 300.0, deg, 551.0, 692.0, 1656.0)
+        val (wx, wy) = turnAt(640.0, 300.0, deg, 552.0, 692.0, 1656.0)
         val o = q.t.map(640f, 300f)
         assertEquals(dx + wx, o.x.toDouble(), 0.05)
         assertEquals(dy + wy, o.y.toDouble(), 0.05)
-        assertEquals(listOf(101, 0, 551, 1280), requireNotNull(rec.quad(NP_LEAVE).src).let { listOf(it.x0, it.y0, it.x1, it.y1) })
-        assertEquals(listOf("front" to NP_LEAVE, "frontPeek" to NP_PEEK), r.homePaint.where)
+        assertEquals(listOf(101, 0, 400, 1280), requireNotNull(rec.quad(NP_LEAVE).src).let { listOf(it.x0, it.y0, it.x1, it.y1) })
+        assertEquals(listOf("front" to NP_LEAVE, "frontPeek" to NP_PEEK, "frontPeek" to NP_PEEK_CUT + 0), r.homePaint.where)
+    }
+
+    @Test
+    fun aT7FromTheQuickplayFrontLeavesTheReachBandOnTheFocusedTileRows() {
+        val r = Run()
+        r.homePaint.pane = Edges(0, 0, 400, 1280)
+        r.homePaint.key = KeyTile(6, Edges(329, 500, 551, 722))
+        r.paint.npForm = NpForm.Front
+        r.stack.push("np", MoveKind.T7)
+        r.stack.frame(0L)
+        val rec = r.draw(190L)
+        assertEquals(listOf(NP_LEAVE, NP_LEAVE_REACH, NP_PEEK, NP_PEEK_CUT + 0, NP_PEEK_CUT + 1), rec.quads.map { it.name }.filter { it.startsWith("np.leave") || it.startsWith(NP_PEEK) })
+        assertEquals(listOf(95, 0, 400, 1280), requireNotNull(rec.quad(NP_LEAVE).src).let { listOf(it.x0, it.y0, it.x1, it.y1) })
+        assertEquals(listOf(400, 494, 558, 728), requireNotNull(rec.quad(NP_LEAVE_REACH).src).let { listOf(it.x0, it.y0, it.x1, it.y1) })
+        assertEquals(rec.quad(NP_LEAVE).t.map(450f, 600f), rec.quad(NP_LEAVE_REACH).t.map(450f, 600f))
     }
 
     @Test

@@ -67,6 +67,7 @@ import net.seilent.funekit.kit.quickplay.quickplay
 import net.seilent.funekit.kit.stack.Phase
 import net.seilent.funekit.kit.stack.PlayOpen
 import net.seilent.funekit.kit.touch.Swipe
+import net.seilent.funekit.px
 import net.seilent.funekit.scale
 import net.seilent.funekit.screens.music.MusicPage
 import net.seilent.funekit.screens.music.MusicSource
@@ -557,6 +558,17 @@ class HomeHostTest {
         val s = state
         assertEquals("the pressed tile is lit at the last frame", 1f, qp.look(s.qpLayout, s.frame).lit[1], 0f)
         rule.onRoot().performTouchInput { up() }
+    }
+
+    @Test
+    fun theHomePaintGivesTheKeyFocusedTileAndItsBorderReach() {
+        val qp = front(songData(songs(TILES)))
+        assertNull("no key focus gives no key tile", state.paint(false).keyTile())
+        rule.runOnUiThread { qp.keyMove(1, state.qpLayout) }
+        val k = requireNotNull(state.paint(false).keyTile())
+        assertEquals(px(Tok.focus_border, home.stdPpu), k.reach)
+        val r = state.qpLayout.rect(1, 0L)
+        assertEquals(listOf(r.x0, r.y0, r.x1, r.y1), requireNotNull(k.tile).let { listOf(it.x0, it.y0, it.x1, it.y1) })
     }
 
     @Test

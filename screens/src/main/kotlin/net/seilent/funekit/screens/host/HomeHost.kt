@@ -248,8 +248,6 @@ fun projectedBounds(r: Edges, m: M3, grow: Int): Edges {
 
 fun homeRingAt(s: Scale, homeOff: Float, t: Float, grow: Int): Edges = projectedBounds(homeRingRect(s, homeOff, false), t6(t, s.stdPpu, s.widthPx), grow)
 
-private fun Edges.and(o: Edges): Edges = Edges(max(x0, o.x0), max(y0, o.y0), min(x1, o.x1), min(y1, o.y1))
-
 fun DrawScope.qpRingCut(l: QpLayout, words: QpInk, st: QuickplayState, boxes: QpBoxes, look: QpLook, active: Boolean, tiles: List<Edges>, geo: HomeGeo, t: Float, homeOff: Float, qpOff: Long) {
     val s = geo.s
     val rb = homeRingAt(s, homeOff, t, CUT_GROW).and(Edges(0, 0, s.widthPx, s.heightPx))

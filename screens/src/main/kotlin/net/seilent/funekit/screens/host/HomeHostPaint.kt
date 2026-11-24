@@ -23,7 +23,9 @@ import net.seilent.funekit.kit.quickplay.qpPeekWords
 import net.seilent.funekit.kit.stack.DrawRecord
 import net.seilent.funekit.kit.stack.HomeMove
 import net.seilent.funekit.kit.stack.HomePaint
+import net.seilent.funekit.kit.stack.KeyTile
 import net.seilent.funekit.kit.touch.ListTouch
+import net.seilent.funekit.px
 
 class LauncherHomePaint(
     private val geo: HomeGeo,
@@ -45,6 +47,12 @@ class LauncherHomePaint(
     override fun itemWord(item: Int): Word? = ink.names.getOrNull(item)
 
     override fun frontPane(): Edges = Edges(0, 0, qpLayout.panelPx, geo.s.heightPx)
+
+    override fun keyTile(): KeyTile? {
+        if (!qp.keyFocus) return null
+        val tile = if (qp.focus in 0 until qpLayout.count) qpLayout.rect(qp.focus, qpOff(qpTouch, qp, qpLayout)) else null
+        return KeyTile(px(Tok.focus_border, qpLayout.s.stdPpu), tile)
+    }
 
     override fun DrawScope.front(now: Long) = qpFront(qpLayout, qpWords, qp, qpBox, qpTouch, qp.look(qpLayout, now))
 
