@@ -27,6 +27,7 @@ import net.seilent.funekit.Scale
 import net.seilent.funekit.Surface
 import net.seilent.funekit.Window
 import net.seilent.funekit.fxInt
+import net.seilent.funekit.kept
 import net.seilent.funekit.api.ArtRef
 import net.seilent.funekit.api.Card
 import net.seilent.funekit.api.Kind
@@ -40,6 +41,7 @@ import net.seilent.funekit.api.Row
 import net.seilent.funekit.core.Section
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.MenuForm
+import net.seilent.funekit.kit.Jump
 import net.seilent.funekit.kit.np.NpLayout
 import net.seilent.funekit.kit.motion.MoveKind
 import net.seilent.funekit.kit.motion.NpForm
@@ -61,6 +63,7 @@ import net.seilent.funekit.fake.FakeSet
 import net.seilent.funekit.screens.music.HUB_ALBUMS
 import net.seilent.funekit.screens.music.MusicPage
 import net.seilent.funekit.screens.music.MusicSource
+import net.seilent.funekit.screens.music.albcol.AlbumColModel
 import net.seilent.funekit.screens.music.album.AlbumModel
 import net.seilent.funekit.screens.music.hub.HubModel
 import net.seilent.funekit.screens.music.nowplaying.AdjustHit
@@ -392,6 +395,42 @@ class HostTest {
         frames(OPEN_FRAMES)
         assertFalse("no column push moves", rule.runOnIdle { app.stack.moving })
         assertEquals("the pick went with the card", listOf<Any?>(MusicPage.Hub), pages(app))
+    }
+
+    @Test
+    fun aMosaicPickLandsOnTheAlbumColumnAtItsLetter() {
+        val (app, _) = cardApp(root = true) { listOf(music(it, MusicPage.Hub)) }
+        val hub = rule.runOnIdle { app.stack.pages.single() }
+        val h = rule.runOnIdle { app.models[hub.entry] as HubModel }
+        rule.runOnIdle { h.select(HUB_ALBUMS) }
+        until("premise: the albums pane loads") { h.pane.map != null }
+        val letter = rule.runOnIdle { (0 until Section.count).filter { h.pane.map?.has(it) == true }[1] }
+        val grid = page.kept()
+        rule.runOnIdle {
+            h.jumpPick = -1
+            h.colPick = -1
+            h.jump.open(h.avail(), letter, grid.stdContentBottom)
+            app.host.openJump(hub)
+        }
+        frames(OPEN_FRAMES)
+        assertEquals("premise: the jump grid is up", OverKind.Jump, rule.runOnIdle { app.stack.overlay?.kind })
+        val slot = Jump.slotOf(letter)
+        val off = rule.runOnIdle { h.jump.offset }
+        tap((Jump.cellX(slot) + Jump.tile / 2) * grid.stdPpu, (Jump.rowTop(slot) - off + Jump.tile / 2) * grid.stdPpu)
+        until("the grid drops") { app.stack.overlay == null }
+        assertEquals("the pick waits for the drop", letter, rule.runOnIdle { h.colPick })
+        var n = 0
+        while (rule.runOnIdle { app.stack.turn == null }) {
+            frames(1)
+            assertTrue("the column push starts", ++n < OPEN_FRAMES)
+        }
+        assertEquals("the column lands by T3c", MoveKind.T3c, rule.runOnIdle { app.stack.turn?.kind })
+        assertEquals("the pick fired", -1, rule.runOnIdle { h.colPick })
+        until("the column lands") { !app.stack.moving }
+        assertEquals(listOf<Any?>(MusicPage.Hub, MusicPage.AlbumCol(letter)), pages(app))
+        val col = rule.runOnIdle { app.models[app.stack.pages.last().entry] as AlbumColModel }
+        until("premise: the column opens") { col.opened }
+        assertEquals("the column shows its letter's tile first", letter, rule.runOnIdle { col.letterAt(col.track.first) })
     }
 
     @Test

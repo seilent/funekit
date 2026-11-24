@@ -11,9 +11,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -66,6 +68,7 @@ class ArbiterTest {
     private var takesLong = true
     private lateinit var touch: ListTouch
     private lateinit var arb: Arbiter
+    private var restarts by mutableIntStateOf(0)
 
     private val tap = Tap(
         onPress = { presses++ },
@@ -108,7 +111,7 @@ class ArbiterTest {
 
     private fun list(pan: Pan? = null) {
         rule.setContent {
-            val a = remember { Arbiter(v1) }
+            val a = remember(restarts) { Arbiter(v1) }
             arb = a
             touch = rememberListTouch(Kind.List, v1)
             Box(Modifier.fillMaxSize().arbiter(a, page(pan = pan))) {
@@ -264,6 +267,28 @@ class ArbiterTest {
         rule.mainClock.advanceTimeBy(1000)
         assertFalse(touch.moving)
         assertEquals(List(4) { true }, calls)
+    }
+
+    @Test
+    fun aDragPastTheEndThatEndsWithNoUpEndsItsDragAndReturns() {
+        list()
+        rule.mainClock.autoAdvance = false
+        rule.onRoot().performTouchInput {
+            down(center)
+            repeat(5) { moveBy(Offset(0f, 60f), delayMillis = 8) }
+        }
+        rule.mainClock.advanceTimeByFrame()
+        assertTrue("premise: the drag is past the list's end", touch.scroll.dragging && touch.over != 0f)
+        rule.runOnUiThread {
+            restarts++
+            Snapshot.sendApplyNotifications()
+        }
+        rule.mainClock.advanceTimeByFrame()
+        rule.mainClock.advanceTimeByFrame()
+        assertFalse("the restart's frame, then the next: the drag ended", touch.scroll.dragging || touch.dragging)
+        rule.mainClock.advanceTimeBy(1000)
+        assertEquals("the over returns", 0f, touch.over, 0f)
+        assertFalse(touch.moving)
     }
 
     @Test

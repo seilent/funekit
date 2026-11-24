@@ -4,9 +4,10 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -19,11 +20,11 @@ import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFontFamilyResolver
 import androidx.compose.ui.text.rememberTextMeasurer
-import kotlinx.coroutines.delay
 import net.seilent.funekit.core.Section
 import net.seilent.funekit.Role
 import net.seilent.funekit.Roles
@@ -34,6 +35,7 @@ import net.seilent.funekit.kit.motion.Curves
 import net.seilent.funekit.kit.motion.Overlay
 import net.seilent.funekit.kit.motion.OverlayGate
 import net.seilent.funekit.kit.motion.lerp
+import net.seilent.funekit.kit.motion.rememberOverlayFrame
 import net.seilent.funekit.kit.touch.Arbiter
 import net.seilent.funekit.kit.touch.BlockBelow
 import net.seilent.funekit.kit.touch.FuneList
@@ -99,6 +101,7 @@ class JumpGrid {
     var target = 0f
         private set
     var dragging = false
+    var moved = false
 
     fun open(available: BooleanArray, section: Int, bottomU: Float) {
         available.copyInto(avail)
@@ -110,6 +113,7 @@ class JumpGrid {
         offset = offsetFor(focus, 0f)
         target = offset
         fade = ThumbFade()
+        moved = false
         opens++
     }
 
@@ -207,6 +211,10 @@ class JumpGrid {
     fun keyDown(now: Long) = press.keyDown(focus, focus != Jump.EXIT, now)
 
     fun keyUp(now: Long) = press.keyUp(now)
+
+    fun animating(now: Long): Boolean = press.stale(now) || fade.fading(now)
+
+    fun wakeAt(now: Long): Long? = listOfNotNull(fade.wakeAt(now).takeIf { it >= 0 }, press.due(now)).minOrNull()
 }
 
 class JumpInk(val exit: Word, val letters: List<Word>)
@@ -299,6 +307,24 @@ fun JumpGridOverlay(
     modifier: Modifier = Modifier,
     band: NavGround? = null,
 ) {
+    JumpGridOverlay(g, overlay, s, a, now, onPick, onExit, onSearch, layer, modifier, band, seen = { _, _ -> })
+}
+
+@Composable
+internal fun JumpGridOverlay(
+    g: JumpGrid,
+    overlay: Overlay,
+    s: Scale,
+    a: Arbiter,
+    now: () -> Long,
+    onPick: (Int) -> Unit,
+    onExit: () -> Unit,
+    onSearch: () -> Unit,
+    layer: Int,
+    modifier: Modifier,
+    band: NavGround?,
+    seen: (State<Long>, DrawScope.() -> Unit) -> Unit,
+) {
     require(s.fit == null && s.ppu == s.stdPpu)
     val m = rememberTextMeasurer()
     val fonts = LocalFontFamilyResolver.current
@@ -323,8 +349,6 @@ fun JumpGridOverlay(
         val i = touch.state.firstVisibleItemIndex
         return ((if (i == 0) 0 else tops[i - 1]) + touch.state.firstVisibleItemScrollOffset) / sp
     }
-    var frameAt by remember { mutableLongStateOf(0L) }
-    var pokes by remember { mutableIntStateOf(0) }
     LaunchedEffect(g, g.opens) { touch.state.scrollToItem(0, px(g.offset, sp)) }
     LaunchedEffect(g, g.aims) {
         if (g.aims == 0) return@LaunchedEffect
@@ -343,25 +367,36 @@ fun JumpGridOverlay(
             }
         }
     }
-    LaunchedEffect(g, g.opens, pokes, touch.moving) {
-        while (true) {
-            withFrameMillis {
-                frameAt = it
-                g.dragging = touch.scroll.dragging
-                if (touch.moving) {
-                    g.follow(offset())
-                    g.focusAfterScroll(g.offset, it)
-                } else {
-                    g.offset = offset()
-                }
-                g.fade.track(g.thumbOn(s), touch.moving, it)
-            }
-            if (g.press.stale(frameAt) || touch.moving || g.fade.fading(frameAt)) continue
-            val w = listOfNotNull(g.fade.wakeAt(frameAt).takeIf { it >= 0 }, g.press.due(frameAt)).minOrNull() ?: break
-            delay(w - frameAt)
+    val frame = rememberOverlayFrame(overlay, now, { t -> touch.moving || touch.dragging || g.animating(t) }, g::wakeAt, { g.press.revision to touch.dragging }) { t ->
+        g.press.look(t)
+        g.dragging = touch.dragging
+        if (touch.moving || touch.dragging || g.moved) {
+            g.follow(offset())
+            g.focusAfterScroll(g.offset, t)
+        } else {
+            g.offset = offset()
         }
+        g.moved = touch.moving || touch.dragging
+        g.fade.track(g.thumbOn(s), touch.moving || touch.dragging, t)
     }
     val paint = remember { Paint() }
+    val draw: DrawScope.() -> Unit = {
+        val t = frame.value
+        val look = overlay.jumpLook(t)
+        val v = look.alpha
+        val dy = (look.dyU * sp).roundToInt().toFloat()
+        val off = offset()
+        if (v >= 1f) {
+            translate(0f, dy) { jumpGrid(g, ink, cells, s, off, t) }
+        } else {
+            paint.alpha = v
+            drawContext.canvas.saveLayer(Rect(0f, 0f, size.width, size.height), paint)
+            translate(0f, dy) { jumpGrid(g, ink, cells, s, off, t) }
+            drawContext.canvas.restore()
+        }
+        if (band != null) navBand(s, band)
+    }
+    SideEffect { seen(frame, draw) }
     val gate = remember(overlay) { OverlayGate() }
     BlockBelow(a, layer)
     val slop by rememberUpdatedState(a.slop)
@@ -379,22 +414,7 @@ fun JumpGridOverlay(
         ) { _, _ -> false }
     }
     Box(modifier.pxSize(s.widthPx, s.heightPx).then(drag)) {
-        Canvas(Modifier.pxSize(s.widthPx, s.heightPx)) {
-            val t = frameAt
-            val look = overlay.jumpLook(now())
-            val v = look.alpha
-            val dy = (look.dyU * sp).roundToInt().toFloat()
-            val off = offset()
-            if (v >= 1f) {
-                translate(0f, dy) { jumpGrid(g, ink, cells, s, off, t) }
-            } else {
-                paint.alpha = v
-                drawContext.canvas.saveLayer(Rect(0f, 0f, size.width, size.height), paint)
-                translate(0f, dy) { jumpGrid(g, ink, cells, s, off, t) }
-                drawContext.canvas.restore()
-            }
-            if (band != null) navBand(s, band)
-        }
+        Canvas(Modifier.pxSize(s.widthPx, s.heightPx).graphicsLayer(), onDraw = draw)
         FuneList(a, touch, Modifier.pxSize(s.widthPx, px(g.bottom, sp)), layer) {
             item { Box(Modifier.pxSize(s.widthPx, tops[0])) }
             items(Jump.rows) { r ->
@@ -406,20 +426,11 @@ fun JumpGridOverlay(
                             val x0 = px(Tok.jumpLeft - Tok.jumpGap / HALF + c * Tok.jumpPitch, sp)
                             val y0 = px(Tok.jumpTop - Tok.jumpGap / HALF + r * Tok.jumpPitch, sp) - tops[r]
                             val tap = Tap(
-                                onPress = {
-                                    if (gate.down(overlay, now())) {
-                                        g.down(i, now())
-                                        pokes++
-                                    }
-                                },
-                                onCancel = {
-                                    g.press.cancel(now())
-                                    pokes++
-                                },
+                                onPress = { if (gate.down(overlay, now())) g.down(i, now()) },
+                                onCancel = { g.press.cancel(now()) },
                                 onTap = {
                                     if (gate.passes(overlay, false)) {
                                         g.press.tap(now())
-                                        pokes++
                                         when (i) {
                                             Jump.EXIT -> onExit()
                                             Jump.SEARCH -> onSearch()

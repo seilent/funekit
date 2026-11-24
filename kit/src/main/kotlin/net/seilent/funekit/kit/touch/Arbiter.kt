@@ -82,6 +82,8 @@ class ListTouch(
         private set
     var moving by mutableStateOf(false)
         private set
+    var dragging by mutableStateOf(false)
+        private set
     var pressed by mutableStateOf(false)
         internal set
     var onScroll: (Long) -> Unit = {}
@@ -130,6 +132,7 @@ class ListTouch(
     internal fun sync() {
         over = scroll.over
         moving = scroll.moving || lift != null
+        dragging = scroll.dragging
         if (moving && !stopped && clock?.isActive != true) clock = scope.launch { while (moving) withFrameMillis { frame(it) } }
     }
 
@@ -534,6 +537,7 @@ fun Modifier.arbiter(a: Arbiter, swipes: Swipes): Modifier {
                         if (list != null) vel.add(t, y)
                         if (dragging) {
                             list?.release(vel.perS())
+                            dragging = false
                         } else if (tap != null && !held && a.slop.tap(x0, y0, x, y)) {
                             tap?.onTap?.invoke()
                         } else {
@@ -556,6 +560,12 @@ fun Modifier.arbiter(a: Arbiter, swipes: Swipes): Modifier {
             } finally {
                 under?.pressed = false
                 drop(true)
+                list?.let {
+                    if (dragging) {
+                        it.scroll.endDrag()
+                        it.sync()
+                    }
+                }
                 panned?.end(Swipe.None)
             }
         }

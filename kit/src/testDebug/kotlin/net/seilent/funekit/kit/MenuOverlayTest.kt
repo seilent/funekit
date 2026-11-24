@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -533,6 +534,31 @@ class MenuOverlayTest {
         rule.mainClock.advanceTimeBy(32)
     }
 
+    private lateinit var arb: Arbiter
+    private var restarts by mutableIntStateOf(0)
+
+    private fun watchJump(g: JumpGrid, o: Overlay, now: () -> Long = ::seenNow) {
+        rule.mainClock.autoAdvance = false
+        o.lead = LEAD
+        stack = PageStack<String>(MoveForms(), { PageKind.Plain }) { MoveEnds() }.also { it.pages.add("page") }
+        rule.setContent {
+            val a = remember(restarts) { Arbiter(a105).also { arb = it } }
+            PageStackClock(stack) { MoveKind.T4 }
+            Box(Modifier.fillMaxSize().arbiter(a, Swipes(false, false, false, { false }, { _, _ -> }))) {
+                if (stack.overlay === o) {
+                    JumpGridOverlay(
+                        g, o, a105, a, now, { jumped += it }, { stack.close() }, {}, 1, Modifier, null,
+                        seen = { f, d ->
+                            frame = f
+                            draws = d
+                        },
+                    )
+                }
+            }
+        }
+        rule.mainClock.advanceTimeBy(32)
+    }
+
     private fun raise(o: Overlay) {
         stack.open(o)
         Snapshot.sendApplyNotifications()
@@ -583,18 +609,22 @@ class MenuOverlayTest {
         parks("premise: still", REST_FRAMES)
     }
 
-    private fun fades(m: Menu, end: Long) {
+    private fun wakes(end: Long, by: String, holds: String) {
         val held = frame.value
         while (frame.value == held) {
-            assertTrue("the fade wakes by its hold's end $end, at ${clock()}", clock() <= end + WAKE)
+            assertTrue("$by $end, at ${clock()}", clock() <= end + WAKE)
             tick()
         }
-        assertTrue("the thumb holds until $end, woke at ${frame.value}", frame.value >= end)
-        while (m.fade.fading(frame.value)) advances("the fade")
+        assertTrue("$holds $end, woke at ${frame.value}", frame.value >= end)
+    }
+
+    private fun fades(fade: ThumbFade, end: Long) {
+        wakes(end, "the fade wakes by its hold's end", "the thumb holds until")
+        while (fade.fading(frame.value)) advances("the fade")
         parks("the fade's end")
         val t = clock()
-        assertEquals("the thumb faded out", 0f, m.fade.at(t), 0f)
-        assertFalse("the fade ended", m.fade.fading(t))
+        assertEquals("the thumb faded out", 0f, fade.at(t), 0f)
+        assertFalse("the fade ended", fade.fading(t))
     }
 
     private fun three(form: MenuForm): Menu = Menu().also {
@@ -675,7 +705,7 @@ class MenuOverlayTest {
         assertFalse("premise: the up lifts", m.held)
         val end = lastNow + Tok.scrollbar_hold.toLong()
         advances("the lift's wake")
-        fades(m, end)
+        fades(m.fade, end)
     }
 
     @Test
@@ -688,7 +718,7 @@ class MenuOverlayTest {
         advances("the first frame")
         val end = frame.value + Tok.scrollbar_hold.toLong()
         while (o.moving(stack.clock)) advances("the rise")
-        fades(m, end)
+        fades(m.fade, end)
         var scrolled = false
         rule.runOnUiThread {
             scrolled = m.scrollTo(m.first + 1, clock())
@@ -857,6 +887,293 @@ class MenuOverlayTest {
         assertEquals("the second sheet shows its thumb", 1f, m.fade.at(frame.value), 0f)
     }
 
+    private fun full(): JumpGrid = JumpGrid().also { it.open(BooleanArray(Section.count) { true }, 0, 1280f / a105.stdPpu) }
+
+    private fun shot(): IntArray {
+        val img = ImageBitmap(a105.widthPx, a105.heightPx)
+        rule.runOnUiThread {
+            CanvasDrawScope().draw(Density(1f), LayoutDirection.Ltr, Canvas(img), Size(a105.widthPx.toFloat(), a105.heightPx.toFloat()), draws)
+        }
+        return IntArray(a105.widthPx * a105.heightPx).also { img.readPixels(it) }
+    }
+
+    private fun faded(g: JumpGrid): Overlay {
+        val o = Overlay(OverKind.Jump)
+        watchJump(g, o)
+        raise(o)
+        assertTrue("premise: the grid shows its thumb", g.thumbOn(a105))
+        advances("the open's first frame")
+        val end = frame.value + Tok.scrollbar_hold.toLong()
+        while (o.moving(stack.clock)) tick()
+        fades(g.fade, end)
+        return o
+    }
+
+    private fun settles(g: JumpGrid, what: String) {
+        var n = 0
+        while (g.press.stale(frame.value)) {
+            assertTrue("$what settles within $PRESS_FRAMES frames", n < PRESS_FRAMES)
+            advances("$what frame $n")
+            n++
+        }
+    }
+
+    @Test
+    @Config(qualifiers = A105_SCREEN)
+    fun aJumpGridsOpenAdvancesItsFrameEveryFrameAndDrawsAtIt() {
+        val o = Overlay(OverKind.Jump)
+        watchJump(full(), o)
+        raise(o)
+        val d = o.dur()
+        var n = 0
+        while (o.moving(stack.clock)) {
+            advances("open frame $n")
+            drawsAt("open frame $n")
+            n++
+        }
+        assertTrue("the open of $d ms draws a frame per $FRAME ms, drew $n", n >= d / FRAME)
+    }
+
+    @Test
+    @Config(qualifiers = A105_SCREEN)
+    fun aJumpGridDrawsItsOpenAtItsFrameNotAtTheClockItIsGiven() {
+        val o = Overlay(OverKind.Jump)
+        watchJump(full(), o) { PINNED }
+        raise(o)
+        val shots = mutableListOf<IntArray>()
+        repeat(LATE_SHOT + 1) {
+            advances("open frame $it")
+            if (it == EARLY_SHOT || it == LATE_SHOT) shots += shot()
+        }
+        assertTrue("premise: the open still moves", o.moving(stack.clock))
+        assertFalse("open frames $EARLY_SHOT and $LATE_SHOT draw two looks", shots[0].contentEquals(shots[1]))
+    }
+
+    @Test
+    @Config(qualifiers = A105_SCREEN)
+    fun aJumpGridsCloseAdvancesEveryFrameUntilItIsDropped() {
+        val o = faded(full())
+        stack.close()
+        Snapshot.sendApplyNotifications()
+        repeat(OPEN_FRAMES) { if (!o.closing) tick() }
+        assertTrue("premise: the close's ask ran", o.closing)
+        val d = o.dur()
+        var n = 0
+        while (stack.overlay != null) {
+            advances("close frame $n")
+            drawsAt("close frame $n")
+            n++
+        }
+        assertTrue("the close of $d ms draws a frame per $FRAME ms, drew $n", n >= d / FRAME)
+    }
+
+    @Test
+    @Config(qualifiers = A105_SCREEN)
+    fun aPressAndAKeyOnARestingJumpGridAdvanceItsFrameThenItParks() {
+        val g = full()
+        faded(g)
+        rule.onRoot().performTouchInput { down(Offset(px(Tok.jumpLeft + Tok.jumpPitch + Tok.jumpPitch / 2, a105.stdPpu).toFloat(), px(Tok.jumpTop + Tok.jumpPitch / 2, a105.stdPpu).toFloat())) }
+        assertEquals("premise: the down presses the letter", 0, g.press.on.item)
+        settles(g, "the press")
+        parks("the held press")
+        rule.onRoot().performTouchInput { up() }
+        assertEquals("premise: the up taps the letter", listOf(0), jumped)
+        val release = lastNow + Tok.motion_touchReturnDelay.toLong()
+        advances("the up")
+        wakes(release, "the release wakes by", "the press holds its frame until")
+        parks("the release's end")
+        rule.runOnUiThread {
+            g.keyDown(clock())
+            Snapshot.sendApplyNotifications()
+        }
+        settles(g, "the key")
+        parks("the held key")
+        rule.runOnUiThread {
+            g.keyUp(clock())
+            Snapshot.sendApplyNotifications()
+        }
+        advances("the key up")
+        parks("the key's end")
+    }
+
+    private fun dragGrid(): JumpGrid = JumpGrid().also { it.open(BooleanArray(Section.count) { s -> s != EMPTY }, MID, 1280f / a105.stdPpu) }
+
+    private fun cellAt(g: JumpGrid, i: Int): Offset {
+        val slot = Jump.slotOf(i)
+        return Offset(px(Jump.cellX(slot) + Jump.tile / 2, a105.stdPpu).toFloat(), px(Jump.rowTop(slot) - g.offset + Jump.tile / 2, a105.stdPpu).toFloat())
+    }
+
+    private fun dragPremises(g: JumpGrid) {
+        assertTrue("premise: the grid scrolls and shows its thumb", g.limit() > 0f && g.thumbOn(a105))
+        assertTrue("premise: the focus stays in band at every offset", g.inBand(Jump.slotOf(MID), 0f) && g.inBand(Jump.slotOf(MID), g.limit()))
+        assertTrue("premise: the empty cell shows", !g.has(EMPTY) && g.inBand(Jump.slotOf(EMPTY), g.offset))
+    }
+
+    @Test
+    @Config(qualifiers = A105_SCREEN)
+    fun aDragFromAnEmptyJumpCellAndItsFlingAdvanceEveryFrameThenTheThumbFades() {
+        val g = dragGrid()
+        val o = Overlay(OverKind.Jump)
+        watchJump(g, o)
+        raise(o)
+        while (o.moving(stack.clock)) tick()
+        dragPremises(g)
+        val at = cellAt(g, EMPTY)
+        rule.onRoot().performTouchInput { down(at) }
+        assertTrue("premise: the down comes inside the thumb's hold", g.fade.wakeAt(clock()) > clock())
+        rule.onRoot().performTouchInput { moveBy(Offset(0f, -(arb.slop.slop + MOVE_PX))) }
+        advances("drag frame 0")
+        repeat(MOVES) {
+            rule.onRoot().performTouchInput { moveBy(Offset(0f, -MOVE_PX)) }
+            advances("drag frame ${it + 1}")
+        }
+        assertTrue("the grid follows the drag", g.offset > 0f)
+        rule.onRoot().performTouchInput { up() }
+        val list = checkNotNull(arb.listAt(at))
+        var n = 0
+        while (list.moving) {
+            advances("fling frame $n")
+            n++
+        }
+        assertTrue("premise: the fling runs $FLING_FRAMES frames, ran $n", n >= FLING_FRAMES)
+        assertEquals("premise: no letter took the drag", emptyList<Int>(), jumped)
+        still()
+        val end = g.fade.wakeAt(frame.value)
+        assertTrue("premise: the thumb holds after the fling", end > frame.value)
+        fades(g.fade, end)
+    }
+
+    @Test
+    @Config(qualifiers = A105_SCREEN)
+    fun aDragBringsTheJumpGridsFadedThumbBack() {
+        val g = dragGrid()
+        faded(g)
+        dragPremises(g)
+        assertEquals("premise: the thumb faded out", 0f, g.fade.at(frame.value), 0f)
+        rule.onRoot().performTouchInput { down(cellAt(g, EMPTY)) }
+        rule.onRoot().performTouchInput { moveBy(Offset(0f, -(arb.slop.slop + MOVE_PX))) }
+        advances("drag frame 0")
+        var was = 0f
+        repeat(MOVES) {
+            rule.onRoot().performTouchInput { moveBy(Offset(0f, -MOVE_PX)) }
+            advances("drag frame ${it + 1}")
+            val level = g.fade.at(frame.value)
+            assertTrue("drag frame ${it + 1}: the thumb shows, $level after $was", level > was)
+            was = level
+        }
+    }
+
+    @Test
+    @Config(qualifiers = A105_SCREEN)
+    fun aDragThatEndsWithNoUpLetsTheJumpGridPark() {
+        val g = dragGrid()
+        val o = Overlay(OverKind.Jump)
+        watchJump(g, o)
+        raise(o)
+        while (o.moving(stack.clock)) tick()
+        dragPremises(g)
+        val at = cellAt(g, EMPTY)
+        rule.onRoot().performTouchInput { down(at) }
+        assertTrue("premise: the down comes inside the thumb's hold", g.fade.wakeAt(clock()) > clock())
+        rule.onRoot().performTouchInput { moveBy(Offset(0f, -(arb.slop.slop + MOVE_PX))) }
+        advances("drag frame 0")
+        repeat(MOVES) {
+            rule.onRoot().performTouchInput { moveBy(Offset(0f, -MOVE_PX)) }
+            advances("drag frame ${it + 1}")
+        }
+        val list = checkNotNull(arb.listAt(at))
+        assertTrue("premise: the list drags", list.dragging)
+        rule.runOnUiThread {
+            restarts++
+            Snapshot.sendApplyNotifications()
+        }
+        tick()
+        tick()
+        assertFalse("the restart's frame, then the next: the drag ended", list.dragging)
+        still()
+        val end = g.fade.wakeAt(frame.value)
+        assertTrue("premise: the thumb holds after the drag", end > frame.value)
+        fades(g.fade, end)
+    }
+
+    @Test
+    @Config(qualifiers = A105_SCREEN)
+    fun aJumpGridsThumbHoldsThenEveryFrameOfItsFadeAdvances() {
+        faded(full())
+    }
+
+    @Test
+    @Config(qualifiers = A105_SCREEN)
+    fun aJumpGridParksAtRestAfterItsThumbFades() {
+        val g = full()
+        val o = Overlay(OverKind.Jump)
+        watchJump(g, o)
+        raise(o)
+        advances("the open's first frame")
+        val gone = frame.value + (Tok.scrollbar_hold + Tok.scrollbar_fade).toLong()
+        while (clock() < gone + FRAME) tick()
+        assertFalse("premise: the open and the thumb's fade are over", o.moving(clock()) || g.fade.fading(clock()))
+        parks("at rest")
+    }
+
+    @Test
+    @Config(qualifiers = A105_SCREEN)
+    fun theJumpGridsFocusFollowsAFlingsLastStep() {
+        val end = Jump.rowTop(TAIL_ROW * Jump.cols) - Tok.edge + TAIL_OUT
+        val g = JumpGrid().also { it.open(BooleanArray(Section.count) { s -> s != EMPTY }, 0, Jump.content() - end) }
+        val o = Overlay(OverKind.Jump)
+        watchJump(g, o)
+        raise(o)
+        while (o.moving(stack.clock)) tick()
+        assertTrue("premise: the grid scrolls and shows its thumb", g.limit() > 0f && g.thumbOn(a105))
+        assertTrue("premise: the focus sits in the top band", g.focus == 0 && g.inBand(Jump.slotOf(0), g.offset))
+        val at = cellAt(g, EMPTY)
+        assertTrue("premise: the down cell is empty", !g.has(EMPTY))
+        rule.onRoot().performTouchInput { down(at) }
+        rule.onRoot().performTouchInput { moveBy(Offset(0f, -(arb.slop.slop + 1f))) }
+        tick()
+        val step = (g.limit() - TAIL_LEFT) * a105.stdPpu / TAIL_MOVES
+        repeat(TAIL_MOVES) {
+            rule.onRoot().performTouchInput { moveBy(Offset(0f, -step)) }
+            tick()
+        }
+        val last = Jump.slotOf(g.focus)
+        assertTrue("premise: the drag leaves the focus in band, ${g.offset} of ${g.limit()}", g.inBand(last, g.offset) && !g.inBand(last, g.limit()))
+        rule.onRoot().performTouchInput { up() }
+        val list = checkNotNull(arb.listAt(at))
+        var n = 0
+        while (list.moving) {
+            tick()
+            n++
+        }
+        assertTrue("premise: the fling's first step reaches the end, in $n frames", n <= TAIL_FRAMES && !g.inBand(last, g.offset))
+        assertTrue("the first frame with no move: the focus ${g.focus} is in band at ${g.offset}", g.inBand(Jump.slotOf(g.focus), g.offset))
+    }
+
+    @Test
+    @Config(qualifiers = A105_SCREEN)
+    fun theJumpGridsFocusFollowsADrag() {
+        val g = JumpGrid().also { it.open(BooleanArray(Section.count) { s -> s != TOP_EMPTY }, 0, 1280f / a105.stdPpu) }
+        val o = Overlay(OverKind.Jump)
+        watchJump(g, o)
+        raise(o)
+        while (o.moving(stack.clock)) tick()
+        val top = Jump.slotOf(g.focus)
+        assertTrue("premise: the grid scrolls and shows its thumb", g.limit() > 0f && g.thumbOn(a105))
+        assertTrue("premise: the focus sits on the top row at offset 0", g.focus == 0 && g.offset == 0f && g.inBand(top, 0f))
+        assertTrue("premise: the down cell is empty", !g.has(TOP_EMPTY))
+        rule.onRoot().performTouchInput { down(cellAt(g, TOP_EMPTY)) }
+        rule.onRoot().performTouchInput { moveBy(Offset(0f, -(arb.slop.slop + 1f))) }
+        advances("drag frame 0")
+        var n = 0
+        while (g.inBand(top, g.offset)) {
+            assertTrue("premise: the drag takes the focused slot out of the band within $TOP_STEPS steps", ++n <= TOP_STEPS)
+            rule.onRoot().performTouchInput { moveBy(Offset(0f, -STEP_PX)) }
+            advances("drag frame $n")
+        }
+        assertTrue("drag frame $n: the focus moves into the band, at ${g.focus}", g.focus != 0 && g.inBand(Jump.slotOf(g.focus), g.offset))
+    }
+
     companion object {
         private const val HOLD_STEP = 50L
         private const val A105_SCREEN = "w720dp-h1280dp-mdpi"
@@ -870,5 +1187,23 @@ class MenuOverlayTest {
         private const val LIT_FRAMES = 3
         private const val RISEN = 1000L
         private const val LATE = 100L
+        private const val LEAD = 17L
+        private const val PRESS_FRAMES = 4
+        private const val PINNED = 0L
+        private const val EARLY_SHOT = 2
+        private const val LATE_SHOT = 6
+        private const val MID = 12
+        private const val EMPTY = 20
+        private const val MOVES = 2
+        private const val MOVE_PX = 20f
+        private const val FLING_FRAMES = 5
+        private const val TOP_EMPTY = 1
+        private const val STEP_PX = 10f
+        private const val TOP_STEPS = 6
+        private const val TAIL_ROW = 3
+        private const val TAIL_OUT = 2f
+        private const val TAIL_LEFT = 4f
+        private const val TAIL_MOVES = 5
+        private const val TAIL_FRAMES = 2
     }
 }

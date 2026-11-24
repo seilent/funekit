@@ -18,7 +18,7 @@ fun rememberOverlayFrame(
     now: () -> Long,
     animating: (Long) -> Boolean,
     wakeAt: (Long) -> Long?,
-    version: () -> Int = { 0 },
+    version: () -> Any = { 0 },
     step: (Long) -> Unit = {},
 ): State<Long> {
     val busy by rememberUpdatedState(animating)
