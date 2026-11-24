@@ -298,6 +298,52 @@ class HomeHostTest {
     }
 
     @Test
+    fun aTileOpenHoldsTheBind() {
+        val ids = songs(TILES)
+        val data = songData(ids)
+        reply = CompletableDeferred()
+        front(data)
+        val o = tileAt(data, 1)
+        sync()
+        val d = SystemClock.uptimeMillis()
+        send(MotionEvent.ACTION_DOWN, o.x, o.y, d)
+        frame()
+        frame()
+        assertNull("the down starts no turn", stack.turn)
+        send(MotionEvent.ACTION_UP, o.x, o.y, d)
+        apply()
+        armed()
+        frames(NowPlayingModel.HOLD_CAP / 2)
+        assertTrue("the bind holds while the play waits", stack.armed && stack.turn?.kind == MoveKind.T7 && !npOnTop())
+        reply!!.complete(Unit)
+        until("the play's answer lands now playing") { npOnTop() && !stack.armed }
+        assertEquals(ids[1], fake.player.state.value.track)
+    }
+
+    @Test
+    fun aTileDownThatTurnsIntoAScrollPlaysNothing() {
+        val data = songData(songs(SCROLL_TILES))
+        val qp = front(data)
+        val l = state.qpLayout
+        val pos = qpPos(state.qpTouch, qp, l)
+        val o = tileAt(data, 1)
+        sync()
+        val d = SystemClock.uptimeMillis()
+        send(MotionEvent.ACTION_DOWN, o.x, o.y, d)
+        frame()
+        for (i in 1..DRAG_STEPS) {
+            send(MotionEvent.ACTION_MOVE, o.x, o.y - DRAG_PX * i, d)
+            frame()
+        }
+        send(MotionEvent.ACTION_UP, o.x, o.y - DRAG_PX * DRAG_STEPS, d)
+        settle()
+        assertTrue("the scroll plays nothing, $played", played.isEmpty())
+        assertNull(stack.turn)
+        assertEquals(0, npEntries())
+        assertTrue("the down turned into a scroll", qpPos(state.qpTouch, qp, l) != pos)
+    }
+
+    @Test
     fun aTilePlayThatPlaysNothingTurnsBackWithNoNowPlaying() {
         val ids = songs(TILES)
         runBlocking { fake.player.play(listOf(ids[0]), 0, 0) }
