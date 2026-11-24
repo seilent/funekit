@@ -124,6 +124,7 @@ class HomeHostTest {
     private var reply: CompletableDeferred<Unit>? = null
     private var cold = false
     private var qpPlays = true
+    private var qpBusy = false
     private val zero = MutableStateFlow(0L)
 
     private val player = object : Player by fake.player {
@@ -149,6 +150,7 @@ class HomeHostTest {
 
         override suspend fun play(item: QpItem): Boolean {
             played += item
+            if (qpBusy) throw Busy()
             if (!qpPlays) return false
             player.play(listOf(item.id), 0, 0)
             return true
@@ -297,6 +299,19 @@ class HomeHostTest {
         until("the refusal lands") { stack.phase == Phase.Rest && !stack.armed }
         assertEquals(0, npEntries())
         assertNull(stack.top)
+    }
+
+    @Test
+    fun aRefusedTilePlayUntapsTheTileAndShowsCardNotAvailable() {
+        qpBusy = true
+        val data = songData(songs(TILES))
+        val qp = front(data)
+        tapTile(data, 1)
+        until("premise: the tile was asked to play") { played.isNotEmpty() }
+        assertNull("the refusal untaps the tile", qp.press.on.p.due(SystemClock.uptimeMillis().toFloat()))
+        until("the refusal lands") { stack.phase == Phase.Rest && !stack.armed }
+        frames(HOLD)
+        assertEquals("card not available" to "", app.toast.artist to app.toast.title)
     }
 
     @Test

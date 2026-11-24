@@ -56,6 +56,7 @@ import net.seilent.funekit.api.Listing
 import net.seilent.funekit.api.NoCard
 import net.seilent.funekit.api.Refused
 import net.seilent.funekit.api.Row
+import net.seilent.funekit.api.Stale
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.Chrome
 import net.seilent.funekit.kit.Edges
@@ -151,6 +152,7 @@ import net.seilent.funekit.screens.music.nowplaying.npStatusAlpha
 import net.seilent.funekit.screens.music.nowplaying.npFlat
 import net.seilent.funekit.screens.music.nowplaying.npNanosAt
 import net.seilent.funekit.screens.music.overlay.ADD_TO_PLAYLIST
+import net.seilent.funekit.screens.music.overlay.CARD_GONE
 import net.seilent.funekit.screens.music.overlay.DELETE
 import net.seilent.funekit.screens.music.overlay.DELETE_ASK
 import net.seilent.funekit.screens.music.overlay.DELETE_PLAYLIST
@@ -242,6 +244,22 @@ private suspend fun <T> quiet(block: suspend () -> T): T? = try {
     null
 }
 
+internal suspend fun played(block: suspend () -> Boolean): Pair<Boolean, String?> = try {
+    block() to null
+} catch (_: NoCard) {
+    false to CARD_GONE
+} catch (_: Busy) {
+    false to CARD_GONE
+} catch (e: Refused) {
+    false to e.text.ifEmpty { CARD_GONE }
+} catch (_: Disconnected) {
+    false to null
+} catch (_: Stale) {
+    false to null
+} catch (_: Expired) {
+    false to null
+}
+
 private suspend fun deleteDone(act: suspend () -> DeleteDone): DeleteDone = try {
     act()
 } catch (_: NoCard) {
@@ -308,6 +326,7 @@ class MusicHost<S : Any> internal constructor(
         private set
     var opened: PlayOpen? = null
         private set
+    private var opens = 0
     val hud = VolumeHud(env.np.board, env.np.w, env.np.h)
     private val volumeOverlay = Overlay(OverKind.Volume, hud) { if (hud.pendingSeek() != null) volSeek() }
     private val menuOvers = ArrayList<Overlay>()
@@ -791,6 +810,7 @@ class MusicHost<S : Any> internal constructor(
         if (stack.pages.any(::isNp)) return
         if (homeBusy(now())) return
         val t = now()
+        opens++
         movePaint.npForm = form
         np.sync(np.shown, t)
         np.resetFocus(t)
@@ -911,6 +931,7 @@ class MusicHost<S : Any> internal constructor(
             return
         }
         val t = now()
+        opens++
         movePaint.npForm = form
         np.resetFocus(t)
         np.lyrics.open(np.shown.track, np.variant)
@@ -926,10 +947,11 @@ class MusicHost<S : Any> internal constructor(
         return true
     }
 
-    override fun playOpen(form: NpForm, keep: Boolean, cut: Boolean, play: suspend (MusicSource) -> Boolean): Boolean {
+    override fun playOpen(form: NpForm, keep: Boolean, cut: Boolean, refused: () -> Unit, play: suspend (MusicSource) -> Boolean): Boolean {
         val s = src ?: return false
         if (s.library.generation.value <= 0) return false
         val t = now()
+        val seq = ++opens
         val kept = if (keep) stack.pages.lastOrNull(::isNp) else null
         val h = if (homeBusy(t) || (kept == null && stack.pages.any(::isNp))) {
             null
@@ -945,12 +967,18 @@ class MusicHost<S : Any> internal constructor(
         }
         if (h != null) opened = h
         scope.launch(FailFast) {
-            val ok = quiet { play(s) } == true && s.player.state.value.let { it.track != null || it.service != null }
+            val (sent, word) = played { play(s) }
+            val ok = sent && s.player.state.value.let { it.track != null || it.service != null }
             if (ok) {
                 h?.done()
                 if (h != null) np.lyrics.open(s.player.state.value.track, np.variant)
             } else {
                 h?.fail()
+            }
+            if (word != null) {
+                refused()
+                snapshotFlow { stack.phase == Phase.Rest && !stack.armed }.first { it }
+                if (seq == opens) toast.show(now(), word, "")
             }
         }
         return true
@@ -1104,7 +1132,12 @@ class MusicHost<S : Any> internal constructor(
         }
         if (t.kind == SheetKind.Entry && word != INFO) {
             val v = modelOf(stack.top) as? ListViewModel
-            scope.launch(FailFast) { quiet { runEntry(word, t, v, s, now()) } }
+            scope.launch(FailFast) {
+                when (val d = quiet { runEntry(word, t, v, s, now()) }) {
+                    is SheetDone.Toast -> toast.show(now(), d.line, d.title)
+                    else -> Unit
+                }
+            }
             return true
         }
         if (t.kind == SheetKind.Queue && word != INFO) {

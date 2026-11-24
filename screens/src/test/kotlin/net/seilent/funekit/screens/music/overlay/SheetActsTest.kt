@@ -229,7 +229,7 @@ class SheetActsTest {
     }
 
     @Test
-    fun aBusyAddToAListToastsItNotReadable() {
+    fun aBusyAddToAListToastsCardNotAvailable() {
         val busy = object : Playlists by f.playlists {
             override suspend fun add(id: Long, tracks: TrackSet) = throw Busy()
         }
@@ -237,7 +237,7 @@ class SheetActsTest {
         val p = runBlocking { picker(s) }
         val id = lists().first { it.title == DRIVE }.id
         val before = count(Listing.PlaylistTracks(id))
-        assertEquals(SheetDone.Toast(NOT_READABLE, DRIVE), runBlocking { runPick(p.items.indexOf(DRIVE), p, albumTarget(album()), s) })
+        assertEquals(SheetDone.Toast(CARD_GONE, ""), runBlocking { runPick(p.items.indexOf(DRIVE), p, albumTarget(album()), s) })
         assertEquals(before, count(Listing.PlaylistTracks(id)))
     }
 
@@ -263,6 +263,21 @@ class SheetActsTest {
         assertEquals(SheetDone.Close, done)
         assertEquals(ROWS_DRIVE - 1, count(Listing.PlaylistTracks(id)))
         assertTrue(m.row(0)?.id != gone)
+    }
+
+    @Test
+    fun aBusyListRemoveShowsCardNotAvailable() {
+        val busy = object : Playlists by f.playlists {
+            override suspend fun remove(id: Long, index: Int, revision: Long) = throw Busy()
+        }
+        val s = MusicSource(f.library, recording, f.quickplay, f.favorites, busy, f.lyrics)
+        val id = lists().first { it.title == DRIVE }.id
+        val m = ListViewModel(0L, Listing.PlaylistTracks(id))
+        m.pane.geometry(RowSpec(PITCH, VIEW))
+        runBlocking { s.viewed { v -> m.show(v, 0, ROWS) } }
+        val done = runBlocking { runEntry(REMOVE, m.target(0)!!, m, s, 0L) }
+        assertEquals(SheetDone.Toast(CARD_GONE, ""), done)
+        assertEquals(ROWS_DRIVE, count(Listing.PlaylistTracks(id)))
     }
 
     private val songT = SheetTarget(SheetKind.Song, "Rain Song", Listing.Songs, track = 4L, pin = Kind.Song, id = 4)

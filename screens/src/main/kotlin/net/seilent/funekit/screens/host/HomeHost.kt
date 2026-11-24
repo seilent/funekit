@@ -721,11 +721,12 @@ fun <S : Any> HomeLayer(
             onPlay = { t ->
                 val q = source
                 if (!qpResumes(t, music?.player?.state?.value?.track, models.np.variant)) {
-                    val asked = q != null && host.playOpen(npOpenForm(true, true)) { q.play(t.item) }
-                    if (!asked) {
+                    val untap = {
                         qp.press.untap(now())
                         poke()
                     }
+                    val asked = q != null && host.playOpen(npOpenForm(true, true), refused = untap) { q.play(t.item) }
+                    if (!asked) untap()
                 } else {
                     scope.launch(FailFast) { quiet { source?.resume() } }
                     host.openNp(npOpenForm(true, true))

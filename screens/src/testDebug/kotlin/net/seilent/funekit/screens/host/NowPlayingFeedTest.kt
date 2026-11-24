@@ -19,20 +19,25 @@ import net.seilent.funekit.Surface
 import net.seilent.funekit.Window
 import net.seilent.funekit.api.ArtRef
 import net.seilent.funekit.api.Busy
+import net.seilent.funekit.api.Favorites
 import net.seilent.funekit.api.Library
 import net.seilent.funekit.api.LibraryState
 import net.seilent.funekit.api.LibraryView
 import net.seilent.funekit.api.Listing
+import net.seilent.funekit.api.NoCard
 import net.seilent.funekit.api.Page
 import net.seilent.funekit.api.Player
 import net.seilent.funekit.api.Repeat
 import net.seilent.funekit.core.Lrc
 import net.seilent.funekit.fake.Fake
 import net.seilent.funekit.fake.FakeSet
+import net.seilent.funekit.kit.Toast
 import net.seilent.funekit.kit.np.NpLayout
 import net.seilent.funekit.scale
 import net.seilent.funekit.screens.music.MusicSource
 import net.seilent.funekit.screens.music.nowplaying.NowPlayingModel
+import net.seilent.funekit.screens.music.nowplaying.NpAct
+import net.seilent.funekit.screens.music.nowplaying.NpShown
 import net.seilent.funekit.screens.music.nowplaying.PhoneRepeat
 import net.seilent.funekit.screens.music.nowplaying.PhoneTrack
 import net.seilent.funekit.screens.music.testFake
@@ -93,6 +98,24 @@ class NowPlayingFeedTest {
     private fun player(act: suspend Player.() -> Unit) {
         runBlocking { fake.player.act() }
         rule.waitForIdle()
+    }
+
+    @Test
+    fun aRefusedHeartShowsItsWords() {
+        var refusal: Exception = NoCard()
+        val favs = object : Favorites by fake.favorites {
+            override suspend fun toggle(track: Long): Boolean = throw refusal
+        }
+        val refused = MusicSource(library, fake.player, fake.quickplay, favs, fake.playlists, fake.lyrics)
+        val np = NowPlayingModel()
+        np.sync(NpShown.None.copy(track = songs().first(), title = "song"), 0L)
+        for ((e, word) in listOf(NoCard() to "card not available", Busy() to "card not available", IllegalStateException() to "favorites not readable")) {
+            refusal = e
+            val toast = Toast()
+            runBlocking { npAct(NpAct.Favorite, np, refused, null, toast) { 0L } }
+            assertEquals("${e::class.simpleName}", word to "", toast.artist to toast.title)
+        }
+        assertFalse("the heart stays as it was", np.favorite)
     }
 
     @Test

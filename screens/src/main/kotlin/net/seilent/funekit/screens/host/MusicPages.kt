@@ -118,7 +118,7 @@ interface MusicActs {
 
     fun nowPlaying(): Boolean
 
-    fun playOpen(form: NpForm, keep: Boolean = false, cut: Boolean = false, play: suspend (MusicSource) -> Boolean): Boolean
+    fun playOpen(form: NpForm, keep: Boolean = false, cut: Boolean = false, refused: () -> Unit = {}, play: suspend (MusicSource) -> Boolean): Boolean
 
     fun album(row: Row, at: Int, hubTile: Boolean)
 

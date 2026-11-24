@@ -4,6 +4,7 @@ import kotlinx.coroutines.CancellationException
 import net.seilent.funekit.api.Busy
 import net.seilent.funekit.api.Kind
 import net.seilent.funekit.api.Listing
+import net.seilent.funekit.api.NoCard
 import net.seilent.funekit.api.Row
 import net.seilent.funekit.api.TrackInfo
 import net.seilent.funekit.api.TrackSet
@@ -21,6 +22,7 @@ const val ALBUM_NOT_DELETED = "album not deleted"
 const val READ_ONLY = "card is read only"
 const val CUE_PART = "part of a cue image"
 const val CARD_GONE = "card not available"
+const val FAVS_UNREADABLE = "favorites not readable"
 
 sealed interface SheetDone {
     data object Close : SheetDone
@@ -108,24 +110,29 @@ suspend fun runPick(i: Int, p: Picker, t: SheetTarget, src: MusicSource): SheetD
             val id = src.playlists.create(tracks) ?: return SheetDone.Close
             name = src.viewed { v -> v.page(Listing.Playlists, 0, v.page(Listing.Playlists, 0, 0).total).rows.firstOrNull { it.id == id }?.title } ?: name
         }
-        PickTo.Favorites -> src.favorites.add(tracks)
-        is PickTo.Playlist -> try {
-            src.playlists.add(to.id, tracks)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: IllegalStateException) {
-            return SheetDone.Toast(NOT_READABLE, name)
-        } catch (_: Busy) {
-            return SheetDone.Toast(NOT_READABLE, name)
-        }
+        PickTo.Favorites -> listEdit(true, name) { src.favorites.add(tracks) }?.let { return it }
+        is PickTo.Playlist -> listEdit(false, name) { src.playlists.add(to.id, tracks) }?.let { return it }
     }
     return SheetDone.Toast(ADDED_TO + name, t.title)
 }
 
 suspend fun runEntry(word: String, t: SheetTarget, view: ListViewModel?, src: MusicSource, now: Long): SheetDone {
     if (word == INFO) return t.track?.let { SheetDone.Info(it, false, t.generation) } ?: SheetDone.Close
-    view?.verb(word, t, src, now)
+    if (view != null) listEdit(view.listing == Listing.Favorites, view.title) { view.verb(word, t, src, now) }?.let { return it }
     return SheetDone.Close
+}
+
+suspend fun listEdit(favorites: Boolean, name: String, edit: suspend () -> Unit): SheetDone.Toast? = try {
+    edit()
+    null
+} catch (e: CancellationException) {
+    throw e
+} catch (_: NoCard) {
+    SheetDone.Toast(CARD_GONE, "")
+} catch (_: Busy) {
+    SheetDone.Toast(CARD_GONE, "")
+} catch (_: IllegalStateException) {
+    if (favorites) SheetDone.Toast(FAVS_UNREADABLE, "") else SheetDone.Toast(NOT_READABLE, name)
 }
 
 suspend fun runSheet(word: String, t: SheetTarget, src: MusicSource): SheetDone {

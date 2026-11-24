@@ -32,6 +32,7 @@ import net.seilent.funekit.screens.music.nowplaying.PhoneLyrics
 import net.seilent.funekit.screens.music.nowplaying.PhoneRepeat
 import net.seilent.funekit.screens.music.nowplaying.PhoneTrack
 import net.seilent.funekit.screens.music.nowplaying.Variant
+import net.seilent.funekit.screens.music.overlay.listEdit
 
 const val FAV_ADDED = "added to favorites"
 const val FAV_REMOVED = "removed from favorites"
@@ -214,7 +215,11 @@ suspend fun npAct(a: NpAct, np: NowPlayingModel, src: MusicSource?, phone: Phone
     when (a) {
         NpAct.Favorite -> {
             val t = np.shown.track ?: return
-            val on = source.favorites.toggle(t)
+            var on = false
+            listEdit(true, "") { on = source.favorites.toggle(t) }?.let {
+                toast.show(now(), it.line, it.title)
+                return
+            }
             val at = now()
             np.favorite = on
             toast.show(at, if (on) FAV_ADDED else FAV_REMOVED, np.shown.title)
