@@ -30,6 +30,7 @@ import net.seilent.funekit.gen.TokBoard
 import net.seilent.funekit.kit.Band
 import net.seilent.funekit.kit.Chrome
 import net.seilent.funekit.kit.Edges
+import net.seilent.funekit.kit.Ink
 import net.seilent.funekit.kit.JumpCells
 import net.seilent.funekit.kit.JumpGrid
 import net.seilent.funekit.kit.JumpInk
@@ -325,6 +326,10 @@ class MovePaintTest {
         override fun DrawScope.content(c: Content, now: Long, rec: DrawRecord?, name: String, fade: Float) = contentRows(this@Painted, c, now, rec, name, fade)
 
         override fun DrawScope.bands(b: Bands, now: Long, rec: DrawRecord?, name: String) = bandRows(this@Painted, b, now, rec, name)
+    }
+
+    private class Flat(d: PagePaint) : PagePaint by d {
+        override val grounded = false
     }
 
     private class NowPlaying(d: PagePaint) : PagePaint by d {
@@ -2162,6 +2167,34 @@ class MovePaintTest {
         assertEquals(1f, r.paint.ctx.arriveThumb, 0f)
         r.draw(t0 + THUMB_AT)
         assertTrue("the arriving thumb inks while the row pop runs", r.drawn.any { it.name.endsWith(".thumb") && it.alpha > 0f })
+    }
+
+    @Test
+    fun aT3AndT4BetweenTwoFlatPagesDrawNoGroundAndNoBase() {
+        val w = s.widthPx
+        val h = s.heightPx
+        fun rig(wrap: (PagePaint) -> PagePaint) = Run(wraps = mapOf("a" to wrap, "b" to wrap))
+        fun inked(b: Bitmap, c: Color) = IntArray(w * h).also { b.getPixels(it, 0, w, 0, 0, w, h) }.count { it == c.toArgb() }
+        fun pushed(r: Run): Bitmap {
+            r.stack.pages.add("a")
+            r.stack.push("b", MoveKind.T3, row = ROW)
+            r.stack.frame(0L)
+            return bitmapOf(w, h) { with(r.paint) { drawMove(100L, null) } }
+        }
+        fun popped(r: Run): Bitmap {
+            val t0 = rowPopped(r)
+            return bitmapOf(w, h) { with(r.paint) { drawMove(t0 + 100L, null) } }
+        }
+        val tinted = pushed(rig { Painted(it) })
+        assertTrue("premise: a grounded side draws its ground in the push", inked(tinted, GROUND_INK) > 0)
+        val flat = pushed(rig { Flat(Painted(it)) })
+        assertEquals("a T3 between two flat pages draws no ground", 0, inked(flat, GROUND_INK))
+        assertEquals("a T3 between two flat pages draws no base", 0, inked(flat, Ink.bg))
+        val tintedBack = popped(rig { Painted(it) })
+        assertTrue("premise: a grounded side draws its ground in the pop", inked(tintedBack, GROUND_INK) > 0)
+        val flatBack = popped(rig { Flat(Painted(it)) })
+        assertEquals("a T4 between two flat pages draws no ground", 0, inked(flatBack, GROUND_INK))
+        assertEquals("a T4 between two flat pages draws no base", 0, inked(flatBack, Ink.bg))
     }
 
     private data class Quad4(val dt: Long, val s: Float, val x: Float, val y: Float)

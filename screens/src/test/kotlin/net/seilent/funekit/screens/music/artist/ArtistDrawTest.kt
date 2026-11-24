@@ -115,6 +115,12 @@ class ArtistDrawTest {
     }
 
     @Test
+    fun theArtistPageTakesTheFlatGround() {
+        val chrome = artistChrome(sc.measurer, sc.fonts, s, sc.density, null)
+        assertFalse(ArtistPaint(artistDraw(loaded(), s, sc.measurer, sc.fonts, sc.density, null, chrome, Ink.white, true), chrome, Ink.white).grounded)
+    }
+
+    @Test
     fun theLineBandRunsFromThePivotTopToTheNameBaselineLessItsDescent() {
         val m = loaded()
         val chrome = artistChrome(sc.measurer, sc.fonts, s, sc.density, null)

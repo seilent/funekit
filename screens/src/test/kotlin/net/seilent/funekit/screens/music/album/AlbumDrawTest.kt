@@ -13,10 +13,12 @@ import net.seilent.funekit.kit.rowInk
 import net.seilent.funekit.px
 import net.seilent.funekit.screens.music.album.AlbumGeo
 import net.seilent.funekit.screens.music.album.AlbumModel
+import net.seilent.funekit.screens.music.album.AlbumPaint
 import net.seilent.funekit.screens.music.album.albumChrome
 import net.seilent.funekit.screens.music.album.albumDraw
 import net.seilent.funekit.screens.music.sheet.MusicScenes
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -123,6 +125,12 @@ class AlbumDrawTest {
         assertTrue(b.gone)
         assertNull(b.art)
         assertNotEquals(0, m.geo!!.artRect(0).w)
+    }
+
+    @Test
+    fun theAlbumPageTakesTheFlatGround() {
+        val chrome = albumChrome(sc.measurer, sc.fonts, s, sc.density, null)
+        assertFalse(AlbumPaint(albumDraw(loaded(), s, sc.measurer, sc.fonts, sc.density, null, chrome, Ink.white, true), chrome, Ink.white).grounded)
     }
 
     companion object {

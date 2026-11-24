@@ -124,4 +124,13 @@ class GroundTest {
             }
         }
     }
+
+    @Test
+    fun theHostGroundFillsTheCanvasWithTheBackground() {
+        for (h in heights) {
+            val px = pixels(h) { hostGround() }
+            for (i in px.indices) assertEquals("height $h px $i", Ink.bg.toArgb(), px[i])
+            assertEquals("height $h", listOf("drawRect"), ops(h) { hostGround() })
+        }
+    }
 }

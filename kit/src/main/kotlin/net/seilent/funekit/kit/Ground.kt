@@ -1,5 +1,7 @@
 package net.seilent.funekit.kit
 
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -76,6 +78,10 @@ fun DrawScope.pageGround(bands: List<Band>, accent: Color, leave: Float, arrive:
         drawRect(Color(blendPx(blendPx(Tok.color_bg, g, la), g, aa) or OPAQUE), Offset(0f, b.y0.toFloat()), Size(size.width, (b.y1 - b.y0).toFloat()))
     }
 }
+
+fun DrawScope.hostGround() = drawRect(Ink.bg, Offset.Zero, size)
+
+fun Modifier.hostGround(): Modifier = drawBehind { this.hostGround() }
 
 class NavGround(val bands: List<Band>, val accent: Color, val ground: Boolean = true)
 

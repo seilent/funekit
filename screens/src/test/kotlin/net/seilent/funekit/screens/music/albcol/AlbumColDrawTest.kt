@@ -6,6 +6,7 @@ import kotlinx.coroutines.runBlocking
 import net.seilent.funekit.kit.Ink
 import net.seilent.funekit.screens.music.albcol.AlbumColGeo
 import net.seilent.funekit.screens.music.albcol.AlbumColModel
+import net.seilent.funekit.screens.music.albcol.AlbumColPaint
 import net.seilent.funekit.screens.music.albcol.ColEntry
 import net.seilent.funekit.screens.music.albcol.ColLook
 import net.seilent.funekit.screens.music.albcol.albumColDraw
@@ -13,6 +14,7 @@ import net.seilent.funekit.screens.music.album.albumChrome
 import net.seilent.funekit.screens.music.album.albumHeaderSide
 import net.seilent.funekit.screens.music.sheet.MusicScenes
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -43,6 +45,13 @@ class AlbumColDrawTest {
         val chrome = albumChrome(sc.measurer, sc.fonts, s, sc.density, null)
         val d = albumColDraw(m, s, sc.measurer, sc.fonts, sc.density, null, albumHeaderSide(sc.measurer, sc.fonts, s, sc.density, null, chrome), Ink.white, true)
         return sc.draw(sc.a105) { with(d) { row(e, ColLook(false, 0f, 0f), d.ink(e), null, "") } }
+    }
+
+    @Test
+    fun theColumnTakesTheFlatGround() {
+        val chrome = albumChrome(sc.measurer, sc.fonts, s, sc.density, null)
+        val d = albumColDraw(model(), s, sc.measurer, sc.fonts, sc.density, null, albumHeaderSide(sc.measurer, sc.fonts, s, sc.density, null, chrome), Ink.white, true)
+        assertFalse(AlbumColPaint(d, chrome, Ink.white).grounded)
     }
 
     @Test
