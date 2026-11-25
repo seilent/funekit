@@ -3,15 +3,15 @@ FB-slide 2026-11-13 the committed swipe from home to the drawer slides home out 
 FB-page 2026-11-11 a phone page takes the A105 physical size: the 407.94 ppi reference, a 0.9 deadband, a 0.5 floor and a 1.1 axis trust on the density report
 FB-lit-1 pending the pillarbox offset is half the spare width
 FB-lit-2 pending Selawik SemiLight keyed at weight 350
-FB-lit-3 pending the battery nub at a third of its height, cited at the funeOS seed set, a token at v0.4.3
-FB-lit-5 pending the toast expOut6 inverse in 17 bisections, cited at the funeOS seed set, absent at v0.4.3
-FB-lit-6 pending the toast text swap over two valueChange legs, cited at the funeOS seed set, absent at v0.4.3
+FB-lit-3 pending the battery nub at a third of its height, cited at the funeOS seed set, a token at v0.4.4
+FB-lit-5 pending the toast expOut6 inverse in 17 bisections, cited at the funeOS seed set, absent at v0.4.4
+FB-lit-6 pending the toast text swap over two valueChange legs, cited at the funeOS seed set, absent at v0.4.4
 FB-lit-7 pending icons and software covers share 1/16 of the memory class, provisional
 FB-lit-8 pending a low RAM device gives icons and covers 1/32 of the memory class, provisional
-FB-lit-9 pending the T7 pane scales about its vertical centre, cited at the funeOS seed set, the v0.4.3 T7 differs
-FB-lit-10 pending the T7 pane scale floor of one 16.16 step, cited at the funeOS seed set, the v0.4.3 T7 differs
+FB-lit-9 pending the T7 pane scales about its vertical centre, cited at the funeOS seed set, the funeOS T7 differs
+FB-lit-10 pending the T7 pane scale floor of one 16.16 step, cited at the funeOS seed set, the funeOS T7 differs
 FB-textfloor pending the smallest text px is 8 px per u times the window's px per u, V1's own 10 px only on the V1 board at its own ppu
-FB-fitbyheight pending windows whose height limits them take V1's values for the tokens V1 alone changed at funeOS v0.4.3
+FB-fitbyheight pending windows whose height limits them take V1's values for the tokens where V1 alone differs from R1 and A105
 FB-lit-11 pending the platform letter spacing at the glyph ends is probed per typeface by the kit, not read from funeOS
 FB-bound pending a play open with no player answer by its bound, the boundMs the host passes from the tap, turns back to the page it came from; a later answer changes no page
 FB-rel pending a play open ended before Now Playing is ready (its ready cap of boundMs after the answer, a host land, HOME, an accessibility action, a restart) shows Now Playing landed with what it has

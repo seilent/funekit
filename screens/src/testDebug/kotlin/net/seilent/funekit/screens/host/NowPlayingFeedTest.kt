@@ -658,7 +658,7 @@ class NowPlayingFeedTest {
     @Test
     fun aServiceEntryPlaysAsTheQueueSays() {
         val st = PlayerState(queueSize = 1, index = 0, service = 9L, playing = true)
-        assertEquals("funeOS player/ui/nowplaying.cpp NowPlaying::status_play :1807-1814, v0.4.3", Play.Playing, playOf(NpFeed.Own(st)))
+        assertEquals("funeOS player/ui/nowplaying.cpp NowPlaying::status_play :1810-1817, v0.4.4", Play.Playing, playOf(NpFeed.Own(st)))
         assertEquals(Play.Paused, playOf(NpFeed.Own(st.copy(playing = false))))
         assertEquals("an empty queue plays nothing", Play.None, playOf(NpFeed.Own(PlayerState())))
     }
@@ -677,7 +677,7 @@ class NowPlayingFeedTest {
         val np = NowPlayingModel()
         lateCover(np)
         val fade = Tok.motion_t7Fade.toLong()
-        assertEquals("the late cover starts its fade at its first draw (funeOS player/ui/nowplaying.cpp NowPlaying::art_in :371-386, v0.4.3)", 0f, rule.runOnIdle { np.artIn(FADE_AT) }, 0f)
+        assertEquals("the late cover starts its fade at its first draw (funeOS player/ui/nowplaying.cpp NowPlaying::art_in :374-389, v0.4.4)", 0f, rule.runOnIdle { np.artIn(FADE_AT) }, 0f)
         val half = fade / 2
         assertEquals(Curves.easeOut.at(half.toFloat() / fade), rule.runOnIdle { np.artIn(FADE_AT + half) }, 1e-4f)
         assertEquals(1f, rule.runOnIdle { np.artIn(FADE_AT + fade) }, 0f)

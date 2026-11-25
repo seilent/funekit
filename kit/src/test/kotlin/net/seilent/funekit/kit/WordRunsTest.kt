@@ -597,7 +597,7 @@ class WordRunsTest {
         val ink = boxInk(measurer, fonts, "שלום", caption, style, tile, QP_LINES, a105.ppu, unitDensity, covers, a105.board.fontHanMinPx)
         assertTrue(ink.rtl)
         val row = ink.lines.single()
-        assertEquals("${sdk()}: funeOS rows.cpp:1099 places an RTL row at x64 - r.width64, the width Fonts::place gives (one track fewer than its code points)", QP_EDGE, ink.x(row) + row.width - TRACK, UNIT64)
+        assertEquals("${sdk()}: funeOS rows.cpp:1104 places an RTL row at x64 - r.width64, the width Fonts::place gives (one track fewer than its code points)", QP_EDGE, ink.x(row) + row.width - TRACK, UNIT64)
     }
 
     @Test

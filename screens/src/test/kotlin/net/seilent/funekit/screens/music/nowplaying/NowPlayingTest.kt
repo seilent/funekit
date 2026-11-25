@@ -247,7 +247,7 @@ class NowPlayingTest {
         assertEquals("premise: the times read the player", npTime(HOLD_POS), npTimes(a105, m, AT, 0L).left)
         m.keySeek(1, HOLD_TO, HOLD_DUR)
         val t = npTimes(a105, m, AT, 0L)
-        assertEquals("the times follow the ramp's target (funeOS player/ui/nowplaying.cpp NowPlaying::ticks_at :1342-1364, v0.4.3)", npTime(HOLD_TO), t.left)
+        assertEquals("the times follow the ramp's target (funeOS player/ui/nowplaying.cpp NowPlaying::ticks_at :1345-1367, v0.4.4)", npTime(HOLD_TO), t.left)
         assertEquals(npRemaining(HOLD_DUR, HOLD_TO), t.right)
         assertEquals((HOLD_TO * a105.bar.w / HOLD_DUR).toInt(), t.fill)
         m.keySeek(0, 0, 0)
@@ -278,7 +278,7 @@ class NowPlayingTest {
         assertEquals("premise: a library row's info reads its track", 1L, npInfoTrack(lib))
         val m = NowPlayingModel()
         service(m)
-        assertNull("no info off the library for a service row (funeOS player/ui/app.cpp App::sheet_target :13544-13552, v0.4.3)", npInfoTrack(m))
+        assertNull("no info off the library for a service row (funeOS player/ui/app.cpp App::sheet_target :14595-14603, v0.4.4)", npInfoTrack(m))
     }
 
     private fun titleDown(m: NowPlayingModel, now: Long) = m.down(a105, Tok.npTextX + TITLE_DX, a105.s.board.npTitleY - TITLE_DY, now)

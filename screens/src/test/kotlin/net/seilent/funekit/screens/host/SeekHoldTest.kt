@@ -84,8 +84,8 @@ class SeekHoldTest {
         assertFalse("an empty queue", start(state(size = 0)))
         assertFalse("the phone's track", start(from = Refuse(true, Card.Present)))
         assertFalse("no card queue", start(from = Refuse(false, Card.Out)))
-        assertFalse("a glyph hold back with no duration (funeOS player/ui/app.cpp App::vol_glyph_hold :14384-14391, v0.4.3)", start(state(dur = 0), dir = -1))
-        assertFalse("a key hold forward with no duration (funeOS player/ui/app.cpp App::seek_start :14393-14402, v0.4.3)", start(state(dur = 0), h = Hold.Key))
+        assertFalse("a glyph hold back with no duration (funeOS player/ui/app.cpp App::vol_glyph_hold :15455-15462, v0.4.4)", start(state(dur = 0), dir = -1))
+        assertFalse("a key hold forward with no duration (funeOS player/ui/app.cpp App::seek_start :15464-15474, v0.4.4)", start(state(dur = 0), h = Hold.Key))
         assertTrue("a key hold back with no duration", start(state(dur = 0), h = Hold.Key, dir = -1))
     }
 
@@ -96,7 +96,7 @@ class SeekHoldTest {
         assertTrue("an index move alone keeps the hold", tick(1048, state(index = 2)))
         assertTrue(hold.on)
         tick(1096, state(track = 2L, index = 1))
-        assertFalse("funeOS player/ui/app.cpp App::seek_tick :14428-14432, v0.4.3", hold.on)
+        assertFalse("funeOS player/ui/app.cpp App::seek_tick :15500-15504, v0.4.4", hold.on)
     }
 
     @Test
@@ -107,7 +107,7 @@ class SeekHoldTest {
         assertTrue("an end for another track keeps the hold", tick(1048))
         emit(EngineEvent.Ended(1L))
         tick(1096)
-        assertFalse("funeOS player/ui/app.cpp App::seek_edge :14518-14528, v0.4.3", hold.on)
+        assertFalse("funeOS player/ui/app.cpp App::seek_edge :15590-15600, v0.4.4", hold.on)
     }
 
     @Test
@@ -140,7 +140,7 @@ class SeekHoldTest {
     @Test
     fun aRunInWhilePausedEndsTheHold() {
         toTheRunIn(state(playing = false))
-        assertEquals("the paused run in still asks the next song (funeOS player/ui/app.cpp App::seek_tick :14482-14487, v0.4.3)", 1, p.nexts)
+        assertEquals("the paused run in still asks the next song (funeOS player/ui/app.cpp App::seek_tick :15554-15559, v0.4.4)", 1, p.nexts)
         assertFalse("a paused run in ends the hold", hold.on)
         p.nextFail = Refused("not now")
         toTheRunIn()
@@ -166,7 +166,7 @@ class SeekHoldTest {
         assertTrue("premise: the edge is held", hold.on)
         emit(EngineEvent.Started(1L))
         tick(1300, last, NEAR_END)
-        assertFalse("funeOS player/ui/app.cpp App::seek_edge :14526-14527, v0.4.3", hold.on)
+        assertFalse("funeOS player/ui/app.cpp App::seek_edge :15598-15599, v0.4.4", hold.on)
     }
 
     @Test
@@ -176,7 +176,7 @@ class SeekHoldTest {
         tick(1000)
         assertEquals(listOf(217000L), p.seeks)
         tick(1250)
-        assertEquals("one seek in flight (funeOS player/ui/app.cpp App::seek_follow :14506-14516, v0.4.3)", listOf(217000L), p.seeks)
+        assertEquals("one seek in flight (funeOS player/ui/app.cpp App::seek_follow :15578-15588, v0.4.4)", listOf(217000L), p.seeks)
         p.slow?.complete(Unit)
         scheduler.runCurrent()
         tick(1264)
@@ -234,7 +234,7 @@ class SeekHoldTest {
         tick(1000, stream)
         tick(1300, stream)
         assertEquals("the ramp runs, seven steps from 3:36", "3:43", hud.seekLeft)
-        assertEquals("a service track skips only the seek (funeOS player/ui/app.cpp App::seek_follow :14508, v0.4.3)", emptyList<Long>(), p.seeks)
+        assertEquals("a service track skips only the seek (funeOS player/ui/app.cpp App::seek_follow :15580, v0.4.4)", emptyList<Long>(), p.seeks)
     }
 
     @Test
@@ -243,7 +243,7 @@ class SeekHoldTest {
         hold.endHold(Hold.Glyph, 1060)
         tick(1100, state(track = 2L, index = 1, dur = 300000), 0)
         assertFalse("premise: the landing ended the hold", hold.on)
-        assertEquals("the owed release lands as a final seek of the carry (funeOS player/ui/app.cpp App::seek_tick :14455-14457, v0.4.3)", 2000L, p.seeks.last())
+        assertEquals("the owed release lands as a final seek of the carry (funeOS player/ui/app.cpp App::seek_tick :15527-15529, v0.4.4)", 2000L, p.seeks.last())
     }
 
     @Test
@@ -251,7 +251,7 @@ class SeekHoldTest {
         start()
         tick(1000)
         tick(1048, variant = true)
-        assertFalse("funeOS player/ui/app.cpp App::seek_tick :14428-14431, v0.4.3", hold.on)
+        assertFalse("funeOS player/ui/app.cpp App::seek_tick :15500-15503, v0.4.4", hold.on)
     }
 
     @Test
@@ -265,7 +265,7 @@ class SeekHoldTest {
         b = false
         tick(1096)
         tick(1300)
-        assertTrue("the other key still holds the ramp (funeOS player/ui/app.cpp App::hold_bit :16064-16078, v0.4.3)", hold.on)
+        assertTrue("the other key still holds the ramp (funeOS player/ui/app.cpp App::hold_bit :17352-17366, v0.4.4)", hold.on)
         a = false
         tick(1348)
         tick(1448)
@@ -278,7 +278,7 @@ class SeekHoldTest {
         toTheRunIn(one)
         emit(EngineEvent.Started(1L))
         tick(1100, one, 0)
-        assertEquals("a one song queue on repeat all lands on its own restart (funeOS player/ui/app.cpp App::seek_edge :14524-14525, v0.4.3)", "0:02", hud.seekLeft)
+        assertEquals("a one song queue on repeat all lands on its own restart (funeOS player/ui/app.cpp App::seek_edge :15596-15597, v0.4.4)", "0:02", hud.seekLeft)
     }
 
     @Test
@@ -296,7 +296,7 @@ class SeekHoldTest {
         val last = state(index = 2)
         toTheRunIn(last)
         tick(1100, last, NEAR_END)
-        assertNull("nothing is due at a held edge with no key (funeOS player/ui/app.cpp App::seek_wake :14551-14571, v0.4.3)", hold.wakeAt(1100))
+        assertNull("nothing is due at a held edge with no key (funeOS player/ui/app.cpp App::seek_wake :15623-15643, v0.4.4)", hold.wakeAt(1100))
         assertEquals("a running ramp wakes at its next step", 1096L, run {
             hold.end(false, 1100)
             start()

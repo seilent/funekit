@@ -242,7 +242,7 @@ class VolumeHudTest {
         h.down(1000, PREV_X, RING_Y)
         assertEquals("no hold at 399 ms", 0, h.holdDue(1399))
         assertFalse(h.holding)
-        assertEquals("funeOS player/ui/hud.cpp VolumeHud::hold_due :613-622, v0.4.3: a hold at seekHoldMs", -1, h.holdDue(1400))
+        assertEquals("funeOS player/ui/hud.cpp VolumeHud::hold_due :614-623, v0.4.4: a hold at seekHoldMs", -1, h.holdDue(1400))
         assertTrue(h.holding)
         assertEquals("one hold per down", 0, h.holdDue(1500))
     }
@@ -254,7 +254,7 @@ class VolumeHudTest {
         assertEquals(1, h.holdDue(1400))
         assertEquals("a move on the held glyph keeps the hold", Act.Draw, h.move(1450, NEXT_X + 2f, RING_Y, 50, VolumeHud.Pos()))
         assertTrue(h.holding)
-        assertEquals("funeOS player/ui/hud.cpp VolumeHud::event :496-519, v0.4.3", Act.SeekEnd, h.move(1500, OFF_X, OFF_Y, 50, VolumeHud.Pos()))
+        assertEquals("funeOS player/ui/hud.cpp VolumeHud::event :497-520, v0.4.4", Act.SeekEnd, h.move(1500, OFF_X, OFF_Y, 50, VolumeHud.Pos()))
         assertFalse(h.holding)
         assertEquals("the up after an ended hold ends nothing more", Act.Draw, h.up(1600, OFF_X, OFF_Y))
         val u = shown()
@@ -269,7 +269,7 @@ class VolumeHudTest {
         val h = shown()
         assertEquals("premise: the number is full", 1f, h.numberK(500), 0f)
         h.seekShow(1, 216000, 377000, 500, false)
-        assertEquals("funeOS player/ui/hud.cpp VolumeHud::seek_show :631-656, v0.4.3: 0.53 of the 520 ms fade in", 1f - Curves.easeIn.at(275f / 520f), h.numberK(500), 1e-4f)
+        assertEquals("funeOS player/ui/hud.cpp VolumeHud::seek_show :632-657, v0.4.4: 0.53 of the 520 ms fade in", 1f - Curves.easeIn.at(275f / 520f), h.numberK(500), 1e-4f)
         assertEquals(0f, h.numberK(500 + 245), 0f)
         val o = shown(10000)
         o.seekShow(1, 216000, 377000, 10500, true)
@@ -283,7 +283,7 @@ class VolumeHudTest {
         assertEquals("premise: a ring down holds the number", 1f, ring.numberK(982 + 260), 0f)
         val h = shown()
         h.down(900, PREV_X, RING_Y)
-        assertEquals("funeOS player/ui/hud.cpp VolumeHud::event :475-477, v0.4.3", 1f - Curves.easeIn.at(0.5f), h.numberK(982 + 260), 0.0001f)
+        assertEquals("funeOS player/ui/hud.cpp VolumeHud::event :476-478, v0.4.4", 1f - Curves.easeIn.at(0.5f), h.numberK(982 + 260), 0.0001f)
     }
 
     @Test

@@ -314,7 +314,7 @@ class LyricRowsTest {
         const val NEXT_WORDS = 5
         const val FOUR = "We kept on running through the rain until the city lights went out"
         const val FIVE = "$FOUR and the morning came slow over the quiet field where nothing was left"
-        const val SLIDE_LINES = "funeOS player/app/slidecases.h slide_case :10-16, player/tests/screens_test.cpp test_lyrics_slide :21696-21701, v0.4.3"
+        const val SLIDE_LINES = "funeOS player/app/slidecases.h slide_case :10-16, player/tests/screens_test.cpp test_lyrics_slide :22151-22156, v0.4.4"
         val SCALES = listOf(1f, 2f, 3f)
     }
 }

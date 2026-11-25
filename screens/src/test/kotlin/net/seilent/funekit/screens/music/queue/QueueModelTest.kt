@@ -66,7 +66,7 @@ class QueueModelTest {
         m.state(st)
         runBlocking { src.viewed { v -> m.show(v, 0, ids.size) } }
         assertFalse("a service entry waits for its open as a track does", m.ready)
-        assertTrue("the queue opens on a service entry (funeOS player/ui/detail.cpp QueuePage::open :1786-1793, v0.4.3)", m.open(st, 0L))
+        assertTrue("the queue opens on a service entry (funeOS player/ui/detail.cpp QueuePage::open :1817-1824, v0.4.4)", m.open(st, 0L))
         assertEquals("focused at its slot", 2, m.focus.row)
     }
 

@@ -22,7 +22,7 @@ class SeekRampTest {
         r.start(1, 1000, 0, 600000)
         assertEquals(listOf(1000L, 2000L, 3000L), listOf(1709L, 1710L, 2420L).map { r.sizeAt(it) })
         r.step(1000L + 48 * 20)
-        assertEquals("funeOS player/tests/pages_test.cpp test_hold_seek :18002-18034, v0.4.3", 21, r.steps)
+        assertEquals("funeOS player/tests/pages_test.cpp test_hold_seek :18819-18851, v0.4.4", 21, r.steps)
         assertEquals(27000L, r.target)
     }
 

@@ -3087,7 +3087,7 @@ class HostTest {
     fun aHeldNextOnThePlateStepsTheRampAndSeeks() {
         val (app, p) = holdApp()
         heldNext(app)
-        assertEquals("the hold's first step seeks a tick step on (funeOS player/ui/app.cpp App::seek_start :14393-14422, seek_tick :14424-14504, v0.4.3)", HOLD_POS + 1000, p.seeks.firstOrNull())
+        assertEquals("the hold's first step seeks a tick step on (funeOS player/ui/app.cpp App::seek_start :15464-15494, seek_tick :15496-15576, v0.4.4)", HOLD_POS + 1000, p.seeks.firstOrNull())
         frames(HOLD_FRAMES)
         assertTrue("the ramp seeks on at the tick rate, ${p.seeks}", p.seeks.size >= 2 && p.seeks.zipWithNext().all { (a, b) -> b > a })
         assertTrue("the readout leads the last seek, ${app.host.hud.seekLeft}", secs(app.host.hud.seekLeft) * 1000 >= p.seeks.last())
@@ -3116,7 +3116,7 @@ class HostTest {
         assertEquals("premise: no seek state", Play.None, app.host.npStatus?.state?.play)
         heldNext(app)
         frames(CUT_FRAMES)
-        assertEquals("funeOS player/ui/nowplaying.cpp status_play, player/ui/rows.cpp draw_status :1270-1279, v0.4.3", Play.SeekForward, app.host.npStatus?.state?.play)
+        assertEquals("funeOS player/ui/nowplaying.cpp status_play, player/ui/rows.cpp draw_status :1275-1284, v0.4.4", Play.SeekForward, app.host.npStatus?.state?.play)
         rule.onRoot().performTouchInput { up() }
         frames(OPEN_FRAMES)
         assertEquals("the end clears the seek state", Play.None, app.host.npStatus?.state?.play)
@@ -3128,7 +3128,7 @@ class HostTest {
         var down = true
         rule.runOnIdle { app.host.seekKey(1) { down } }
         frames(OPEN_FRAMES)
-        assertEquals("a held key on a settled now playing opens the plate (funeOS player/ui/app.cpp App::seek_start :14403-14408, v0.4.3)", OverKind.Volume, app.stack.overlay?.kind)
+        assertEquals("a held key on a settled now playing opens the plate (funeOS player/ui/app.cpp App::seek_start :15475-15480, v0.4.4)", OverKind.Volume, app.stack.overlay?.kind)
         assertTrue("the key hold seeks, ${p.seeks}", p.seeks.isNotEmpty())
         down = false
         frames(OPEN_FRAMES)
@@ -3155,7 +3155,7 @@ class HostTest {
         frames(TICK_FRAMES)
         val wake = app.music.np.idleWake()
         assertTrue(
-            "the tick stamps the idle later than the glyph down, $wake against ${down + NowPlayingModel.IDLE} (funeOS player/ui/app.cpp App::seek_tick :14433-14434, v0.4.3)",
+            "the tick stamps the idle later than the glyph down, $wake against ${down + NowPlayingModel.IDLE} (funeOS player/ui/app.cpp App::seek_tick :15505-15506, v0.4.4)",
             wake > down + NowPlayingModel.IDLE + Tok.seekHoldMs.toLong() - FRAME_MS,
         )
         rule.onRoot().performTouchInput { up() }
@@ -3176,7 +3176,7 @@ class HostTest {
         heldNext(app)
         rule.onRoot().performTouchInput { up() }
         frames(OPEN_FRAMES)
-        assertEquals("a held glyph on the phone's track skips nothing (funeOS player/ui/app.cpp App::vol_glyph_hold :14384-14391, v0.4.3)", 0, skips)
+        assertEquals("a held glyph on the phone's track skips nothing (funeOS player/ui/app.cpp App::vol_glyph_hold :15455-15462, v0.4.4)", 0, skips)
         assertEquals("and seeks nothing", emptyList<Long>(), p.seeks)
     }
 
@@ -3289,7 +3289,7 @@ class HostTest {
     fun aCoverLandingAtRestFades() {
         val app = lateCoverAtRest()
         assertTrue(
-            "the resting page starts the late cover's fade (funeOS player/ui/nowplaying.cpp NowPlaying::art_tile :415-424, NowPlaying::art_in :371-386, v0.4.3)",
+            "the resting page starts the late cover's fade (funeOS player/ui/nowplaying.cpp NowPlaying::art_tile :418-427, NowPlaying::art_in :374-389, v0.4.4)",
             app.music.np.artStart >= 0,
         )
         val mid = rule.runOnIdle { app.music.np.artAlpha(1f, app.music.np.artStart + Tok.motion_t7Fade.toLong() / 2) }
@@ -3302,7 +3302,7 @@ class HostTest {
     fun aCoverLandingOnASleepingPageWakesItsFade() {
         val app = lateCoverAtRest(asleep = true)
         assertTrue(
-            "the late cover wakes the sleeping page into its fade (funeOS player/ui/nowplaying.cpp NowPlaying::art_tile :415-424, NowPlaying::art_in :371-386, v0.4.3)",
+            "the late cover wakes the sleeping page into its fade (funeOS player/ui/nowplaying.cpp NowPlaying::art_tile :418-427, NowPlaying::art_in :374-389, v0.4.4)",
             app.music.np.artStart >= 0,
         )
         frames(ART_FADE_FRAMES)

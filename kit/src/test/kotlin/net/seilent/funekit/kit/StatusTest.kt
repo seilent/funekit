@@ -59,7 +59,7 @@ class StatusTest {
         assertFalse("the seek glyph is not drawn at the play slot centre", same(drawn, alone(g, 0)))
         assertTrue(
             "the seek glyph sits 2 px right of the slot centre, (size * 2 + glyphBox / 2) / glyphBox at the A105's status size " +
-                "(funeOS player/ui/rows.cpp draw_status :1270-1279, kSeekInkDx :21, v0.4.3)",
+                "(funeOS player/ui/rows.cpp draw_status :1275-1284, kSeekInkDx :21, v0.4.4)",
             same(drawn, alone(g, 2)),
         )
     }

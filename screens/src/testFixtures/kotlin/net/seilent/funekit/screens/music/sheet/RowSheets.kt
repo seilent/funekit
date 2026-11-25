@@ -20,7 +20,7 @@ class RowSheets(val sc: MusicScenes) {
     val hubSheets = listOf(
         HubSheet("sheet-500-albums", HUB_ALBUMS, ALBUM_STEPS, OLD_ALBUM, ALBUM_PANEL, "two knob steps on ALBUMS from 2600 to cell 2, this fixture's album there; the sheet opened at 3040"),
         HubSheet("sheet-500-songs", HUB_SONGS, SONG_STEPS, OLD_SONG_ITEMS, SONG_SHORT, "three knob steps on SONGS from 2600 to row 3; the sheet opened at 3160"),
-        HubSheet("sheet-500-genres", HUB_GENRES, 1, GENRE_ITEMS, GENRE_PANEL, "one knob step on GENRES from 2600 to row 1, the second genre (funeOS v0.4.3 draws the genre list with no dividers); the sheet opened at 2920"),
+        HubSheet("sheet-500-genres", HUB_GENRES, 1, GENRE_ITEMS, GENRE_PANEL, "one knob step on GENRES from 2600 to row 1, the second genre (funeOS v0.4.4 draws the genre list with no dividers); the sheet opened at 2920"),
         HubSheet("sheet-500-playlists", HUB_PLAYLISTS, 1, OLD_PLAYLIST, PLAYLIST_PANEL, "one knob step on PLAYLISTS from 2600 to row 1, FAVORITES with this fixture's favorites; the sheet opened at 2920"),
         HubSheet("sheet-500-folders", HUB_FOLDERS, 1, OLD_FOLDER, FOLDER_PANEL, "one knob step on FOLDERS from 2600 to row 1, the first folder; the sheet opened at 2920"),
     )
@@ -58,9 +58,9 @@ class RowSheets(val sc: MusicScenes) {
         val OLD_FOLDER = listOf(PLAY, PLAY_NEXT, ADD, SHUFFLE, ADD_PLAYLIST)
         val OLD_PLAYLIST = listOf(PLAY, PLAY_NEXT, ADD, SHUFFLE, OPEN_PLAYLIST)
         val GENRE_ITEMS = listOf(PLAY, PLAY_NEXT, ADD, ADD_PLAYLIST)
-        const val ALBUM_PANEL = "funeOS v0.4.3 draws the album sheet with 6 rows, as the kit does, so the panel and every page region under it are excluded"
-        const val PLAYLIST_PANEL = "funeOS v0.4.3 draws the FAVORITES sheet with 5 rows, as the kit does, so the panel and every page region under it are excluded"
-        const val FOLDER_PANEL = "funeOS v0.4.3 draws the folder sheet with 5 rows, as the kit does, so the panel and every page region under it are excluded"
-        const val GENRE_PANEL = "funeOS v0.4.3 draws the genre sheet with 4 rows, as the kit does, so the panel and every page region under it are excluded"
+        const val ALBUM_PANEL = "funeOS v0.4.4 draws the album sheet with 6 rows, as the kit does, so the panel and every page region under it are excluded"
+        const val PLAYLIST_PANEL = "funeOS v0.4.4 draws the FAVORITES sheet with 5 rows, as the kit does, so the panel and every page region under it are excluded"
+        const val FOLDER_PANEL = "funeOS v0.4.4 draws the folder sheet with 5 rows, as the kit does, so the panel and every page region under it are excluded"
+        const val GENRE_PANEL = "funeOS v0.4.4 draws the genre sheet with 4 rows, as the kit does, so the panel and every page region under it are excluded"
     }
 }
