@@ -218,11 +218,11 @@ class GenTokensTest {
         assertEquals(free, Gen.classes(vendored).filterValues { it == "free" }.keys)
         assertEquals(setOf("u"), Gen.classes(vendored).filterValues { it == "ppu" }.keys)
         assertEquals(setOf("minTextPx"), Gen.classes(vendored).filterValues { it == "ppuTop" }.keys)
-        assertEquals(1690, Gen.tokens(vendored).names.size)
+        assertEquals(1747, Gen.tokens(vendored).names.size)
         assertEquals(446, Gen.tokens(vendored).board.size)
         assertEquals(30, Gen.glyphs(vendored).list.size)
-        assertEquals("funeOS v0.4.3", Gen.source(vendored).from)
-        assertEquals(null, Gen.source(vendored).commit)
+        assertEquals("funeOS v0.4.4", Gen.source(vendored).from)
+        assertEquals("422ccdeb61de61739a342aaed460e63da33bac62", Gen.source(vendored).commit)
     }
 
     @Test
@@ -248,9 +248,10 @@ class GenTokensTest {
         src.writeText(src.readText().replace(Regex("set [0-9a-f]{64}"), "set " + "0".repeat(64)))
         assertTrue(assertThrows(GenException::class.java) { Gen.checkSource(set) }.message!!.contains("SOURCE pins " + "0".repeat(64)))
         val committed = copy()
-        File(committed, "SOURCE").appendText("commit " + "a".repeat(40) + "\n")
-        Gen.checkSource(committed)
         File(committed, "SOURCE").appendText("tree " + "b".repeat(40) + "\n")
         assertTrue(assertThrows(GenException::class.java) { Gen.checkSource(committed) }.message!!.contains("is not a from, commit, set or file line"))
+        val twice = copy()
+        File(twice, "SOURCE").appendText("commit " + "a".repeat(40) + "\n")
+        assertTrue(assertThrows(GenException::class.java) { Gen.checkSource(twice) }.message!!.contains("repeats one"))
     }
 }

@@ -12,7 +12,7 @@ class BoardLoadTest {
 
     @Test
     fun everyBoardLoadsAndAnswersEveryMember() {
-        assertEquals(1690, names.size)
+        assertEquals(1747, names.size)
         assertEquals(442, getters.size)
         for (b in listOf(TokBoard.v1, TokBoard.r1, TokBoard.a105, TokFit.at(480f, 4.5f), TokFit.at(320f, 3.275f))) {
             for (g in getters) assertTrue("${b.javaClass.simpleName} ${g.name}", g.invoke(b) != null)
