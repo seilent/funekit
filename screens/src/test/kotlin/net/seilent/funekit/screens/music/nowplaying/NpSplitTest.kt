@@ -4,6 +4,7 @@ import net.seilent.funekit.Insets
 import net.seilent.funekit.Nav
 import net.seilent.funekit.Surface
 import net.seilent.funekit.Window
+import net.seilent.funekit.fxU
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.np.NP_RINGS
 import net.seilent.funekit.kit.np.NpLayout
@@ -205,6 +206,40 @@ class NpSplitTest {
         t.at(ax, ay, 10)
         t.tap(20)
         assertEquals(listOf(NpAct.LyricsSheet), acts)
+    }
+
+    @Test
+    fun inLyricsModeAHoldInTheHalfWithNoColumnAsks() {
+        val s = split()!!
+        val m = NowPlayingModel()
+        m.sync(NpShown.of(listOf(Row(1, Kind.Song, "Song", "Artist", null, durationMs = 180000, album = "Album"))), 0)
+        m.lyricsView = true
+        m.lyrics.toggle(0)
+        m.lyrics.land()
+        var asks = 0
+        val t = NpTouch(m, s.halves, {}, {}, artHold = {
+            asks++
+            true
+        })
+        val lg = s.lower.g
+        val lt = LyricTable.of(lg.s)
+        val end = fxU(lt.end(lt.ap))
+        val y = (lg.s.board.npSeekBandBottom + minOf(lg.titleBottomU, end)) / 2
+        assertTrue("premise: the point is in the column span, below the seek band, above the rings", y >= fxU(lt.top) && y < end && y >= lg.s.board.npSeekBandBottom && y < lg.titleBottomU)
+        val (lx, ly) = pt(100f, y, s.lower)
+        assertSame("premise: the lower half takes the down", s.lower, s.halves.at(lx, ly))
+        t.press()
+        t.at(lx, ly, 10)
+        assertTrue("the lower half draws no column, so the hold is backdrop", t.hold())
+        assertEquals(1, asks)
+        t.cancel(20)
+        val ug = s.upper.g
+        val (ux, uy) = pt(100f, (ug.artY + ug.artSide / 2f) / ug.p, s.upper)
+        assertSame("premise: the upper half takes the down", s.upper, s.halves.at(ux, uy))
+        t.press()
+        t.at(ux, uy, 30)
+        assertFalse(t.hold())
+        assertEquals("the upper half's column asks nothing", 1, asks)
     }
 
     @Test

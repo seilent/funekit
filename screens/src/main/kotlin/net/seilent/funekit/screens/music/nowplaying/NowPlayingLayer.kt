@@ -43,7 +43,7 @@ private fun seekEdges(h: NpHalf): Edges {
     return Edges(h.x + r.x0, maxOf(h.y, top + r.y0), h.x + r.x1, minOf(h.y + h.clip, top + r.y1))
 }
 
-class NpTouch(private val m: NowPlayingModel, private val halves: List<NpHalf>, private val act: (NpAct) -> Unit, private val seek: (Long) -> Unit) {
+class NpTouch(private val m: NowPlayingModel, private val halves: List<NpHalf>, private val act: (NpAct) -> Unit, private val seek: (Long) -> Unit, private val artHold: () -> Boolean = { false }) {
     private var fresh = false
     private var cur: NpHalf? = null
 
@@ -71,7 +71,7 @@ class NpTouch(private val m: NowPlayingModel, private val halves: List<NpHalf>, 
 
     fun hold(): Boolean {
         val h = cur ?: return false
-        if (!m.hold(h.g)) return false
+        if (!m.hold(h.g)) return m.artHit(h.g, NpPart.Art in h.parts) && artHold()
         cur = null
         fresh = false
         act(NpAct.Info)
@@ -111,6 +111,7 @@ fun NowPlayingLayer(
     onSeek: (Long) -> Unit,
     split: NpSplit? = null,
     backdrop: NpBackdrop? = null,
+    onArtHold: () -> Boolean = { false },
 ) {
     val s = g.s
     val halves = remember(g, split) { split?.halves ?: listOf(npFlat(g)) }
@@ -142,7 +143,8 @@ fun NowPlayingLayer(
     val time = remember(times, measures) { measures.zip(times) { me, t -> me.time(t) } }
     val act by rememberUpdatedState(onAct)
     val seek by rememberUpdatedState(onSeek)
-    val touch = remember(m, halves) { NpTouch(m, halves, { act(it) }, { seek(it) }) }
+    val artHold by rememberUpdatedState(onArtHold)
+    val touch = remember(m, halves) { NpTouch(m, halves, { act(it) }, { seek(it) }, { artHold() }) }
     val liveNow by rememberUpdatedState(live)
     val halvesNow by rememberUpdatedState(halves)
     val owner = remember { Any() }

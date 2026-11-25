@@ -54,6 +54,8 @@ class NowPlayingTouchTest {
     private val g = NpLayout(s)
     private val acts = mutableListOf<NpAct>()
     private val seeks = mutableListOf<Long>()
+    private var asks = 0
+    private var answer = false
 
     private fun compose(): NowPlayingModel {
         val m = NowPlayingModel()
@@ -68,12 +70,58 @@ class NowPlayingTouchTest {
                     live = true, visible = true, frozen = false, hideFocus = false, snap = 0,
                     onAct = { acts += it },
                     onSeek = { seeks += it },
+                    onArtHold = {
+                        asks++
+                        answer
+                    },
                 )
             }
         }
         rule.mainClock.autoAdvance = false
         rule.mainClock.advanceTimeByFrame()
         return m
+    }
+
+    private fun hold(x: Float, y: Float) {
+        rule.onRoot().performTouchInput { down(Offset(x, y)) }
+        frames((Tok.input_keyHoldMs.toLong() / FRAME + 2).toInt())
+        rule.onRoot().performTouchInput { up() }
+        rule.mainClock.advanceTimeByFrame()
+    }
+
+    @Test
+    fun anArtHoldTheAppTakesAsksOnceAndActsNothingAtTheRelease() {
+        compose()
+        answer = true
+        hold(300f, 700f)
+        assertEquals(1, asks)
+        assertEquals(emptyList<NpAct>(), acts)
+    }
+
+    @Test
+    fun anArtHoldTheAppRefusesIsTheArtTapAtTheRelease() {
+        compose()
+        hold(300f, 700f)
+        assertEquals(1, asks)
+        assertEquals(listOf(NpAct.Controls), acts)
+    }
+
+    @Test
+    fun aTitleHoldIsStillTheInfoActAndAsksNothing() {
+        compose()
+        answer = true
+        hold(300f, 1000f)
+        assertEquals(0, asks)
+        assertEquals(listOf(NpAct.Info), acts)
+    }
+
+    @Test
+    fun aBackRingHoldAsksNothingAndItsReleaseIsTheBack() {
+        compose()
+        answer = true
+        hold(60f, 60f)
+        assertEquals(0, asks)
+        assertEquals(listOf(NpAct.Back), acts)
     }
 
     private fun tap(x: Float, y: Float) {

@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
 import kotlinx.coroutines.Dispatchers
+import net.seilent.funekit.fx
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.Edges
 import net.seilent.funekit.kit.Glow
@@ -487,6 +488,18 @@ class NowPlayingModel {
         slide.touch = false
         bump()
         return true
+    }
+
+    fun artHit(g: NpLayout, column: Boolean): Boolean {
+        if (!touchDown || seeking) return false
+        val x = downX
+        val y = downY
+        if (g.backHit(x, y) || g.seekHit(x, y) || ringAt(g, x, y) >= 0) return false
+        if (!lyricsShown()) return !g.titleHit(x, y)
+        if (!column) return true
+        val t = LyricTable.of(g.s)
+        val u = fx(y)
+        return u < t.top || u >= t.end(t.ap)
     }
 
     fun pressing(now: Long): Boolean = press.any { it.stale(now.toFloat()) }

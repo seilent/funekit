@@ -130,6 +130,9 @@ class TestApp(page: Scale, np: Scale, src: MusicSource?, private val level: Volu
     var extras: (SheetTarget) -> List<SheetExtra> = { emptyList() }
     val logs = mutableListOf<String>()
     var phoneLyricsOf: PhoneLyrics? = null
+    var artHold: (() -> Boolean)? = null
+    var artAsks = 0
+    var songArts = 0
 
     override fun music(s: TestScreen): MusicEntry? = (s as? TestScreen.Music)?.music
 
@@ -169,6 +172,15 @@ class TestApp(page: Scale, np: Scale, src: MusicSource?, private val level: Volu
 
     override fun lyricsModeChanged(on: Boolean) {
         modeChanges += on
+    }
+
+    override fun npArtHold(): Boolean {
+        artAsks++
+        return artHold?.invoke() ?: super.npArtHold()
+    }
+
+    override fun npSongArtShown() {
+        songArts++
     }
 
     override fun offset(track: Long): OffsetEdit? = edit.also { asked() }

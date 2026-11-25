@@ -18,10 +18,12 @@ import net.seilent.funekit.kit.motion.Curves
 import net.seilent.funekit.kit.np.NP_BACK
 import net.seilent.funekit.kit.np.NP_HEART
 import net.seilent.funekit.kit.np.NP_MARK
+import net.seilent.funekit.kit.np.NP_RINGS
 import net.seilent.funekit.kit.np.NpLayout
 import net.seilent.funekit.kit.np.NpRingPlace
 import net.seilent.funekit.kit.Toast
 import net.seilent.funekit.fxInt
+import net.seilent.funekit.fxU
 import net.seilent.funekit.scale
 import net.seilent.funekit.api.Anchor
 import net.seilent.funekit.api.Kind
@@ -43,6 +45,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 private const val HELD_AT = 1000L
+private const val INSET_U = 0.1f
 private const val AT = 1000L
 private const val SERVICE = 9L
 private const val HOLD_POS = 216000L
@@ -789,6 +792,86 @@ class NowPlayingTest {
         m.feed(PhoneTrack("Radio", "T", "A", "B", true, false, 180000, 10000, 500000, 1f, false, PhoneRepeat.Off, 0, 0, null))
         m.down(a105, 100f, 330f, 1200)
         assertFalse(m.hold(a105))
+    }
+
+    private fun artAt(m: NowPlayingModel, x: Float, y: Float, column: Boolean = true): Boolean {
+        m.down(a105, x, y, 10)
+        return m.artHit(a105, column).also { m.cancel(20) }
+    }
+
+    private val artCx = (a105.artX + a105.artSide / 2f) / a105.p
+    private val artCy = (a105.artY + a105.artSide / 2f) / a105.p
+
+    @Test
+    fun theArtHitIsTheBackdropAndTheArtSquareOffTheControls() {
+        val m = NowPlayingModel()
+        m.sync(shown(1), 0)
+        assertTrue("the art square", artAt(m, artCx, artCy))
+        assertTrue("right of the art, above the mark", artAt(m, 200f, 200f))
+        assertTrue("the gesture bottom strip below the rings", artAt(m, 100f, a105.s.stdH - 1f))
+    }
+
+    @Test
+    fun theControlsTakeNoArtHit() {
+        val m = NowPlayingModel()
+        m.sync(shown(1), 0)
+        assertFalse("the back ring", artAt(m, 1f, 1f))
+        for (i in 0 until m.rings()) assertFalse("ring $i", artAt(m, a105.ringCx(i) / a105.p, a105.ringCy / a105.p))
+        assertFalse("the title", artAt(m, 100f, 330f))
+        assertFalse("a seek band down seeks", artAt(m, 100f, 300f))
+        val v = phoneShown()
+        assertFalse("the variant's title", artAt(v, 100f, 330f))
+        assertFalse("the variant's seek band (funeOS player/ui/nowplaying.cpp NowPlaying::backdrop_pressed :2388-2405, v0.4.4)", artAt(v, 100f, 300f))
+        assertTrue("the variant's art square", artAt(v, artCx, artCy))
+    }
+
+    @Test
+    fun theMarkBoxLiesOffTheTitleAndTheRingsOnEveryBoard() {
+        for ((name, g) in listOf("v1" to v1, "r1" to r1, "a105" to a105)) {
+            val b = g.s.board
+            val half = Tok.npMarkHit / 2
+            val cx = Tok.npArtX + b.npArt + Tok.tileLGutter + Tok.npRing / 2
+            val cy = b.npArtTop + b.npArt - Tok.npRing / 2
+            val x0 = maxOf(cx - half, Tok.npArtX + b.npArt) + INSET_U
+            val x1 = minOf(cx + half, g.s.w) - INSET_U
+            val y0 = cy - half + INSET_U
+            val y1 = cy + half - INSET_U
+            for ((x, y) in listOf(x0 to y0, x1 to y0, x0 to y1, x1 to y1)) {
+                assertTrue("premise: $name ($x, $y) is in the mark box", g.markHit(x, y))
+                assertFalse("$name ($x, $y): the mark answers before the title in funeOS player/ui/nowplaying.cpp NowPlaying::backdrop_pressed :2398-2403, v0.4.4", g.titleHit(x, y))
+                assertEquals("$name ($x, $y) is off the rings", -1, g.ringHit(x, y, NP_RINGS))
+            }
+        }
+    }
+
+    @Test
+    fun anOwnMarkHoldIsAnArtHitAndItsRefusedReleaseOpensLyricsMode() {
+        val m = NowPlayingModel()
+        m.sync(shown(1), 0)
+        m.lyricsView = true
+        m.mark = true
+        m.down(a105, a105.markX / a105.p, a105.markY / a105.p, 10)
+        assertTrue(m.artHit(a105, true))
+        assertEquals("a refused hold keeps the touch, so the release is the mark tap", NpAct.Lyrics, m.tap(a105, 20))
+    }
+
+    @Test
+    fun inLyricsModeTheColumnTakesNoArtHitAndTheBackdropAboveAndBelowDoes() {
+        val m = NowPlayingModel()
+        m.sync(shown(1), 0)
+        m.lyricsView = true
+        m.lyrics.toggle(0)
+        m.lyrics.land()
+        assertTrue("premise: lyrics mode shows", m.lyricsShown())
+        val t = LyricTable.of(a105.s)
+        val top = fxU(t.top)
+        val end = fxU(t.end(t.ap))
+        val mid = (top + end) / 2
+        assertTrue("premise: the column ends above the rings", end < a105.titleBottomU)
+        assertFalse("inside the column", artAt(m, 100f, mid))
+        assertTrue("above the column, off the back ring", artAt(m, 200f, top - 10f))
+        assertTrue("between the column end and the rings", artAt(m, 100f, (end + a105.titleBottomU) / 2))
+        assertTrue("a half that draws no column", artAt(m, 100f, mid, column = false))
     }
 
     private fun held(k: Int): NowPlayingModel {

@@ -55,6 +55,10 @@ interface MusicApp<S : Any> {
 
     fun lyricsModeChanged(on: Boolean) {}
 
+    fun npArtHold(): Boolean = false
+
+    fun npSongArtShown() {}
+
     fun offset(track: Long): OffsetEdit? = null
 
     fun sheetDelete(t: SheetTarget): SheetDelete? = null

@@ -18,6 +18,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
 import androidx.lifecycle.Lifecycle
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
@@ -28,6 +29,7 @@ import net.seilent.funekit.Scale
 import net.seilent.funekit.Surface
 import net.seilent.funekit.Window
 import net.seilent.funekit.fxInt
+import net.seilent.funekit.fxU
 import net.seilent.funekit.kept
 import net.seilent.funekit.api.Anchor
 import net.seilent.funekit.api.ArtRef
@@ -70,6 +72,7 @@ import net.seilent.funekit.screens.music.albcol.AlbumColModel
 import net.seilent.funekit.screens.music.album.AlbumModel
 import net.seilent.funekit.screens.music.hub.HubModel
 import net.seilent.funekit.screens.music.nowplaying.AdjustHit
+import net.seilent.funekit.screens.music.nowplaying.LyricTable
 import net.seilent.funekit.screens.music.nowplaying.NowPlayingModel
 import net.seilent.funekit.screens.music.nowplaying.NpAct
 import net.seilent.funekit.screens.music.nowplaying.npTitleGlow
@@ -3332,6 +3335,169 @@ class HostTest {
         assertFalse("the fade runs on at rest and ends", app.music.np.artPending)
     }
 
+    private val aboveColumn = NpLayout(np).let { g -> Offset(Tok.canvasW / 2 * g.p + (np.left - page.left), (fxU(LyricTable.of(np).top) - ABOVE_U) * g.p) }
+
+    private fun npHold(at: Offset, before: () -> Unit = {}) {
+        rule.onRoot().performTouchInput { down(at) }
+        frames(CUT_FRAMES)
+        before()
+        frames(HOLD_FRAMES)
+        rule.onRoot().performTouchInput { up() }
+        frames(OPEN_FRAMES)
+    }
+
+    private fun newArt(app: TestApp) {
+        app.music.np.art = ImageBitmap(COVER, COVER)
+        app.music.np.artId = Any()
+    }
+
+    private fun coverIn(app: TestApp, work: CoroutineDispatcher = Dispatchers.Unconfined): NpPicture {
+        val pic = NpPicture(ImageBitmap(4, 4))
+        rule.runOnIdle {
+            app.music.np.workContext = work
+            newArt(app)
+            app.backdropFlow.value = pic
+        }
+        frames(2)
+        rule.runOnIdle { app.host.showLyrics(true) }
+        frames(BLUR_FRAMES)
+        return pic
+    }
+
+    @Test
+    fun aBackdropHoldTheAppTakesOpensNothingAndClearsTheTitleFocus() {
+        val app = lyricsApp(Edit(), mode = false, root = true)
+        npDown(app, titleAt)
+        assertTrue("premise: the title down focuses it", rule.runOnIdle { app.music.np.titleFocus })
+        app.artHold = { true }
+        npHold(artPx) { assertTrue("premise: the title has the focus", rule.runOnIdle { app.music.np.titleFocus }) }
+        assertEquals(1, app.artAsks)
+        assertNull("the release opens nothing", app.stack.overlay)
+        assertFalse(rule.runOnIdle { app.music.np.titleFocus })
+    }
+
+    @Test
+    fun theDefaultHookRefusesSoAnArtSquareHoldOpensTheControls() {
+        val app = lyricsApp(Edit(), mode = false, root = true)
+        npHold(artPx)
+        assertEquals(1, app.artAsks)
+        assertEquals("the release is the art tap", OverKind.Volume, app.stack.overlay?.kind)
+    }
+
+    @Test
+    fun aHoldWhileAnotherOpenHoldsTheSlotAsksNothing() {
+        val app = lyricsApp(Edit(), mode = false, root = true)
+        app.artHold = { true }
+        npHold(artPx) {
+            rule.runOnUiThread { app.stack.open(Overlay(OverKind.Dlg)) }
+            assertTrue("premise: the slot is held", rule.runOnIdle { app.stack.taken })
+            assertTrue("premise: the touch is still down", rule.runOnIdle { app.music.np.touching() })
+        }
+        assertEquals(0, app.artAsks)
+    }
+
+    @Test
+    fun aHoldWhoseTurnAwayStartedAsksNothing() {
+        val app = lyricsApp(Edit(), mode = false, root = true)
+        app.artHold = { true }
+        npHold(artPx) {
+            rule.runOnIdle { app.stack.back(app.host.popKind) }
+            frames(CUT_FRAMES)
+            assertEquals("premise: the close runs", MoveKind.T8, rule.runOnIdle { app.stack.turn?.kind })
+            assertTrue("premise: the close keeps the touch", rule.runOnIdle { app.music.np.touching() })
+        }
+        assertEquals(0, app.artAsks)
+    }
+
+    @Test
+    fun inLyricsModeAHoldOnTheSongArtAsksNothingAndItsReleaseOpensTheLyricsSheet() {
+        val app = lyricsApp(Edit(), mode = false, root = true)
+        val pic = coverIn(app)
+        assertNotSame("premise: the song art shows", pic, app.host.npBackdrop.shown)
+        app.artHold = { true }
+        npHold(aboveColumn)
+        assertEquals("funeOS player/ui/app.cpp App::art_sheet :14842-14850, v0.4.4", 0, app.artAsks)
+        assertNotNull("the release is the lyrics tap", app.host.fieldSheet)
+    }
+
+    @Test
+    fun whileTheFirstSongArtStillBlursAHoldOnTheAppPictureAsks() {
+        val app = lyricsApp(Edit(), mode = false, root = true)
+        val pic = coverIn(app, StandardTestDispatcher())
+        assertSame("premise: the app's picture shows while the first cover blurs", pic, app.host.npBackdrop.shown)
+        app.artHold = { true }
+        npHold(aboveColumn)
+        assertEquals(1, app.artAsks)
+    }
+
+    @Test
+    fun whileTheNextSongArtBlursTheShownSongArtStillRefuses() {
+        val app = lyricsApp(Edit(), mode = false, root = true)
+        coverIn(app)
+        val first = app.host.npBackdrop.shown
+        rule.runOnIdle {
+            app.music.np.workContext = StandardTestDispatcher()
+            newArt(app)
+        }
+        frames(BLUR_FRAMES)
+        assertSame("premise: the first cover still shows", first, app.host.npBackdrop.shown)
+        app.artHold = { true }
+        npHold(aboveColumn)
+        assertEquals(0, app.artAsks)
+    }
+
+    @Test
+    fun afterLyricsModeLeavesAHoldOnTheBackdropAsks() {
+        val app = lyricsApp(Edit(), mode = false, root = true)
+        val pic = coverIn(app)
+        rule.runOnIdle { app.host.showLyrics(false) }
+        frames(OPEN_FRAMES)
+        assertSame("premise: the app's picture is back", pic, app.host.npBackdrop.shown)
+        app.artHold = { true }
+        npHold(aboveColumn)
+        assertEquals(1, app.artAsks)
+    }
+
+    @Test
+    fun thePhoneVariantAsksOnItsArtSquare() {
+        val app = lyricsApp(Edit(), mode = false, root = true)
+        session(app)
+        assertTrue("premise: the variant shows", rule.runOnIdle { app.music.np.variant })
+        app.artHold = { true }
+        npHold(artPx)
+        assertEquals(1, app.artAsks)
+    }
+
+    @Test
+    fun theSongArtShownHookFiresOncePerSongArtLanding() {
+        val app = lyricsApp(Edit(), mode = false)
+        val blur = StandardTestDispatcher()
+        coverIn(app, blur)
+        assertEquals("none while the first cover blurs", 0, app.songArts)
+        rule.runOnIdle { blur.scheduler.advanceUntilIdle() }
+        frames(BLUR_FRAMES)
+        assertTrue("premise: the cover shows", app.host.npBackdrop.shown!!.whole)
+        assertEquals("funeOS player/ui/app.cpp App::show_cover :21820-21830, v0.4.4", 1, app.songArts)
+        val first = app.host.npBackdrop.shown
+        val shorter = scale(Window(W, H_SHORT, SDK, none, none, none, none, none), Nav.None, Surface.NowPlaying, false)
+        rule.runOnIdle {
+            app.music.np.workContext = Dispatchers.Unconfined
+            app.music.np.artKey = listOf(1L, null, NpLayout(shorter).artSide, null, false)
+            app.np = shorter
+        }
+        frames(BLUR_FRAMES)
+        val next = app.host.npBackdrop.shown
+        assertTrue("premise: the resize shows the same art blurred again", next!!.whole)
+        assertNotSame(first, next)
+        assertEquals("none on a resize of the same art", 1, app.songArts)
+        rule.runOnIdle { newArt(app) }
+        frames(BLUR_FRAMES)
+        assertEquals("one more for a new song's cover", 2, app.songArts)
+        rule.runOnIdle { app.host.showLyrics(false) }
+        frames(OPEN_FRAMES)
+        assertEquals("none when lyrics mode leaves", 2, app.songArts)
+    }
+
     companion object {
         private const val W = 720
         private const val H = 1280
@@ -3358,6 +3524,7 @@ class HostTest {
         private const val WAIT_MS = 5_000L
         private const val FRAME_MS = 16
         private const val HOLD_FRAMES = 27
+        private const val ABOVE_U = 20f
         private const val TICK_FRAMES = 3
         private const val CLOSE_FRAMES = 11
         private const val ART_FADE_FRAMES = 23

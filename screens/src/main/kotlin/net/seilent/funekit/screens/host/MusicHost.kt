@@ -318,6 +318,7 @@ class MusicHost<S : Any> internal constructor(
     private var npGeo by mutableStateOf(npGeo)
     private var npHalves by mutableStateOf(npHalves)
     private var npHalfInks by mutableStateOf(npHalfInks)
+    private var npSongArt = false
     private var navGround by mutableStateOf(navGround)
     private var split by mutableStateOf(split)
     private var scaleAt: List<Any> = scaleKey(env.page)
@@ -1709,6 +1710,7 @@ class MusicHost<S : Any> internal constructor(
                         onSeek = { ms -> if (npSeekLive()) scope.launch(FailFast) { quiet { src?.player?.seek(ms) } } },
                         split = split,
                         backdrop = backdrop,
+                        onArtHold = ::npArtHold,
                     )
                 }
                 continue
@@ -1860,6 +1862,8 @@ class MusicHost<S : Any> internal constructor(
             val same = id != null && id === showing
             if (same && backdrop.fading(t)) backdrop.swap(want) else backdrop.set(want, t, cut = same)
             showing = id
+            npSongArt = id != null
+            if (id != null && !same) app.npSongArtShown()
         }
     }
 
@@ -1954,6 +1958,8 @@ class MusicHost<S : Any> internal constructor(
             else -> scope.launch(FailFast) { quiet { npAct(act, np, src, phone, toast, env.now) } }
         }
     }
+
+    internal fun npArtHold(): Boolean = npSeekLive() && !stack.taken && !npSongArt && app.npArtHold()
 
     fun openOffset() {
         val track = offsetOpen() ?: return
