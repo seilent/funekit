@@ -64,6 +64,12 @@ class SubSheetTest {
         SettingRow("dsdOutput", "dsd output", "dop", SettingKind.Choice, sub = "DoP skips EQ, crossfeed, tube, width"),
     )
 
+    private fun effects() = listOf(
+        SettingRow("earEq", "correction eq", "off", SettingKind.Choice, sub = "headphone correction before EQ", tall = true),
+        SettingRow("crossfeed", "crossfeed", "off", SettingKind.Choice, sub = "blends left and right on the jack"),
+        SettingRow("tube", "tube", "off", SettingKind.Choice, sub = "adds tube harmonics on the jack"),
+    )
+
     private fun long() = listOf(
         SettingRow("resume", "resume", "position", SettingKind.Choice, sub = LONG_SUB),
     )
@@ -105,6 +111,7 @@ class SubSheetTest {
             render.tile(FOLDER, "subs-library", "the library pivot, sub lines under play through and resume, focus on resume", notes, shot(a105, library(), LIBRARY, RESUME_ROW), emptyList(), a105.stdPpu),
             render.tile(FOLDER, "large-subs-library", "the same at large", largeNotes, shot(large, library(), LIBRARY, RESUME_ROW), emptyList(), large.stdPpu),
             render.tile(FOLDER, "subs-output", "priority and dsd output with their sub lines, focus on priority", notes, shot(a105, output(), OUTPUT, 0), emptyList(), a105.stdPpu),
+            render.tile(FOLDER, "subs-effects", "correction eq reserving both two line blocks, crossfeed and tube, focus on correction eq", notes, shot(a105, effects(), EFFECTS, 0), emptyList(), a105.stdPpu),
             render.tile(FOLDER, "subs-long", "a sub longer than the row, on one line clipped at the right edge", notes, shot(a105, long(), LIBRARY, 0), emptyList(), a105.stdPpu),
         )
         render.write(Sheet(FOLDER, "subs", listOf("Kit settings rows with sub lines (funeOS v0.4.4)."), tiles))
@@ -113,7 +120,7 @@ class SubSheetTest {
             listOf(
                 "# Kit settings sub lines",
                 "",
-                "- `settings-subs/subs.png`: the library pivot with its sub rows at A105 and at large, the output sub rows, a clipped long sub",
+                "- `settings-subs/subs.png`: the library pivot with its sub rows at A105 and at large, the output and effects sub rows, a clipped long sub",
                 "- Not ink gated: the settings row draw records no region",
             ),
         )
@@ -125,6 +132,7 @@ class SubSheetTest {
         const val SDK = 35
         const val FOLDER = "settings-subs"
         const val OUTPUT = 0
+        const val EFFECTS = 1
         const val LIBRARY = 2
         const val RESUME_ROW = 3
         const val NOW = 5000L

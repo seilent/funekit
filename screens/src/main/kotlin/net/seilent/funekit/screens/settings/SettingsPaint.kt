@@ -84,7 +84,7 @@ fun settingsDraw(
     accentOff: Boolean,
 ): SettingsDraw {
     val meas = settingMeasure(s, fonts, density, covers, accentOff)
-    val d = SettingsDraw(m, s, meas, { r -> settingInk(measurer, fonts, density, covers, meas, r.title, r.live ?: r.value, r.words + r.shows + listOfNotNull(r.live?.let { r.value }), r.sub, r.editable, swatch = r.swatch != null) }, accent)
+    val d = SettingsDraw(m, s, meas, { r -> settingInk(measurer, fonts, density, covers, meas, r.title, r.live ?: r.value, r.words + r.shows + listOfNotNull(r.live?.let { r.value }), r.sub, r.editable, r.tall, swatch = r.swatch != null) }, accent)
     m.heightOf = { d.ink(it).size.px }
     m.view = d.view
     m.scale(s.ppu)

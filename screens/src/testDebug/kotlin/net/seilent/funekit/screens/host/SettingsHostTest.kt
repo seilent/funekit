@@ -1269,6 +1269,17 @@ class SettingsHostTest {
         assertEquals("the drag rests at the content end", m.content(0) - m.view, m.pane.px)
     }
 
+    @Test
+    fun aTapInATallRowsReservedBandHitsIt() {
+        val ear = choice(EAR).copy(title = "correction eq", sub = "headphone correction before EQ", tall = true)
+        val rows = Rows(listOf(SettingPivot(EFFECTS, listOf(ear, choice(CROSSFEED)))))
+        val app = app(SettingsPage(ID, rows, HeaderLook.Settings), root = true)
+        val (_, m) = open(app)
+        assertTrue("premise: the tap is past the one line sub row's end", TALL_TAP >= A105_SUB_ROW)
+        press(onRow(m, TALL_TAP))
+        assertEquals("the reserved band is the row's (funeOS player/ui/settings.cpp SettingsPage::measure :573, row_at :803-810, v0.4.4)", listOf(EAR), rows.opens)
+    }
+
     companion object {
         private const val W = 720
         private const val H = 1280
@@ -1321,6 +1332,10 @@ class SettingsHostTest {
         private const val DRAG_STEP = 60f
         private const val DRAG_STEPS = 10
         private const val SETTLE_FRAMES = 90
+        private const val EFFECTS = "effects"
+        private const val EAR = "earEq"
+        private const val CROSSFEED = "crossfeed"
+        private const val TALL_TAP = 190
         private val ID = SettingsId(SETTINGS)
         private val WORDS = listOf("off", "low", "high")
         private val LATER = listOf("x", "y", "z")

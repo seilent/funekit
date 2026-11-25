@@ -56,6 +56,8 @@ class SettingsRowTest {
 
     private fun subbed(at: List<Int> = SUB_ROWS) = plain().mapIndexed { i, r -> if (i in at) r.copy(sub = "the sub of row $i") else r }
 
+    private fun correctionEq(sub: String? = "headphone correction before EQ") = SettingRow("earEq", "correction eq", "off", SettingKind.Choice, sub = sub, tall = true)
+
     private fun shown(rows: List<SettingRow>): SettingsModel = model().also {
         draw(it)
         it.pivots = listOf(SettingPivot(LIBRARY, rows))
@@ -310,6 +312,23 @@ class SettingsRowTest {
         assertEquals("the row's full height shows (funeOS player/ui/settings.cpp SettingsPage::show_pivot :628-630, v0.4.4)", top + h - m.view, m.pane(1).px)
     }
 
+    @Test
+    fun aTallRowReservesBothTwoLineBlocks() {
+        for ((s, want) in listOf(a105 to A105_TALL, r1 to R1_TALL)) {
+            val m = model()
+            draw(m, s)
+            m.pivots = listOf(SettingPivot(EFFECTS, listOf(correctionEq(), SettingRow("crossfeed", "crossfeed", "off", SettingKind.Choice, sub = "blends left and right on the jack"))))
+            assertEquals("ppu ${s.ppu}: funeOS player/ui/settings.cpp SettingsPage::measure :573, v0.4.4", want, m.heights(0)[0])
+            assertEquals("ppu ${s.ppu}: the next row starts below it", want, m.tops(0)[1])
+        }
+    }
+
+    @Test
+    fun aTallRowWithNoSubKeepsTheSettingsPitch() {
+        val m = shown(listOf(correctionEq(null)))
+        assertEquals("funeOS player/ui/settings.cpp SettingsPage::measure :562-563, v0.4.4", px(Tok.settingsPitch, a105.ppu), m.heights(0)[0])
+    }
+
     private companion object {
         const val A105_W = 720
         const val A105_H = 1280
@@ -325,6 +344,8 @@ class SettingsRowTest {
         const val FOCUS_ROW = 7
         const val SHOW_ROW = 7
         const val CUT_OFF = 300
+        const val A105_TALL = 199
+        const val R1_TALL = 133
         const val SDK = 35
         const val EFFECTS = "effects"
         const val SYSTEM = "system"

@@ -37,6 +37,7 @@ data class SettingRow(
     val swatch: Color? = null,
     val swatches: List<Color> = emptyList(),
     val pressLook: Boolean = true,
+    val tall: Boolean = false,
 ) {
     val editable: Boolean
         get() = SettingFlag.ReadOnly !in flags && when (kind) {
