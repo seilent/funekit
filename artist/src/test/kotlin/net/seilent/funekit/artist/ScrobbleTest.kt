@@ -229,6 +229,46 @@ class ScrobbleTest {
         PlayEntry(seq, startS, 240_000, "Track $seq", "Radiohead", listOf("Radiohead"), mbids, "OK Computer", albumArtist, seq.toInt(), 0)
 
     @Test
+    fun aListenTheUnitSentToLastFmGoesToListenBrainzOnly() {
+        val s = scrobbler()
+        s.addLog(0xA1, listOf(entry(1).copy(sentTo = Accounts.LAST_FM_SENT)), ZoneOffset.UTC)
+        s.flush()
+        assertTrue("funeOS player/app/scrobsend.cpp ScrobSend::sent_to :531-539, v0.4.4", net.sent(LFM).isEmpty())
+        assertEquals(listOf("Track 1"), lbTracks())
+        assertEquals(0, s.pending())
+    }
+
+    @Test
+    fun aListenTheUnitSentToListenBrainzGoesToLastFmOnly() {
+        val s = scrobbler()
+        s.addLog(0xA1, listOf(entry(1).copy(sentTo = Accounts.LISTEN_BRAINZ_SENT)), ZoneOffset.UTC)
+        s.flush()
+        assertEquals(listOf("Track 1"), lfmTracks())
+        assertTrue(net.sent(LB).isEmpty())
+        assertEquals(0, s.pending())
+    }
+
+    @Test
+    fun aListenTheUnitSentToBothReachesNeither() {
+        val s = scrobbler()
+        s.addLog(0xA1, listOf(entry(1).copy(sentTo = Accounts.LAST_FM_SENT or Accounts.LISTEN_BRAINZ_SENT)), ZoneOffset.UTC)
+        s.flush()
+        assertTrue(net.sent(LFM).isEmpty())
+        assertTrue(net.sent(LB).isEmpty())
+        assertEquals("both cursors past it", listOf(1L, 1L), listOf(s.queue.cursor(Accounts.LAST_FM), s.queue.cursor(Accounts.LISTEN_BRAINZ)))
+        assertEquals(0, s.pending())
+    }
+
+    @Test
+    fun aListenTheUnitSentToLastFmIsInLastFmsOwnRecord() {
+        val s = scrobbler()
+        s.addLog(0xA1, listOf(entry(1).copy(sentTo = Accounts.LAST_FM_SENT)), ZoneOffset.UTC)
+        s.flush()
+        assertTrue("premise: Last.fm got no post", net.sent(LFM).isEmpty())
+        assertTrue("the shift pass sees it as Last.fm's", "e\t1\t${NOW / 1000 - 7200 + 60}\tRadiohead\tTrack 1" in java.io.File(tmp.root, "own.${Accounts.LAST_FM}").readLines())
+    }
+
+    @Test
     fun logEntriesSendAlbumArtistTrackNumberAndMbids() {
         val s = scrobbler()
         assertEquals(1L, s.addLog(0xA1, listOf(entry(1, albumArtist = "Various Artists")), ZoneOffset.UTC))

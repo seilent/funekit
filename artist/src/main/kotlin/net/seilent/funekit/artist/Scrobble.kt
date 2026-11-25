@@ -47,6 +47,14 @@ data class Accounts(
     companion object {
         const val LAST_FM = "lastfm"
         const val LISTEN_BRAINZ = "listenbrainz"
+        const val LAST_FM_SENT = 1 shl 0
+        const val LISTEN_BRAINZ_SENT = 1 shl 1
+
+        fun sentBit(service: String) = when (service) {
+            LAST_FM -> LAST_FM_SENT
+            LISTEN_BRAINZ -> LISTEN_BRAINZ_SENT
+            else -> 0
+        }
     }
 }
 
@@ -404,6 +412,8 @@ class Scrobbler(
     private fun bound(service: String) = bounds.getOrPut(service) { ReadBound(dir, service, dirSync) }
 
     private fun passed(service: String, a: Accounts, id: Long) {
+        val unit = queue.after(service).filter { it.id <= id && unitSent(service, it) }
+        if (unit.isNotEmpty()) record(service, a).sent(unit, clock() / 1000)
         queue.sent(service, id)
         record(service, a).moved(id, clock() / 1000)
         bound(service).passed(id)
@@ -429,14 +439,14 @@ class Scrobbler(
             for (l in rest) {
                 if (n == batchSize(service)) break
                 window += l
-                if (!old(service, l)) n++
+                if (!old(service, l) && !unitSent(service, l)) n++
             }
             if (n == 0) {
                 passed(service, a, window.last().id)
                 continue
             }
             val others = (a.enabled + Accounts.LAST_FM + Accounts.LISTEN_BRAINZ).distinct().map { record(it, a) }
-            val v = check.check(window, { !old(service, it) }, user, read, record(service, a), others, queue.cursor(service), zone(), clock(), bound(service), stop)
+            val v = check.check(window, { !old(service, it) && !unitSent(service, it) }, user, read, record(service, a), others, queue.cursor(service), zone(), clock(), bound(service), stop)
             if (v.result == Sent.YIELD) return Sent.YIELD
             if (v.cut > 0) {
                 val part = window.subList(0, v.cut)
@@ -450,6 +460,8 @@ class Scrobbler(
 
     private fun old(service: String, l: Listen) = service == Accounts.LAST_FM && clock() / 1000 - l.startS > LAST_FM_MAX_AGE_S
 
+    private fun unitSent(service: String, l: Listen) = (l.sentTo and Accounts.sentBit(service)) != 0
+
     private fun call(service: String, a: Accounts, p: AppPair?, batch: List<Listen>): Sent {
         val r = if (service == Accounts.LAST_FM) lastFm.scrobble(a, p!!, batch) else listenBrainz.submit(a.token, batch)
         log("scrobble $service ${batch.size} up to ${batch.last().id} $r")
@@ -457,7 +469,7 @@ class Scrobbler(
         return r
     }
 
-    private fun sendable(service: String, seg: List<Listen>, skip: Set<Long>) = seg.filter { !old(service, it) && it.id !in skip }
+    private fun sendable(service: String, seg: List<Listen>, skip: Set<Long>) = seg.filter { !old(service, it) && !unitSent(service, it) && it.id !in skip }
 
     private fun halves(seg: List<Listen>, batch: List<Listen>): List<List<Listen>> {
         val at = seg.indexOf(batch[batch.size / 2])

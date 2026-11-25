@@ -23,8 +23,8 @@ class ScrobbleQueueTest {
     private val utc: ZoneId = ZoneOffset.UTC
     private val now = 1_800_000_000L
 
-    private fun entry(seq: Long, title: String = "Track $seq", startLocalS: Long? = now - 86400 + seq * 60, zoneS: Int? = 0, artist: String? = "Radiohead", liveSeen: Boolean? = null, exposed: Boolean? = null) =
-        PlayEntry(seq, startLocalS, 240_000, title, artist, listOfNotNull(artist), emptyList(), "OK Computer", zoneS = zoneS, liveSeen = liveSeen, exposed = exposed)
+    private fun entry(seq: Long, title: String = "Track $seq", startLocalS: Long? = now - 86400 + seq * 60, zoneS: Int? = 0, artist: String? = "Radiohead", liveSeen: Boolean? = null, exposed: Boolean? = null, sentTo: Int? = null) =
+        PlayEntry(seq, startLocalS, 240_000, title, artist, listOfNotNull(artist), emptyList(), "OK Computer", zoneS = zoneS, liveSeen = liveSeen, exposed = exposed, sentTo = sentTo)
 
     private fun oldParse(line: String): Listen? {
         val f = line.split('\t')
@@ -165,6 +165,51 @@ class ScrobbleQueueTest {
         q.addLog(0xA1, listOf(entry(1, exposed = true), entry(2), entry(3, zoneS = null, exposed = true)), lastFm, utc, now)
         q.add(Listen(now, "Radiohead", "Let Down"), lastFm)
         assertEquals(oldLoad(dir), q.after(Accounts.LAST_FM).map { it.copy(exposed = false, z = null) })
+    }
+
+    @Test
+    fun aListensSentToSurvivesTheQueueFile() {
+        val dir = tmp.newFolder("sent")
+        val q = queue(dir)
+        q.addLog(0xA1, listOf(entry(1, sentTo = 1), entry(2, sentTo = 2), entry(3, sentTo = 3), entry(4, sentTo = FUTURE_BIT), entry(5), entry(6, exposed = true, sentTo = 1)), lastFm, utc, now)
+        val want = listOf(1, 2, 3, FUTURE_BIT, 0, 1)
+        assertEquals("the unit's bits kept whole (funeOS player/link/proto.txt PlayEntry 19 sentTo :1017, v0.4.4)", want, q.after(Accounts.LAST_FM).map { it.sentTo })
+        assertEquals(want, queue(dir).after(Accounts.LAST_FM).map { it.sentTo })
+        val marks = File(dir, ScrobbleQueue.QUEUE).readLines().filter { it.startsWith("x\t") || it.startsWith("s\t") }
+        assertEquals("no marker with no bits, and x before s", listOf("s\t1\t1", "s\t2\t2", "s\t3\t3", "s\t4\t$FUTURE_BIT", "x\t6\t0", "s\t6\t1"), marks)
+    }
+
+    @Test
+    fun anEntrySeenAgainWithMoreSentToUpdatesItsListen() {
+        val dir = tmp.newFolder("grow")
+        val q = queue(dir)
+        q.addLog(0xA1, listOf(entry(4, sentTo = 1), entry(5, sentTo = 3)), lastFm, utc, now)
+        q.addLog(0xA1, listOf(entry(4, sentTo = 2), entry(5, sentTo = 1)), lastFm, utc, now)
+        assertEquals("1 then 2 gives 3, and 3 then 1 keeps 3", listOf(3, 3), q.after(Accounts.LAST_FM).map { it.sentTo })
+        assertEquals(2, q.size)
+        assertEquals(listOf(3, 3), queue(dir).after(Accounts.LAST_FM).map { it.sentTo })
+    }
+
+    @Test
+    fun aSentToMarkerForNoListenOrWithBadFieldsIsDropped() {
+        val dir = tmp.newFolder("badsent")
+        val a = Listen(now, "A", "T1", id = 1)
+        val b = Listen(now + 300, "A", "T2", id = 2)
+        File(dir, ScrobbleQueue.QUEUE).writeText("next\t3\n${a.line()}\ns\t1\t1\ns\t1\t2\n${b.line()}\ns\t2\ns\t2\tx\ns\t9\t3\n")
+        File(dir, "sent.lastfm").writeText("0")
+        val q = queue(dir)
+        assertEquals("two markers OR together; a short, a non numeric and a lone marker drop", listOf(a.copy(sentTo = 3), b), q.after(Accounts.LAST_FM))
+        q.add(Listen(now + 600, "A", "T3"), lastFm)
+        assertEquals(listOf("s\t1\t3"), File(dir, ScrobbleQueue.QUEUE).readLines().filter { it.startsWith("s\t") })
+    }
+
+    @Test
+    fun aQueueWithSentToMarkersReadByTheOlderRulesKeepsEveryListen() {
+        val dir = tmp.newFolder("oldersent")
+        val q = queue(dir)
+        q.addLog(0xA1, listOf(entry(1, sentTo = 1), entry(2), entry(3, exposed = true, sentTo = 3)), lastFm, utc, now)
+        q.add(Listen(now, "Radiohead", "Let Down"), lastFm)
+        assertEquals(oldLoad(dir), q.after(Accounts.LAST_FM).map { it.copy(exposed = false, z = null, sentTo = 0) })
     }
 
     @Test
@@ -332,5 +377,9 @@ class ScrobbleQueueTest {
         q.addLog(0xA1, (1L..7L).map { entry(it) }, lastFm, utc, now)
         assertEquals(listOf("Track 6", "Track 7"), q.after(Accounts.LAST_FM).map { it.title })
         assertEquals(7L, queue(dir).logSeq(0xA1))
+    }
+
+    private companion object {
+        const val FUTURE_BIT = 4
     }
 }

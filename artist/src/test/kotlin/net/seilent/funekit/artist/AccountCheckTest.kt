@@ -784,4 +784,14 @@ class AccountCheckTest {
         assertTrue(logs.contains("scrobble $svc check off this session: no user"))
         assertFalse(logs.any { "on the account" in it })
     }
+
+    @Test
+    fun anExposedListenTheUnitSentToLastFmMakesNoLastFmRead() = each(listOf(Accounts.LAST_FM)) { svc ->
+        records()
+        val s = scrobbler()
+        store(s, play(u, "Song 1").copy(sentTo = Accounts.LAST_FM_SENT), play(u + 600, "Song 2", exposed = false))
+        s.flush()
+        assertTrue("the unit's listen takes no account read", reads(svc).isEmpty())
+        assertEquals(listOf("Song 2"), sent(svc))
+    }
 }
