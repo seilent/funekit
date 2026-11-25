@@ -1317,11 +1317,11 @@ class SettingsHostTest {
 
     @Test
     fun aLiftedSheetOnASlackPivotRisesByItsFullReach() {
-        val app = app(SettingsPage(ID, slackRows(FOUR), HeaderLook.Settings), s = window(ONE_OVER_H))
+        val app = app(SettingsPage(ID, slackRows(FOUR), HeaderLook.Settings), root = true, s = window(ONE_OVER_H))
         val (_, m) = open(app)
+        rule.runOnIdle { app.host.types.settings.drawOf(m) }
         assertEquals("premise: the pivot is 1 px over its view", 1, m.content(0) - m.view)
         rule.runOnIdle {
-            app.host.types.settings.drawOf(m)
             m.down(SLACK_ROWS - 1, rule.mainClock.currentTime)
             m.cancel(rule.mainClock.currentTime)
         }
