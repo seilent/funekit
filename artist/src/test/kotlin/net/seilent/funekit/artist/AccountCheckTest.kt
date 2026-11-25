@@ -76,6 +76,7 @@ class AccountCheckTest {
         const val LFM = "ws.audioscrobbler.com"
         const val LB = "api.listenbrainz.org"
         val SERVICES = listOf(Accounts.LAST_FM, Accounts.LISTEN_BRAINZ)
+        const val DONE_LOG = 0xD0L
 
         fun hostOf(url: String) = url.substringAfter("://").substringBefore('/')
 
@@ -793,5 +794,121 @@ class AccountCheckTest {
         s.flush()
         assertTrue("the unit's listen takes no account read", reads(svc).isEmpty())
         assertEquals(listOf("Song 2"), sent(svc))
+    }
+
+    private fun doneLines(svc: String) = File(dir, "own.$svc").readLines().filter { it.startsWith("d\t") }
+
+    @Test
+    fun aDoneItemIsAnAccountEntryForTheServicesItWasSentTo() = each { svc ->
+        records()
+        val s = scrobbler()
+        s.addDone(DONE_LOG, listOf(Done(1, u, "Artist", "Song 1", Accounts.LAST_FM_SENT)))
+        store(s, *tracks(2, u).toTypedArray())
+        s.flush()
+        val want = if (svc == Accounts.LAST_FM) listOf("Song 2") else listOf("Song 1", "Song 2")
+        assertEquals("funeOS player/link/proto.txt ScrobDone :1046-1050, v0.4.4", want, sent(svc))
+    }
+
+    @Test
+    fun aDoneItemExcludesAShiftMatchOnBothServices() = each { svc ->
+        records()
+        val s = scrobbler()
+        s.addDone(DONE_LOG, (0 until 2).map { Done(it + 1L, u + it * 300 + 32400, "Artist", "Song ${it + 1}", 0) })
+        onAccount(svc, 2, u + 32400)
+        store(s, *tracks(2, u).toTypedArray())
+        s.flush()
+        assertEquals(listOf("Song 1", "Song 2"), sent(svc))
+    }
+
+    @Test
+    fun aDoneItemSentAgainIsStoredOnce() = each { svc ->
+        records()
+        val s = scrobbler()
+        val d = Done(5, u, "Artist", "Song 1", Accounts.LAST_FM_SENT or Accounts.LISTEN_BRAINZ_SENT)
+        s.addDone(DONE_LOG, listOf(d))
+        s.addDone(DONE_LOG, listOf(d))
+        s.addDone(DONE_LOG + 1, listOf(d))
+        for (r in SERVICES) {
+            assertEquals("$svc arm, $r: one line per log", listOf(DONE_LOG, DONE_LOG + 1).map { "d\t${java.lang.Long.toHexString(it)}\t5\t$u\t3\tArtist\tSong 1" }, doneLines(r))
+        }
+    }
+
+    @Test
+    fun aLostDoneListRaisesBothRecordsFrom() = each { svc ->
+        records()
+        val s = scrobbler()
+        s.doneLost()
+        for (r in SERVICES) assertEquals("$svc arm, $r", "from\t$nowS", File(dir, "own.$r").readLines().first())
+        onAccount(svc, 3, u + 32400)
+        store(s, *tracks(3, u).toTypedArray())
+        s.flush()
+        assertEquals("no shift before now", (1..3).map { "Song $it" }, sent(svc))
+    }
+
+    @Test
+    fun doneItemsLeaveWithTheFloor() = each { svc ->
+        records()
+        val s = scrobbler()
+        s.addDone(DONE_LOG, listOf(Done(1, nowS - OwnRecord.FLOOR_S - 60, "Artist", "Old", 0), Done(2, u, "Artist", "Song 1", 0)))
+        s.doneLost()
+        for (r in SERVICES) assertEquals("$svc arm, $r", listOf(2L), doneLines(r).map { it.split('\t')[2].toLong() })
+    }
+
+    @Test
+    fun aServiceTurnedBackOnKeepsTheDoneItemsAndTheRaisedFrom() = each(listOf(Accounts.LISTEN_BRAINZ)) { svc ->
+        records()
+        accounts = both
+        val s = scrobbler()
+        store(s, play(u - 86400, "Song 0", exposed = false))
+        s.flush()
+        assertEquals("premise: the send cached the ListenBrainz record", listOf("Song 0"), sent(svc))
+        accounts = both.copy(listenBrainz = false)
+        s.addDone(DONE_LOG, listOf(Done(1, u, "Artist", "Song 1", Accounts.LISTEN_BRAINZ_SENT)))
+        s.doneLost()
+        accounts = both
+        onAccount(svc, 2, u + 86400 + 32400, from = 3)
+        store(s, *tracks(2, u).toTypedArray(), *tracks(2, u + 86400, from = 3).toTypedArray())
+        s.flush()
+        assertFalse("the done item is in the cached record's exact pool", "Song 1" in sent(svc))
+        assertEquals("the raised from holds the shift in the cached records", listOf("Song 0", "Song 2", "Song 3", "Song 4"), sent(svc))
+        s.doneLost()
+        assertTrue("the d line kept through a rewrite from the cached record", File(dir, "own.$svc").readLines().any { it.startsWith("d\t") })
+    }
+
+    @Test
+    fun aDoneStoreThatCannotWriteThrows() = each { svc ->
+        records()
+        val s = scrobbler()
+        store(s, play(u - 86400, "Song 0", exposed = false))
+        s.flush()
+        val files = SERVICES.map { File(dir, "own.$it") }
+        assertTrue("premise: no write reaches the dir or the records", (files + dir).all { it.setWritable(false) })
+        val added = runCatching { s.addDone(DONE_LOG, listOf(Done(1, u, "Artist", "Song 1", Accounts.LAST_FM_SENT or Accounts.LISTEN_BRAINZ_SENT))) }.exceptionOrNull()
+        val lost = runCatching { s.doneLost() }.exceptionOrNull()
+        assertTrue((files + dir).all { it.setWritable(true) })
+        assertTrue("addDone throws, $added", added is IOException)
+        assertTrue("doneLost throws, $lost", lost is IOException)
+        onAccount(svc, 2, u + 86400 + 32400, from = 3)
+        store(s, play(u, "Song 1"), *tracks(2, u + 86400, from = 3).toTypedArray())
+        s.flush()
+        val want = if (svc == Accounts.LAST_FM) listOf("Song 0", "Song 1", "Song 3", "Song 4") else listOf("Song 0", "Song 1")
+        assertEquals("the item is not in memory, from was not raised, and the record that failed holds its shift", want, sent(svc))
+    }
+
+    @Test
+    fun aResendAfterAFailedListenBrainzStoreStoresTheItemOnceOnEach() = each { svc ->
+        records()
+        val s = scrobbler()
+        store(s, play(u - 86400, "Song 0", exposed = false))
+        s.flush()
+        val lb = File(dir, "own.${Accounts.LISTEN_BRAINZ}")
+        val d = Done(1, u, "Artist", "Song 1", Accounts.LAST_FM_SENT or Accounts.LISTEN_BRAINZ_SENT)
+        assertTrue("premise: only own.listenbrainz takes no write", lb.setWritable(false))
+        val added = runCatching { s.addDone(DONE_LOG, listOf(d)) }.exceptionOrNull()
+        assertTrue(lb.setWritable(true))
+        assertTrue("addDone throws, $added", added is IOException)
+        assertEquals("$svc arm: Last.fm stored before the throw", listOf(1, 0), SERVICES.map { doneLines(it).size })
+        s.addDone(DONE_LOG, listOf(d))
+        for (r in SERVICES) assertEquals("$svc arm, $r: stored once", listOf("d\t${java.lang.Long.toHexString(DONE_LOG)}\t1\t$u\t3\tArtist\tSong 1"), doneLines(r))
     }
 }

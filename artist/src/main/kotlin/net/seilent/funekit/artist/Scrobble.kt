@@ -387,6 +387,19 @@ class Scrobbler(
 
     fun session() = checks.values.forEach { it.session() }
 
+    fun addDone(log: Long, items: List<Done>) {
+        if (items.isEmpty()) return
+        val nowS = clock() / 1000
+        for (service in listOf(Accounts.LAST_FM, Accounts.LISTEN_BRAINZ)) own(service).addDone(log, items, nowS)
+        this.log("playlog done ${items.size} stored ${java.lang.Long.toHexString(log)}")
+    }
+
+    fun doneLost() {
+        val nowS = clock() / 1000
+        for (service in listOf(Accounts.LAST_FM, Accounts.LISTEN_BRAINZ)) own(service).lost(nowS)
+        log("playlog done lost, shift from now")
+    }
+
     fun flush(): Map<String, Sent> {
         val a = accounts()
         val out = HashMap<String, Sent>()
@@ -408,6 +421,8 @@ class Scrobbler(
         if (service !in a.enabled) return OwnRecord(dir, service, dirSync, log).also { it.load(null, clock() / 1000) }
         return records.getOrPut(service) { OwnRecord(dir, service, dirSync, log).also { it.load(queue.cursor(service), clock() / 1000) } }
     }
+
+    private fun own(service: String) = records[service] ?: OwnRecord(dir, service, dirSync, log).also { it.load(null, clock() / 1000) }
 
     private fun bound(service: String) = bounds.getOrPut(service) { ReadBound(dir, service, dirSync) }
 

@@ -138,7 +138,7 @@ class ScrobbleQueue(private val dir: File, private val dirSync: (File) -> Unit =
                     val id = p.getOrNull(1)?.toLongOrNull()
                     val bits = p.getOrNull(2)?.toIntOrNull()
                     val at = lines.indexOfLast { it.id == id }
-                    if (p.size == 3 && bits != null && at >= 0) lines[at] = lines[at].copy(sentTo = lines[at].sentTo or (bits and Listen.U8))
+                    if (p.size == 3 && bits != null && bits >= 0 && at >= 0) lines[at] = lines[at].copy(sentTo = lines[at].sentTo or (bits and Listen.U8))
                     continue
                 }
                 Listen.parse(l)?.let { lines += it }

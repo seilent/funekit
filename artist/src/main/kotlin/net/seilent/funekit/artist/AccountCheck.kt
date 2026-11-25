@@ -13,6 +13,8 @@ import kotlin.math.abs
 
 class Played(val s: Long, val artist: String, val title: String)
 
+data class Done(val seq: Long, val startS: Long, val artist: String, val title: String, val sentTo: Int)
+
 sealed class Read {
     class Page(val plays: List<Played>, val full: Boolean, val maxAgeS: Long? = null) : Read()
 
@@ -28,11 +30,17 @@ fun maxAge(headers: Map<String, String>): Long? = headers["cache-control"]?.let 
 class OwnRecord(private val dir: File, private val service: String, private val dirSync: (File) -> Unit, private val log: (String) -> Unit) {
     class Line(val id: Long, val played: Played)
 
+    class Item(val log: Long, val done: Done) {
+        val played = Played(done.startS, done.artist, done.title)
+    }
+
     private val file = File(dir, "$OWN.$service")
     private val keys = HashSet<Pair<Long, Long>>()
+    private val doneKeys = HashSet<Pair<Long, Long>>()
     var from = 0L
         private set
     val lines = ArrayList<Line>()
+    val done = ArrayList<Item>()
     private var cursor = 0L
     private var broken = false
 
@@ -56,6 +64,7 @@ class OwnRecord(private val dir: File, private val service: String, private val 
                 when {
                     i == 0 && p.size == 2 && p[0] == "from" && a != null -> from = a
                     i > 0 && p.size == 5 && p[0] == "e" && a != null && b != null -> keep(Line(a, Played(b, p[3], p[4])))
+                    i > 0 && p.size == 7 && p[0] == "d" -> if (!keepDone(p) && doubt == null) doubt = "bad line"
                     i > 0 && p.size == 2 && p[0] == "c" && a != null -> {
                         cursor = a
                         seen = true
@@ -91,17 +100,78 @@ class OwnRecord(private val dir: File, private val service: String, private val 
         write("c\t$id\n", nowS)
     }
 
+    fun addDone(log: Long, items: List<Done>, nowS: Long) {
+        val fresh = items.distinctBy { it.seq }.filter { (log to it.seq) !in doneKeys }.map { Item(log, it) }
+        if (fresh.isEmpty()) return
+        store(nowS, fresh.joinToString("") { doneLine(it) + "\n" }) { fresh.forEach { keepDone(it) } }
+    }
+
+    fun lost(nowS: Long) = store(nowS, null) { from = maxOf(from, nowS) }
+
+    private fun store(nowS: Long, text: String?, change: () -> Unit) {
+        val f = from
+        val c = cursor
+        val l = ArrayList(lines)
+        val d = ArrayList(done)
+        change()
+        try {
+            if (!file.isFile) from = maxOf(from, nowS)
+            if (text == null || !file.isFile || due(nowS)) {
+                rewrite(nowS)
+            } else {
+                FileOutputStream(file, true).use { o ->
+                    o.write(text.toByteArray())
+                    o.fd.sync()
+                }
+            }
+            broken = false
+        } catch (e: IOException) {
+            from = f
+            cursor = c
+            if (!broken) log("scrobble $service record: write failed, shift off until a write")
+            broken = true
+            lines.clear()
+            keys.clear()
+            done.clear()
+            doneKeys.clear()
+            l.forEach { keep(it) }
+            d.forEach { keepDone(it) }
+            throw e
+        }
+    }
+
     private fun keep(l: Line) {
         lines += l
         keys += l.id to l.played.s
     }
 
+    private fun keepDone(i: Item) {
+        done += i
+        doneKeys += i.log to i.done.seq
+    }
+
+    private fun keepDone(p: List<String>): Boolean {
+        val log = runCatching { java.lang.Long.parseUnsignedLong(p[1], 16) }.getOrNull() ?: return false
+        val seq = p[2].toLongOrNull() ?: return false
+        val s = p[3].toLongOrNull() ?: return false
+        val bits = p[4].toIntOrNull() ?: return false
+        if ((log to seq) !in doneKeys) keepDone(Item(log, Done(seq, s, p[5], p[6], bits)))
+        return true
+    }
+
     private fun line(l: Line) = "e\t${l.id}\t${l.played.s}\t${Listen.clean(l.played.artist)}\t${Listen.clean(l.played.title)}"
+
+    private fun doneLine(i: Item) = "d\t${java.lang.Long.toHexString(i.log)}\t${i.done.seq}\t${i.done.startS}\t${i.done.sentTo}\t${Listen.clean(i.done.artist)}\t${Listen.clean(i.done.title)}"
+
+    private fun due(nowS: Long): Boolean {
+        val floor = nowS - FLOOR_S
+        val n = lines.size + done.size
+        return broken || n > CAP || (lines.count { it.played.s < floor } + done.count { it.played.s < floor }) * 2 > n
+    }
 
     private fun write(text: String, nowS: Long) {
         try {
-            val floor = nowS - FLOOR_S
-            if (broken || lines.size > CAP || lines.count { it.played.s < floor } * 2 > lines.size) {
+            if (due(nowS)) {
                 if (broken) from = maxOf(from, nowS)
                 rewrite(nowS)
             } else {
@@ -119,16 +189,20 @@ class OwnRecord(private val dir: File, private val service: String, private val 
 
     private fun rewrite(nowS: Long) {
         val floor = nowS - FLOOR_S
-        if (lines.any { it.played.s < floor }) from = maxOf(from, floor)
-        val kept = lines.filter { it.played.s >= floor }.sortedBy { it.played.s }.takeLast(CAP)
-        if (kept.size < lines.count { it.played.s >= floor }) from = maxOf(from, kept.first().played.s)
+        if (lines.any { it.played.s < floor } || done.any { it.played.s < floor }) from = maxOf(from, floor)
+        val inside = lines.filter { it.played.s >= floor }.map { it.played.s to it } + done.filter { it.played.s >= floor }.map { it.played.s to it }
+        val kept = inside.sortedBy { it.first }.takeLast(CAP)
+        if (kept.size < inside.size) from = maxOf(from, kept.first().first)
         lines.clear()
         keys.clear()
-        kept.forEach { keep(it) }
+        done.clear()
+        doneKeys.clear()
+        kept.forEach { (_, x) -> if (x is Line) keep(x) else keepDone(x as Item) }
         dir.mkdirs()
         syncedWrite(file, buildString {
             append("from\t").append(from).append('\n')
             lines.forEach { append(line(it)).append('\n') }
+            done.forEach { append(doneLine(it)).append('\n') }
             append("c\t").append(cursor).append('\n')
         }, dir, dirSync)
     }
@@ -137,6 +211,7 @@ class OwnRecord(private val dir: File, private val service: String, private val 
         const val OWN = "own"
         const val FLOOR_S = 14L * 24 * 3600 + 15 * 3600
         const val CAP = 20000
+        const val NO_ID = -1L
     }
 }
 
@@ -280,8 +355,8 @@ class AccountCheck(private val service: String, private val log: (String) -> Uni
         }
 
         val decided = clusters.take(fail).filter { c -> c.listens.none { it.id in unchecked } }
-        val records2 = records.flatMap { it.lines }
-        val pool = reads + own.lines.filter { it.id <= cursor }.map { it.played }
+        val records2 = records.flatMap { it.lines } + records.flatMap { r -> r.done.map { OwnRecord.Line(OwnRecord.NO_ID, it.played) } }
+        val pool = reads + own.lines.filter { it.id <= cursor }.map { it.played } + own.done.filter { (it.done.sentTo and Accounts.sentBit(service)) != 0 }.map { it.played }
         val taken = Collections.newSetFromMap(IdentityHashMap<Played, Boolean>()).apply { addAll(claims.values) }
         for (l in decided.flatMap { it.listens }.sortedBy { it.startS }) {
             val near = pool.filter { abs(it.s - l.startS) <= 1 && it !in taken }
