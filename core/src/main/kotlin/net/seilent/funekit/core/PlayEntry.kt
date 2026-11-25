@@ -14,4 +14,5 @@ data class PlayEntry(
     val zoneS: Int? = null,
     val liveSeen: Boolean? = null,
     val exposed: Boolean? = null,
+    val sentTo: Int? = null,
 )

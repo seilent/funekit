@@ -50,4 +50,17 @@ class PlayEntryTest {
         assertNull(bare.startLocalS)
         assertNull(bare.zoneS)
     }
+
+    @Test
+    fun aPlayEntryCarriesItsSentToAndDefaultsToNull() {
+        assertNull("the positional form leaves no services sent", positional().sentTo)
+        assertNull(PlayEntry(1).sentTo)
+        val e = positional().copy(sentTo = SENT_BOTH)
+        assertEquals("funeOS player/link/proto.txt PlayEntry 19 sentTo :1017, v0.4.4", SENT_BOTH, e.sentTo)
+        assertNotEquals(positional(), e)
+    }
+
+    private companion object {
+        const val SENT_BOTH = 3
+    }
 }
