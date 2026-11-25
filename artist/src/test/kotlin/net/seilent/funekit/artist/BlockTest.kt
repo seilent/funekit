@@ -396,5 +396,108 @@ class BlockTest {
         assertEquals(listOf(PushLedger.Held("C", mb, "rfcomm:Y")), held.held("rfcomm:Y"))
         assertTrue(again.records().isEmpty())
     }
+
+    @Test
+    fun aCrcSetRidesItsOwnLineAfterItsRecordAndRoundTrips() {
+        val f = java.io.File(tmp.root, "sets.tsv")
+        val b = ArtBlocks(f)
+        b.add(ArtBlocks.Block("k1", null, "deezer", "x", "s", "A", 1, crc = 5, crcs = setOf(5L, 6L, 7L)))
+        b.add(ArtBlocks.Block("k2", null, "deezer", "y", "s", "B", 2, crc = 8))
+        b.add(ArtBlocks.Block("k3", null, "deezer", "z", "s", "E", 5, crc = 8, crcs = emptySet()))
+        b.add(ArtBlocks.Reject("m1", "m1", "C", "C", 3, crc = 9, channel = "UC1", crcs = setOf(9L, 10L)))
+        b.add(ArtBlocks.Reject("m2", "m2", "D", "D", 4, crcs = setOf(11L)))
+        b.save()
+        val lines = f.readLines()
+        assertEquals(listOf("block", "crcs", "block", "block", "crcs", "reject", "crcs", "reject", "crcs"), lines.map { it.substringBefore('\t') })
+        assertEquals("the record lines keep their fields", listOf(10, 2, 10, 10, 2, 9, 2, 7, 2), lines.map { it.split('\t').size })
+        assertEquals("an empty set beside a crc has its empty line", listOf("crcs\t5,6,7", "crcs\t", "crcs\t9,10", "crcs\t11"), lines.filter { it.startsWith("crcs\t") })
+        assertEquals(b.records(), ArtBlocks(f).records())
+    }
+
+    @Test
+    fun aFileReadByTheOlderRulesKeepsEveryRecordWithItsCrc() {
+        val f = java.io.File(tmp.root, "older.tsv")
+        val b = ArtBlocks(f)
+        b.add(ArtBlocks.Block("k1", null, "deezer", "x", "s", "A", 1, crc = 5, crcs = setOf(5L, 6L)))
+        b.add(ArtBlocks.Reject("m1", "m1", "C", "C", 3, crc = 9, crcs = setOf(9L, 10L)))
+        b.save()
+        val kept = f.readLines().filter { !it.startsWith("crcs\t") }
+        val sizes = kept.map { it.substringBefore('\t') to it.split('\t').size }
+        assertTrue("every record line is within the older rules, $sizes", sizes.all { (k, n) -> if (k == "block") n == 9 || n == 10 else n in 7..9 })
+        f.writeText(kept.joinToString("") { "$it\n" })
+        val want = b.records().map { if (it is ArtBlocks.Block) it.copy(crcs = setOfNotNull(it.crc)) else (it as ArtBlocks.Reject).copy(crcs = setOfNotNull(it.crc)) }
+        assertEquals(want, ArtBlocks(f).records())
+    }
+
+    @Test
+    fun aCrcsLineWithNoRecordAboveOrABadItemIsSkipped() {
+        val f = java.io.File(tmp.root, "bad.tsv")
+        val logs = ArrayList<String>()
+        fun block(k: String, crc: Long? = null) = "block\t$k\t\tdeezer\tx\ts\t$k\t1\t" + (crc?.let { "\t$it" } ?: "")
+        val lines = listOf(
+            "crcs\t1",
+            block("a"), "block\tonly\tthree", "crcs\t2",
+            block("b"), "drop\tname:d\t\tD\t1\t", "crcs\t3",
+            block("c"), "held\tN\t\tv1", "crcs\t4",
+            block("d"), "crcs\t5", "crcs\t6",
+            block("e"), "crcs\t1,x",
+            block("f"), "crcs\t1,,2",
+            block("g"), "crcs\t1\t2",
+            block("h", 9), "crcs\t",
+        )
+        f.writeText(lines.joinToString("") { "$it\n" })
+        val b = ArtBlocks(f, ledger = PushLedger()) { logs += it }
+        val none = emptySet<Long>()
+        val sets = b.records().filterIsInstance<ArtBlocks.Block>().associate { it.key to it.crcs }
+        assertEquals(mapOf("a" to none, "b" to none, "c" to none, "d" to setOf(5L), "e" to none, "f" to none, "g" to none, "h" to none), sets)
+        assertEquals("the empty field is the empty set beside the crc", 9L, b.records().filterIsInstance<ArtBlocks.Block>().single { it.key == "h" }.crc)
+        val skipped = listOf("crcs\t1", "block\tonly\tthree", "crcs\t2", "crcs\t3", "crcs\t4", "crcs\t6", "crcs\t1,x", "crcs\t1,,2", "crcs\t1\t2")
+        assertEquals(skipped.map { "artblock skipped line $it" }, logs)
+    }
+
+    @Test
+    fun coveringReadsTheSet() {
+        val b = ArtBlocks.Block("k", null, "deezer", "x", "s", "A", 1, crc = 5, crcs = setOf(5L, 6L))
+        val r = ArtBlocks.Reject("m", "m", "B", "B", 2, crc = 9, crcs = setOf(9L, 10L))
+        val bare = ArtBlocks.Block("k7", null, "deezer", "y", "s", "C", 3, crcs = setOf(7L))
+        listOf(b, r, bare).forEach { blocks.add(it) }
+        blocks.applied(b, "dev")
+        assertEquals("a crc of the set covers on an applied device too", b.copy(applied = setOf("dev")), blocks.covering(false, "A", emptySet(), null, 6, "dev"))
+        assertEquals(r, blocks.covering(true, "B", emptySet(), null, 10, "dev"))
+        assertEquals(bare, blocks.covering(false, "C", emptySet(), null, 7, "dev"))
+        assertNull("a record with a set is no name record", blocks.covering(false, "C", emptySet(), null, 123, "dev"))
+    }
+
+    @Test
+    fun anUnblockTakesTheSetWithItsRecord() {
+        val f = java.io.File(tmp.root, "unblock.tsv")
+        val b = ArtBlocks(f)
+        val set = ArtBlocks.Block("k", null, "deezer", "x", "s", "A", 1, crc = 5, crcs = setOf(5L, 6L))
+        b.add(set)
+        b.save()
+        assertEquals("premise: the set has its line", listOf("block", "crcs"), f.readLines().map { it.substringBefore('\t') })
+        b.remove(set)
+        b.save()
+        assertEquals(emptyList<String>(), f.readLines())
+        val again = ArtBlocks.Block("k", null, "deezer", "x", "s", "A", 2, crc = 5)
+        b.add(again)
+        assertNull(b.covering(false, "A", emptySet(), null, 6, "dev"))
+        assertEquals(again, b.covering(false, "A", emptySet(), null, 5, "dev"))
+    }
+
+    @Test
+    fun aClearedDropExpiresAtNinetyDaysAndABlockWithASetStays() {
+        val f = java.io.File(tmp.root, "expiry.tsv")
+        val day = 24L * 3600 * 1000
+        val b = ArtBlocks(f, { 0L })
+        b.cleared("name:d", null, "D", 0, setOf(3L, 4L))
+        b.add(ArtBlocks.Block("k", null, "deezer", "x", "s", "A", 0, crc = 5, crcs = setOf(5L, 6L)))
+        b.add(ArtBlocks.Reject("m", "m", "B", "B", 0, crc = 9, crcs = setOf(9L, 10L)))
+        b.save()
+        assertEquals("premise: the cleared drop and its crcs are kept until 90 days", listOf(setOf(3L, 4L)), ArtBlocks(f, { 89 * day }).drops().map { it.crcs })
+        val later = ArtBlocks(f, { 91 * day })
+        assertEquals(emptyList<ArtBlocks.Drop>(), later.drops())
+        assertEquals(b.records(), later.records())
+    }
 }
 

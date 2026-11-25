@@ -185,5 +185,14 @@ class ArtClearTest {
         assertEquals(setOf(utada, radiohead), back.pending("tcp:new").map { it.key }.toSet())
     }
 
+    @Test
+    fun theCacheCrcsHoldTheRenderedPushAndCropCrcs() {
+        seed()
+        val render = CRC32().apply { update(cache.rendered(utada, 256, 320)!!) }.value
+        cache.putFull(utada, ArtCache.Full(77L, 900, 900, "copy", null, true), null)
+        cache.putCropCrc(utada, 88L)
+        assertEquals(setOf(render, 77L, 88L), cache.crcs(utada))
+    }
+
     private fun hashOf(key: String) = java.security.MessageDigest.getInstance("SHA-1").digest(key.toByteArray()).joinToString("") { "%02x".format(it) }.take(20)
 }

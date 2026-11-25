@@ -385,7 +385,8 @@ class ArtCache(private val dir: File) {
 
     private fun picked(): Set<String> = files(".meta").filter { load(it).getProperty("key")?.startsWith(ArtPicks.PREFIX) == true }.mapTo(HashSet()) { it.name.substringBefore('.') }
 
-    private fun crcs(key: String): Set<Long> {
+    @Synchronized
+    fun crcs(key: String): Set<Long> {
         val h = hash(key)
         val out = (dir.listFiles { f -> f.name.startsWith("$h.") && f.name.endsWith(".jpg") && f.name != "$h.full.jpg" } ?: emptyArray())
             .mapTo(HashSet()) { CRC32().apply { update(it.readBytes()) }.value }

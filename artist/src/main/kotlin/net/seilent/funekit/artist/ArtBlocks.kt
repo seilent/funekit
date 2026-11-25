@@ -25,6 +25,7 @@ class ArtBlocks(
         override val at: Long,
         val applied: Set<String> = emptySet(),
         val crc: Long? = null,
+        val crcs: Set<Long> = setOfNotNull(crc),
     ) : Record
 
     data class Reject(
@@ -36,6 +37,7 @@ class ArtBlocks(
         val applied: Set<String> = emptySet(),
         val crc: Long? = null,
         val channel: String = "",
+        val crcs: Set<Long> = setOfNotNull(crc),
     ) : Record
 
     data class Drop(
@@ -137,13 +139,13 @@ class ArtBlocks(
         val f = Names.fold(name)
         val m = Names.mbid(mbid)
         return records().firstOrNull { r ->
-            val (rc, applied) = when (r) {
-                is Block -> r.crc to r.applied
-                is Reject -> r.crc to r.applied
-                is Drop -> null to r.applied
+            val (cs, applied) = when (r) {
+                is Block -> r.crcs + setOfNotNull(r.crc) to r.applied
+                is Reject -> r.crcs + setOfNotNull(r.crc) to r.applied
+                is Drop -> emptySet<Long>() to r.applied
             }
             (r is Reject) == wrongArtist && (r.key in keys || Names.fold(r.name) == f || (m != null && r.mbid == m)) &&
-                (rc == crc || (rc == null && device != null && device !in applied))
+                (crc in cs || (cs.isEmpty() && device != null && device !in applied))
         }
     }
 
@@ -158,9 +160,15 @@ class ArtBlocks(
 
     @Synchronized
     fun encode(): String = buildString {
-        for (b in blocks) line("block", b.key, b.mbid ?: "", b.source, b.id, b.sha, b.name, b.at.toString(), b.applied.joinToString(","), *listOfNotNull(b.crc?.toString()).toTypedArray())
+        for (b in blocks) {
+            line("block", b.key, b.mbid ?: "", b.source, b.id, b.sha, b.name, b.at.toString(), b.applied.joinToString(","), *listOfNotNull(b.crc?.toString()).toTypedArray())
+            if (b.crcs != setOfNotNull(b.crc)) line(CRCS, b.crcs.sorted().joinToString(","))
+        }
         for (d in drops) line("drop", d.key, d.mbid ?: "", d.name, d.at.toString(), d.applied.joinToString(","), *(if (!d.cleared) emptyList() else if (d.crcs.isEmpty()) listOf(CLEARED) else listOf(CLEARED, d.crcs.sorted().joinToString(","))).toTypedArray())
-        for (r in rejects) line("reject", r.key, r.mbid ?: "", r.resolvedBy, r.name, r.at.toString(), r.applied.joinToString(","), *(if (r.channel.isEmpty()) listOfNotNull(r.crc?.toString()) else listOf(r.crc?.toString() ?: "", r.channel)).toTypedArray())
+        for (r in rejects) {
+            line("reject", r.key, r.mbid ?: "", r.resolvedBy, r.name, r.at.toString(), r.applied.joinToString(","), *(if (r.channel.isEmpty()) listOfNotNull(r.crc?.toString()) else listOf(r.crc?.toString() ?: "", r.channel)).toTypedArray())
+            if (r.crcs != setOfNotNull(r.crc)) line(CRCS, r.crcs.sorted().joinToString(","))
+        }
         val l = ledger
         if (l == null) {
             kept.forEach { append(it).append('\n') }
@@ -187,12 +195,14 @@ class ArtBlocks(
         ledger?.clear()
         val f = file ?: return
         if (!f.isFile) return
+        var prev: Record? = null
         for (l in f.readLines(Charsets.UTF_8)) {
             if (l.isBlank()) continue
             val p = l.split('\t').map { unescape(it) }
             val ok = when (p[0]) {
                 "block" -> (p.size == 9 || p.size == 10) && p[7].toLongOrNull() != null && blocks.add(Block(p[1], p[2].ifEmpty { null }, p[3], p[4], p[5], p[6], p[7].toLong(), set(p[8]), p.getOrNull(9)?.toLongOrNull()))
                 "reject" -> p.size in 7..9 && p[5].toLongOrNull() != null && rejects.add(Reject(p[1], p[2].ifEmpty { null }, p[3], p[4], p[5].toLong(), set(p[6]), p.getOrNull(7)?.toLongOrNull(), p.getOrNull(8) ?: ""))
+                CRCS -> p.size == 2 && prev != null && crcs(prev, p[1])
                 "drop" -> (p.size == 6 || (p.size in 7..8 && p[6] == CLEARED)) && p[4].toLongOrNull() != null &&
                     ((p.size >= 7 && clock() - p[4].toLong() >= CLEAR_KEEP_MS) ||
                         (drops.none { it.key == p[1] } && drops.add(Drop(p[1], p[2].ifEmpty { null }, p[3], p[4].toLong(), set(p[5]), p.size >= 7, set(p.getOrNull(7) ?: "").mapNotNullTo(HashSet()) { it.toLongOrNull() }))))
@@ -200,7 +210,14 @@ class ArtBlocks(
                 else -> false
             }
             if (!ok) log("artblock skipped line ${l.take(80)}")
+            prev = if (ok && p[0] == "block") blocks.last() else if (ok && p[0] == "reject") rejects.last() else null
         }
+    }
+
+    private fun crcs(r: Record, s: String): Boolean {
+        val c: Set<Long> = if (s.isEmpty()) emptySet() else s.split(',').mapTo(HashSet()) { it.toLongOrNull() ?: return false }
+        if (r is Block) blocks[blocks.lastIndex] = r.copy(crcs = c) else if (r is Reject) rejects[rejects.lastIndex] = r.copy(crcs = c)
+        return true
     }
 
     private fun StringBuilder.line(vararg f: String) {
@@ -213,6 +230,7 @@ class ArtBlocks(
     internal companion object {
         const val CLEAR_KEEP_MS = 90L * 24 * 60 * 60 * 1000
         private const val CLEARED = "clear"
+        private const val CRCS = "crcs"
 
         fun escape(s: String) = s.replace("\\", "\\\\").replace("\t", "\\t").replace("\n", "\\n")
 
