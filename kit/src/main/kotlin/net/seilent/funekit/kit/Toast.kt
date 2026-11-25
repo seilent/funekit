@@ -165,6 +165,7 @@ class Toast {
     fun toTop(now: Long) {
         if (!bottom) return
         if (phase(now) == Phase.In) {
+            fadeFrom = fade(now)
             inFrom = min(1f, inFrom + progress(now - inAt, inMs()))
             inAt = now
             place = ToastPlace.Top

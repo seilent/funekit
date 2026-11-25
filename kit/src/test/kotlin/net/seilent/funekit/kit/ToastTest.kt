@@ -177,6 +177,8 @@ class ToastTest {
         assertFalse(t.bottom)
         assertEquals(ToastPlace.Top, t.place)
         assertEquals(0.5f, t.pos(50), 0.001f)
+        assertEquals(0.5f, t.fade(50), 0.001f)
+        assertEquals(0.5f, t.look(a105, 50)!!.scrim, 0.001f)
         assertEquals(0.7f, t.pos(50 + 20), 0.001f)
         assertEquals(1f, t.pos(50 + 50), 0f)
     }
