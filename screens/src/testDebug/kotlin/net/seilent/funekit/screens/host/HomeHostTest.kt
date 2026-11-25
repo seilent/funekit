@@ -45,6 +45,7 @@ import net.seilent.funekit.api.Listing
 import net.seilent.funekit.api.NoCard
 import net.seilent.funekit.api.Page
 import net.seilent.funekit.api.Player
+import net.seilent.funekit.api.Refused
 import net.seilent.funekit.api.pins
 import net.seilent.funekit.fake.FakeSet
 import net.seilent.funekit.gen.Tok
@@ -131,6 +132,7 @@ class HomeHostTest {
     private var cold = false
     private var qpPlays = true
     private var qpBusy = false
+    private var qpRefuses = false
     private val zero = MutableStateFlow(0L)
 
     private val player = object : Player by fake.player {
@@ -162,6 +164,7 @@ class HomeHostTest {
         override suspend fun play(item: QpItem): Boolean {
             played += item
             if (qpBusy) throw Busy()
+            if (qpRefuses) throw Refused()
             if (!qpPlays) return false
             player.play(listOf(item.id), 0, 0)
             return true
@@ -369,6 +372,19 @@ class HomeHostTest {
         until("the refusal lands") { stack.phase == Phase.Rest && !stack.armed }
         frames(HOLD)
         assertEquals("card not available" to "", app.toast.artist to app.toast.title)
+    }
+
+    @Test
+    fun aTilePlayRefusedWithNoLineUntapsTheTileAndShowsNoWord() {
+        qpRefuses = true
+        val data = songData(songs(TILES))
+        val qp = front(data)
+        tapTile(data, 1)
+        until("premise: the tile was asked to play") { played.isNotEmpty() }
+        assertNull("the refusal untaps the tile", qp.press.on.p.due(SystemClock.uptimeMillis().toFloat()))
+        until("the refusal lands") { stack.phase == Phase.Rest && !stack.armed }
+        frames(HOLD)
+        assertFalse("a refusal with no line shows no word", app.toast.visible(SystemClock.uptimeMillis()))
     }
 
     @Test

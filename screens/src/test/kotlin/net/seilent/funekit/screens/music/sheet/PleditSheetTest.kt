@@ -57,7 +57,7 @@ class PleditSheetTest {
         }
     }
 
-    private fun pick(board: Dev, kind: String, large: Boolean, scenes: MusicScenes, steps: Int, made: Boolean): Tile {
+    private fun pick(board: Dev, kind: String, large: Boolean, scenes: MusicScenes, steps: Int, made: Boolean, readOnly: Boolean = false): Tile {
         val dev = scenes.same(board)
         val h = scenes.hubShot(dev, HUB_SONGS, large = large)
         val open = h.knobs(SONG_STEPS, KNOBS_AT) + SHEET_OPEN
@@ -67,8 +67,13 @@ class PleditSheetTest {
         val rec = scenes.regionsOn(dev, h.s, made, if (made) S6_LOUD else S6_SHEET)
         val base = "three steps on SONGS from $KNOBS_AT to row 3, its song sheet at $open, add to playlist at $PICK_AT swapping in the picker"
         if (made) {
-            val toast = scenes.sceneToast(ADDED_TO + FIRST_LIST, t.title, h.s, PICKED, false)
-            return scenes.s6Tile(FOLDER, dev, kind, h.s, listOf("as funeOS pledit:500:new: $base, new playlist picked at $PICKED; the picker closed and the toast names the list made; shot at $shot"), rec) {
+            val toast = if (readOnly) scenes.sceneToast(READ_ONLY_LINE, "", h.s, PICKED, false) else scenes.sceneToast(ADDED_TO + FIRST_LIST, t.title, h.s, PICKED, false)
+            val note = if (readOnly) {
+                "unpaired, funeOS's shot set has no read only toast: $base, new playlist picked at $PICKED on a read only card; the picker closed, no list made, and the toast shows the device's line $READ_ONLY_LINE over no second line (FB-refusedline); shot at $shot"
+            } else {
+                "as funeOS pledit:500:new: $base, new playlist picked at $PICKED; the picker closed and the toast names the list made; shot at $shot"
+            }
+            return scenes.s6Tile(FOLDER, dev, kind, h.s, listOf(note), rec) {
                 with(h) { page(shot, rec) }
                 sceneToast(toast, h.s, shot, rec)
             }
@@ -88,6 +93,7 @@ class PleditSheetTest {
             "pledit-500-new" -> pick(dev, k, large, sc, 0, true)
             "pledit-500-sheet" -> listSheet(dev, k, large, false)
             "pledit-500-delete" -> listSheet(dev, k, large, true)
+            "pledit-500-readonly" -> pick(dev, k, large, sc, 0, true, true)
             else -> error("no scene $kind")
         }
     }
@@ -115,7 +121,8 @@ class PleditSheetTest {
         private const val MANY = 6
         private const val MANY_STEPS = 5
         private const val FIRST_LIST = "playlist 1"
-        val KINDS = listOf("pledit-500-pick", "pledit-500-many", "pledit-500-new", "pledit-500-sheet", "pledit-500-delete")
+        private const val READ_ONLY_LINE = "card read only"
+        val KINDS = listOf("pledit-500-pick", "pledit-500-many", "pledit-500-new", "pledit-500-sheet", "pledit-500-delete", "pledit-500-readonly")
         val LARGE = listOf("pledit-500-many", "pledit-500-delete")
     }
 }

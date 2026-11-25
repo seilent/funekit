@@ -13,17 +13,18 @@ import org.junit.Assert.assertSame
 import org.junit.Test
 
 class PlayedTest {
-    private fun of(e: Exception): Pair<Boolean, String?> = runBlocking { played { throw e } }
+    private fun of(e: Exception): PlayDone = runBlocking { played { throw e } }
 
     @Test
     fun eachPlayOutcomeTakesItsWord() {
-        assertEquals(true to null, runBlocking { played { true } })
-        assertEquals("a play that sends nothing turns back with no word", false to null, runBlocking { played { false } })
-        assertEquals(false to CARD_GONE, of(NoCard()))
-        assertEquals("a Busy is a card or library not ready, whatever its text", false to CARD_GONE, of(Busy(BUSY_TEXT)))
-        assertEquals(false to REFUSED_TEXT, of(Refused(REFUSED_TEXT)))
-        assertEquals(false to CARD_GONE, of(Refused()))
-        for (e in listOf(Disconnected(), Stale(STALE), Expired(EXPIRED))) assertEquals("${e::class.simpleName} turns back with no word", false to null, of(e))
+        assertEquals(PlayDone(true), runBlocking { played { true } })
+        assertEquals("a play that sends nothing turns back with no word", PlayDone(false), runBlocking { played { false } })
+        assertEquals(PlayDone(false, true, CARD_GONE), of(NoCard()))
+        assertEquals("a Busy is a card or library not ready, whatever its text", PlayDone(false, true, CARD_GONE), of(Busy(BUSY_TEXT)))
+        assertEquals(PlayDone(false, true, REFUSED_TEXT), of(Refused(REFUSED_TEXT)))
+        assertEquals("a refusal with no line is refused with no word", PlayDone(false, true, null), of(Refused()))
+        assertEquals("a refusal with a blank line is refused with no word", PlayDone(false, true, null), of(Refused(" ")))
+        for (e in listOf(Disconnected(), Stale(STALE), Expired(EXPIRED))) assertEquals("${e::class.simpleName} turns back with no word", PlayDone(false), of(e))
     }
 
     @Test

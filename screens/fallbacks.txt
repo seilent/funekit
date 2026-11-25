@@ -5,3 +5,4 @@ FB-stack-fields pending a saved music entry holds the push source row, the album
 FB-settings-spot pending a saved settings spot holds the pivot name, the focus row key and the scroll
 FB-nopress 2026-11-15 a settings row its supplier marks takes the focus on a down with no lit title and no glow
 FB-serviceheart pending a service row shows no heart: its heart state has no seam source
+FB-refusedline pending a list edit, heart or delete the seam refuses with a line shows that line over no second line: Refused carries one line and the link's read only answer comes without funeOS's check it on a computer, absent at v0.4.4

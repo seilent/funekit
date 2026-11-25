@@ -6,8 +6,10 @@ import net.seilent.funekit.kit.touch.RowSpec
 import net.seilent.funekit.api.Busy
 import net.seilent.funekit.api.Kind
 import net.seilent.funekit.api.Listing
+import net.seilent.funekit.api.NoCard
 import net.seilent.funekit.api.Player
 import net.seilent.funekit.api.Playlists
+import net.seilent.funekit.api.Refused
 import net.seilent.funekit.api.Row
 import net.seilent.funekit.api.TrackSet
 import net.seilent.funekit.fake.FakeSet
@@ -242,6 +244,55 @@ class SheetActsTest {
     }
 
     @Test
+    fun aRefusedAddToAListShowsTheDevicesLineAndAddsNothing() {
+        val refused = object : Playlists by f.playlists {
+            override suspend fun add(id: Long, tracks: TrackSet) = throw Refused(LINE)
+        }
+        val s = MusicSource(f.library, recording, f.quickplay, f.favorites, refused, f.lyrics)
+        val p = runBlocking { picker(s) }
+        val id = lists().first { it.title == DRIVE }.id
+        val before = count(Listing.PlaylistTracks(id))
+        assertEquals(SheetDone.Toast(LINE, ""), runBlocking { runPick(p.items.indexOf(DRIVE), p, albumTarget(album()), s) })
+        assertEquals(before, count(Listing.PlaylistTracks(id)))
+    }
+
+    @Test
+    fun aRefusedAddWithNoLineShowsNoWordAndNoAddedToast() {
+        var refusal = Refused()
+        val refused = object : Playlists by f.playlists {
+            override suspend fun add(id: Long, tracks: TrackSet) = throw refusal
+        }
+        val s = MusicSource(f.library, recording, f.quickplay, f.favorites, refused, f.lyrics)
+        val p = runBlocking { picker(s) }
+        for (e in listOf(Refused(), Refused(" "))) {
+            refusal = e
+            assertEquals("a refusal with the line '${e.text}'", SheetDone.Close, runBlocking { runPick(p.items.indexOf(DRIVE), p, albumTarget(album()), s) })
+        }
+    }
+
+    @Test
+    fun aRefusedNewPlaylistShowsTheDevicesLineAndMakesNone() {
+        val refused = object : Playlists by f.playlists {
+            override suspend fun create(tracks: TrackSet) = throw Refused(LINE)
+        }
+        val s = MusicSource(f.library, recording, f.quickplay, f.favorites, refused, f.lyrics)
+        val p = runBlocking { picker(s) }
+        val before = count(Listing.Playlists)
+        assertEquals(SheetDone.Toast(LINE, ""), runBlocking { runPick(0, p, albumTarget(album()), s) })
+        assertEquals(before, count(Listing.Playlists))
+    }
+
+    @Test
+    fun aNewPlaylistWithNoCardShowsCardNotAvailable() {
+        val out = object : Playlists by f.playlists {
+            override suspend fun create(tracks: TrackSet) = throw NoCard()
+        }
+        val s = MusicSource(f.library, recording, f.quickplay, f.favorites, out, f.lyrics)
+        val p = runBlocking { picker(s) }
+        assertEquals(SheetDone.Toast(CARD_GONE, ""), runBlocking { runPick(0, p, albumTarget(album()), s) })
+    }
+
+    @Test
     fun aSongTargetAddsItsTrackAlone() {
         val s = song(5)
         val t = SheetTarget(SheetKind.Song, s.title, Listing.Songs, gen(), 5, s.id, Kind.Song, s.id)
@@ -277,6 +328,21 @@ class SheetActsTest {
         runBlocking { s.viewed { v -> m.show(v, 0, ROWS) } }
         val done = runBlocking { runEntry(REMOVE, m.target(0)!!, m, s, 0L) }
         assertEquals(SheetDone.Toast(CARD_GONE, ""), done)
+        assertEquals(ROWS_DRIVE, count(Listing.PlaylistTracks(id)))
+    }
+
+    @Test
+    fun aRefusedListRemoveShowsTheDevicesLine() {
+        val refused = object : Playlists by f.playlists {
+            override suspend fun remove(id: Long, index: Int, revision: Long) = throw Refused(LINE)
+        }
+        val s = MusicSource(f.library, recording, f.quickplay, f.favorites, refused, f.lyrics)
+        val id = lists().first { it.title == DRIVE }.id
+        val m = ListViewModel(0L, Listing.PlaylistTracks(id))
+        m.pane.geometry(RowSpec(PITCH, VIEW))
+        runBlocking { s.viewed { v -> m.show(v, 0, ROWS) } }
+        val done = runBlocking { runEntry(REMOVE, m.target(0)!!, m, s, 0L) }
+        assertEquals(SheetDone.Toast(LINE, ""), done)
         assertEquals(ROWS_DRIVE, count(Listing.PlaylistTracks(id)))
     }
 
@@ -336,5 +402,6 @@ class SheetActsTest {
         private const val ROWS = 20
         private const val ROWS_DRIVE = 12
         private const val ALBUM_ROWS = 8
+        private const val LINE = "card read only"
     }
 }

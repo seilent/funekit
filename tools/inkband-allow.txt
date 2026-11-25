@@ -178,6 +178,7 @@ a105/pledit-500-many no funeOS reference in the set
 a105/pledit-500-new no funeOS reference in the set
 a105/pledit-500-sheet no funeOS reference in the set
 a105/pledit-500-delete no funeOS reference in the set
+a105/pledit-500-readonly no funeOS reference in the set
 a105/delete-500-song no funeOS reference in the set
 a105/delete-500-album no funeOS reference in the set
 a105/delete-500-albumlong no funeOS reference in the set
@@ -220,6 +221,7 @@ r1/pledit-500-many no funeOS reference in the set
 r1/pledit-500-new no funeOS reference in the set
 r1/pledit-500-sheet no funeOS reference in the set
 r1/pledit-500-delete no funeOS reference in the set
+r1/pledit-500-readonly no funeOS reference in the set
 r1/delete-500-song no funeOS reference in the set
 r1/delete-500-album no funeOS reference in the set
 r1/delete-500-albumlong no funeOS reference in the set
@@ -262,6 +264,7 @@ v1/pledit-500-many no funeOS reference in the set
 v1/pledit-500-new no funeOS reference in the set
 v1/pledit-500-sheet no funeOS reference in the set
 v1/pledit-500-delete no funeOS reference in the set
+v1/pledit-500-readonly no funeOS reference in the set
 v1/delete-500-song no funeOS reference in the set
 v1/delete-500-album no funeOS reference in the set
 v1/delete-500-albumlong no funeOS reference in the set

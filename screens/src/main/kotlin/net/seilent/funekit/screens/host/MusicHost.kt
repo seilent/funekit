@@ -251,20 +251,22 @@ private suspend fun <T> quiet(block: suspend () -> T): T? = try {
     null
 }
 
-internal suspend fun played(block: suspend () -> Boolean): Pair<Boolean, String?> = try {
-    block() to null
+internal data class PlayDone(val sent: Boolean, val refused: Boolean = false, val word: String? = null)
+
+internal suspend fun played(block: suspend () -> Boolean): PlayDone = try {
+    PlayDone(block())
 } catch (_: NoCard) {
-    false to CARD_GONE
+    PlayDone(false, true, CARD_GONE)
 } catch (_: Busy) {
-    false to CARD_GONE
+    PlayDone(false, true, CARD_GONE)
 } catch (e: Refused) {
-    false to e.text.ifEmpty { CARD_GONE }
+    PlayDone(false, true, e.text.takeIf { it.isNotBlank() })
 } catch (_: Disconnected) {
-    false to null
+    PlayDone(false)
 } catch (_: Stale) {
-    false to null
+    PlayDone(false)
 } catch (_: Expired) {
-    false to null
+    PlayDone(false)
 }
 
 private suspend fun deleteDone(act: suspend () -> DeleteDone): DeleteDone = try {
@@ -1040,18 +1042,18 @@ class MusicHost<S : Any> internal constructor(
         }
         if (h != null) opened = h
         scope.launch(FailFast) {
-            val (sent, word) = played { play(s) }
-            val ok = sent && s.player.state.value.let { it.track != null || it.service != null }
+            val d = played { play(s) }
+            val ok = d.sent && s.player.state.value.let { it.track != null || it.service != null }
             if (ok) {
                 h?.done()
                 if (h != null) np.lyrics.open(s.player.state.value.track, np.variant)
             } else {
                 h?.fail()
             }
-            if (word != null) {
-                refused()
+            if (d.refused) refused()
+            if (d.word != null) {
                 snapshotFlow { stack.phase == Phase.Rest && !stack.armed }.first { it }
-                if (seq == opens) toast.show(now(), word, "")
+                if (seq == opens) toast.show(now(), d.word, "")
             }
         }
         return true

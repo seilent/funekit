@@ -31,6 +31,7 @@ import net.seilent.funekit.api.NoCard
 import net.seilent.funekit.api.Page
 import net.seilent.funekit.api.Player
 import net.seilent.funekit.api.PlayerState
+import net.seilent.funekit.api.Refused
 import net.seilent.funekit.api.Repeat
 import net.seilent.funekit.api.Stale
 import net.seilent.funekit.core.Lrc
@@ -130,6 +131,26 @@ class NowPlayingFeedTest {
             assertEquals("${e::class.simpleName}", word to "", toast.artist to toast.title)
         }
         assertFalse("the heart stays as it was", np.favorite)
+    }
+
+    @Test
+    fun aRefusedHeartShowsTheDevicesLineOrNothingWithoutOne() {
+        var refusal = Refused(LINE)
+        val favs = object : Favorites by fake.favorites {
+            override suspend fun toggle(track: Long): Boolean = throw refusal
+        }
+        val refused = MusicSource(library, fake.player, fake.quickplay, favs, fake.playlists, fake.lyrics)
+        val np = NowPlayingModel()
+        np.sync(NpShown.None.copy(track = songs().first(), title = "song"), 0L)
+        np.favorite = true
+        val toast = Toast()
+        runBlocking { npAct(NpAct.Favorite, np, refused, null, toast) { 0L } }
+        assertEquals(LINE to "", toast.artist to toast.title)
+        refusal = Refused()
+        val blank = Toast()
+        runBlocking { npAct(NpAct.Favorite, np, refused, null, blank) { 0L } }
+        assertEquals("a refusal with no line shows nothing", 0, blank.shows)
+        assertTrue("the heart stays as it was", np.favorite)
     }
 
     @Test
@@ -689,5 +710,6 @@ class NowPlayingFeedTest {
         const val PAST = 10_000
         const val A105_W = 720
         const val A105_H = 1280
+        const val LINE = "card read only"
     }
 }
