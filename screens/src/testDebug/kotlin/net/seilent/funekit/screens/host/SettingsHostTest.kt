@@ -184,6 +184,17 @@ class SettingsHostTest {
 
     private fun named(vararg names: String) = names.map { SettingPivot(it, listOf(choice(it))) }
 
+    private fun library() = listOf(
+        SettingRow(FOLDERS, "library folders", "1 on"),
+        SettingRow(RESCAN, "rescan library", "1293 songs", SettingKind.Action, shows = listOf("scanning")),
+        choice(PLAY, PLAY_WORDS).copy(title = "play through", sub = "what plays when the queue ends"),
+        choice(RESUME, RESUME_WORDS).copy(title = "resume", sub = "restores the queue at power on"),
+    )
+
+    private fun subRows(subs: List<Int>) = (0 until SUB_PIVOT_ROWS).map { i -> SettingRow("k$i", "row $i", "", sub = if (i in subs) "the sub of row $i" else null) }
+
+    private fun onRow(m: SettingsModel, y: Int) = Offset(page.widthPx / 2f, (px(page.board.page_contentTop, page.ppu) + y - m.pane.px).toFloat())
+
     private fun app(vararg pages: SettingsPage, root: Boolean = false) = TestApp(page, page, null, StillLevel) { rule.mainClock.currentTime }.also {
         it.settingsList = pages.toList()
         it.compose(rule, root)
@@ -1188,6 +1199,76 @@ class SettingsHostTest {
         rule.onRoot().performTouchInput { up() }
     }
 
+    @Test
+    fun aTapUnderASubLineStillHitsItsRow() {
+        val rows = Rows(listOf(SettingPivot(LIB, library())))
+        val app = app(SettingsPage(ID, rows, HeaderLook.Settings), root = true)
+        val (_, m) = open(app)
+        val d = rule.runOnIdle { app.host.types.settings.drawOf(m) }
+        assertEquals("premise: PLAY THROUGH's sub sits at 348", PLAY_SUB_TOP, m.tops(0)[PLAY_ROW] + d.ink(m.rows(0)[PLAY_ROW]).size.subY)
+        press(onRow(m, PAD_TAP))
+        assertEquals("a tap in PLAY THROUGH's bottom pad hits its row (funeOS player/ui/settings.cpp SettingsPage::row_at :803-810, v0.4.4)", listOf(PLAY), rows.opens)
+        assertEquals("and opens its value sheet", OverKind.Sheet, app.stack.overlay?.kind)
+        assertEquals(PLAY_WORDS, app.menu.items)
+        rule.runOnIdle { app.stack.close() }
+        frames(OPEN_FRAMES)
+        assertNull("premise: the sheet is gone", app.stack.overlay)
+        press(onRow(m, RESUME_TOP))
+        assertEquals("a tap on RESUME's top hits RESUME", listOf(PLAY, RESUME), rows.opens)
+        assertEquals(RESUME_WORDS, app.menu.items)
+    }
+
+    @Test
+    fun aTapOnARowWhoseSubIsBelowTheViewScrollsItsSubIntoView() {
+        val rows = Rows(listOf(SettingPivot(LIB, subRows(listOf(CUT_ROW)))))
+        val app = app(SettingsPage(ID, rows, HeaderLook.Settings), root = true)
+        val (_, m) = open(app)
+        val d = rule.runOnIdle { app.host.types.settings.drawOf(m) }
+        val top = m.tops(0)[CUT_ROW]
+        val h = m.heights(0)[CUT_ROW]
+        assertTrue("premise: the view's bottom cuts the row and its sub is below the view", top < m.view && top + d.ink(m.rows(0)[CUT_ROW]).size.subY >= m.view)
+        press(onRow(m, top + TAP_IN), 1)
+        assertEquals("premise: the info row reaches the app unopened", listOf("k$CUT_ROW"), rows.opens)
+        assertNull("no value sheet", app.stack.overlay)
+        assertEquals("an into aim at the up (funeOS player/ui/settings.cpp SettingsPage::ensure_visible :773-786, v0.4.4)", AimKind.Into, m.aimKind)
+        assertEquals("to the row's top plus its full height less the view", top + h - m.view, m.aim)
+        frames(OPEN_FRAMES)
+        assertEquals(top + h - m.view, m.pane.px)
+    }
+
+    @Test
+    fun aLandingThatDropsTheSubsClampsTheScrolledOffset() {
+        val rows = Rows(listOf(SettingPivot(LIB, subRows(SUB_ROWS))))
+        val app = app(SettingsPage(ID, rows, HeaderLook.Settings), root = true)
+        val (_, m) = open(app)
+        rule.runOnIdle { m.aimTo(m.limit(0), AimKind.Into) }
+        frames(OPEN_FRAMES)
+        assertEquals("premise: the pivot rests at its end", m.content(0) - m.view, m.pane.px)
+        rule.runOnIdle { rows.pivots.value = listOf(SettingPivot(LIB, subRows(emptyList()))) }
+        frames(OPEN_FRAMES)
+        assertEquals("premise: the subs dropped", SUB_PIVOT_ROWS * px(Tok.settingsPitch, page.ppu), m.content(0))
+        assertEquals("the list's offset rests at the new content less view", m.content(0) - m.view, m.pane.px)
+    }
+
+    @Test
+    fun aDragToTheEndStopsAtTheContentEndWithTheSubRows() {
+        val rows = Rows(listOf(SettingPivot(LIB, subRows(SUB_ROWS))))
+        val app = app(SettingsPage(ID, rows, HeaderLook.Settings), root = true)
+        val (_, m) = open(app)
+        val pitch = px(Tok.settingsPitch, page.ppu)
+        assertEquals("premise: the sub rows are in the content", SUB_PIVOT_ROWS * pitch + SUB_ROWS.size * (A105_SUB_ROW - pitch), m.content(0))
+        val x = page.widthPx / 2f
+        rule.onRoot().performTouchInput { down(Offset(x, DRAG_FROM)) }
+        frames(1)
+        repeat(DRAG_STEPS) {
+            rule.onRoot().performTouchInput { moveBy(Offset(0f, -DRAG_STEP)) }
+            frames(1)
+        }
+        rule.onRoot().performTouchInput { up() }
+        frames(SETTLE_FRAMES)
+        assertEquals("the drag rests at the content end", m.content(0) - m.view, m.pane.px)
+    }
+
     companion object {
         private const val W = 720
         private const val H = 1280
@@ -1224,10 +1305,29 @@ class SettingsHostTest {
         private const val HIDE_FRAMES = 2
         private const val HOLD_LEAD = 3
         private const val FADE_SLACK = 4
+        private const val FOLDERS = "libraryFolders"
+        private const val RESCAN = "rescan"
+        private const val PLAY = "playThrough"
+        private const val RESUME = "resume"
+        private const val PLAY_ROW = 2
+        private const val PLAY_SUB_TOP = 348
+        private const val PAD_TAP = 395
+        private const val RESUME_TOP = 406
+        private const val SUB_PIVOT_ROWS = 9
+        private const val CUT_ROW = 7
+        private const val TAP_IN = 8
+        private const val A105_SUB_ROW = 148
+        private const val DRAG_FROM = 1100f
+        private const val DRAG_STEP = 60f
+        private const val DRAG_STEPS = 10
+        private const val SETTLE_FRAMES = 90
         private val ID = SettingsId(SETTINGS)
         private val WORDS = listOf("off", "low", "high")
         private val LATER = listOf("x", "y", "z")
         private val FOUR = listOf("off", "low", "mid", "high")
         private val TALL = List(24) { "word $it" }
+        private val PLAY_WORDS = listOf("off", "on")
+        private val RESUME_WORDS = listOf("position", "off")
+        private val SUB_ROWS = listOf(2, 6)
     }
 }

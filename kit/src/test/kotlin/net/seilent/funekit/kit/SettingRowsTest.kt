@@ -1,5 +1,12 @@
 package net.seilent.funekit.kit
 
+import android.graphics.Bitmap
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Canvas
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.font.createFontFamilyResolver
 import androidx.compose.ui.unit.Density
@@ -15,6 +22,7 @@ import net.seilent.funekit.px
 import net.seilent.funekit.scale
 import net.seilent.funekit.sheet.Phones
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -28,7 +36,7 @@ import org.robolectric.annotation.GraphicsMode
 @Config(sdk = [35])
 class SettingRowsTest {
     private val none = Insets(0, 0, 0, 0)
-    private fun page(w: Int, h: Int) = scale(Window(w, h, 35, none, none, none, none, none), Nav.None, Surface.Page, false)
+    private fun page(w: Int, h: Int, large: Boolean = false) = scale(Window(w, h, 35, none, none, none, none, none), Nav.None, Surface.Page, large)
     private val v1 = page(240, 320)
     private val r1 = page(480, 800)
     private val a105 = page(720, 1280)
@@ -148,6 +156,39 @@ class SettingRowsTest {
     }
 
     @Test
+    fun theLargeRowsLandOnTheFuneOsShotBaselines() {
+        val a = page(720, 1280, true)
+        val r = page(480, 800, true)
+        assertTrue("premise: the large page ppu (funeOS player/ui/size.cpp set_size :79-84, kLargePpu :62, v0.4.4)", a.large && r.large)
+        landsOnTheShot(a, Shot(A105_LARGE_TOP, A105_LARGE_BASE, A105_LARGE_RIGHT64, A105_LARGE_SUB, A105_LARGE_RESUME_TOP, A105_LARGE_RESUME_SUB))
+        landsOnTheShot(r, Shot(R1_LARGE_TOP, R1_LARGE_BASE, R1_LARGE_RIGHT64, R1_LARGE_SUB, R1_LARGE_RESUME_TOP, R1_LARGE_RESUME_SUB))
+    }
+
+    private fun drawn(w: Int, h: Int, block: DrawScope.() -> Unit): Bitmap {
+        val img = ImageBitmap(w, h)
+        CanvasDrawScope().draw(density, LayoutDirection.Ltr, Canvas(img), Size(w.toFloat(), h.toFloat()), block)
+        return img.asAndroidBitmap()
+    }
+
+    private fun Bitmap.inked(xs: IntRange, ys: IntRange): Boolean = xs.any { x -> ys.any { y -> getPixel(x, y) ushr ALPHA_SHIFT != 0 } }
+
+    @Test
+    fun aLongSubDrawsOnOneLineClippedAtTheRightEdge() {
+        val m = measure(a105)
+        val ink = ink(m, "resume", "position", LONG_SUB)
+        val sub = requireNotNull(ink.sub)
+        assertTrue("premise: the sub runs past the room left of HUB_EDGE", penPx(ink.titleX64) + sub.width > ink.right)
+        assertEquals("the row keeps the one line height (funeOS player/ui/settings.cpp SettingsPage::measure :555-580, v0.4.4)", A105_SUB_ROW, ink.size.px)
+        val box = ink.size.subY + Metrics.ascent(m.subPx) + Metrics.descent(m.subPx)
+        assertEquals("premise: the sub box bottom", A105_SUB_BOX, box)
+        val bmp = drawn(a105.widthPx, ink.size.px) { settingSub(ink, 1f) }
+        assertTrue("premise: the sub draws", bmp.inked(0 until ink.right, ink.size.subY until box))
+        assertFalse("no pixel right of the clip (funeOS player/ui/settings.cpp SettingsPage::draw_row :1955-1961, player/ui/rows.cpp draw_clipped :121-129, v0.4.4)", bmp.inked(ink.right until bmp.width, 0 until bmp.height))
+        assertFalse("no second line under the sub box", bmp.inked(0 until bmp.width, box until bmp.height))
+        bmp.recycle()
+    }
+
+    @Test
     fun onThePhonePageBaseTheValueEndsAtTheWindowLessHubEdge() {
         val s = scale(Phones.p2160Page.window(Nav.Gesture), Nav.Gesture, Surface.Page, false)
         assertTrue("premise: the page base", s.fit != null)
@@ -182,6 +223,22 @@ class SettingRowsTest {
         const val R1_RIGHT64 = 28160
         const val R1_RESUME_TOP = 511
         const val R1_RESUME_SUB = 593
+        const val A105_LARGE_TOP = 432
+        const val A105_LARGE_BASE = 522
+        const val A105_LARGE_SUB = 581
+        const val A105_LARGE_RIGHT64 = 41472
+        const val A105_LARGE_RESUME_TOP = 983
+        const val A105_LARGE_RESUME_SUB = 1132
+        const val R1_LARGE_TOP = 288
+        const val R1_LARGE_BASE = 348
+        const val R1_LARGE_SUB = 386
+        const val R1_LARGE_RIGHT64 = 27648
+        const val R1_LARGE_RESUME_TOP = 653
+        const val R1_LARGE_RESUME_SUB = 751
+        const val A105_SUB_ROW = 148
+        const val A105_SUB_BOX = 130
+        const val ALPHA_SHIFT = 24
+        const val LONG_SUB = "a sub line that runs on past the right edge of the row in a window narrower than the device"
         const val PAGE_RIGHT64 = 65323
         const val PEN = 64f
     }
