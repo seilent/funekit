@@ -2353,7 +2353,8 @@ fun <S : Any> rememberMusicHost(
         key(page.id) {
             val pivots = page.rows.pivots.value
             val names = remember(pivots) { pivotNames(pivots) }
-            val c = rememberChrome(env.page, page.id.header, names)
+            val r = if (page.look == HeaderLook.Page) Roles.settingsItem else Roles.pageHeader
+            val c = rememberChrome(env.page, page.id.header, names, r.case, r.weight)
             page.id to (pivots to remember(c, page.look) { settingsChrome(c, page.look) })
         }
     }

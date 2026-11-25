@@ -11,6 +11,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.text.font.FontWeight
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
 import net.seilent.funekit.FuneTheme
@@ -249,6 +250,8 @@ class SettingsHostTest {
         assertTrue("premise: the list drags", it.scroll.dragging)
     }
 
+    private fun weightOf(c: Chrome) = c.header.runs[0].layout.layoutInput.style.fontWeight
+
     private fun closed(app: TestApp): Boolean = app.stack.overlay.let { it == null || it.closing }
 
     @Test
@@ -429,13 +432,53 @@ class SettingsHostTest {
     }
 
     @Test
+    fun aPageLookHeaderTakesTheSettingsRowCaseAndWeight() {
+        val app = app(SettingsPage(SettingsId(LED), Rows(pivot(choice("a"))), HeaderLook.Page))
+        frames(1)
+        val c = app.host.types.settings.chromes.getValue(SettingsId(LED))
+        assertEquals("the row case (funeOS player/ui/app.cpp kRowCases :66, App::start :524-532, v0.4.4)", LED.uppercase(), c.header.text)
+        assertEquals("the row weight", FontWeight.Bold, weightOf(c))
+    }
+
+    @Test
+    fun theSettingsAndDefaultLooksKeepThePageHeaderCase() {
+        val app = app(
+            SettingsPage(ID, Rows(pivot(choice("a"))), HeaderLook.Settings),
+            SettingsPage(SettingsId(DEFAULT), Rows(pivot(choice("b"))), HeaderLook.Default),
+        )
+        frames(1)
+        val chromes = app.host.types.settings.chromes
+        for ((id, word) in listOf(ID to SETTINGS, SettingsId(DEFAULT) to DEFAULT)) {
+            val c = chromes.getValue(id)
+            assertEquals("the page header case (funeOS player/ui/rows.cpp Chrome::header_style :402-408, v0.4.4)", word, c.header.text)
+            assertEquals("the page header weight", FontWeight.Light, weightOf(c))
+        }
+    }
+
+    @Test
+    fun aPageWhoseLookTurnsPageTakesTheRowCase() {
+        val rows = Rows(pivot(choice("a")))
+        val id = SettingsId(LED)
+        val app = app(SettingsPage(id, rows, HeaderLook.Default))
+        frames(1)
+        val before = app.host.types.settings.chromes.getValue(id)
+        assertEquals("premise: the default look keeps the page header case", LED, before.header.text)
+        assertEquals("premise: and its weight", FontWeight.Light, weightOf(before))
+        rule.runOnIdle { app.settingsList = listOf(SettingsPage(id, rows, HeaderLook.Page)) }
+        frames(RESIZE_FRAMES)
+        val c = app.host.types.settings.chromes.getValue(id)
+        assertEquals("the page look takes the row case", LED.uppercase(), c.header.text)
+        assertEquals("and the row weight", FontWeight.Bold, weightOf(c))
+    }
+
+    @Test
     fun aPageWhoseOnePivotHasNoNameDrawsAChromeWithNoPivots() {
         val id = SettingsId(PAGE)
         val app = app(SettingsPage(id, Rows(listOf(SettingPivot("", listOf(choice("a"), choice("b"))))), HeaderLook.Page))
         val (_, m) = open(app, id)
         val c = app.host.types.settings.chromes.getValue(id)
         assertEquals("the chrome has no pivots", 0, c.count)
-        assertEquals("the header is the page's word", PAGE, c.header.text)
+        assertEquals("the header is the page's word in the row case", PAGE.uppercase(), c.header.text)
         assertEquals("the page shows its rows", listOf("a", "b"), m.rows(m.pivot).map { it.key })
         assertEquals("the focus is on the first row", 0, m.focusRow(m.pivot))
     }
@@ -496,6 +539,26 @@ class SettingsHostTest {
         rule.setContent { FuneTheme(page) { chrome = rememberSettingsChrome(page, m, HeaderLook.Page) } }
         rule.waitForIdle()
         assertEquals("the chrome has no pivots", 0, chrome?.count)
+    }
+
+    @Test
+    fun rememberSettingsChromeOfAPageLookTakesTheRowCase() {
+        val m = SettingsModel(ENTRY, ID).also { it.pivots = listOf(SettingPivot("", listOf(choice("a")))) }
+        var paged: Chrome? = null
+        var plain: Chrome? = null
+        rule.setContent {
+            FuneTheme(page) {
+                paged = rememberSettingsChrome(page, m, HeaderLook.Page)
+                plain = rememberSettingsChrome(page, m, HeaderLook.Settings)
+            }
+        }
+        rule.waitForIdle()
+        val p = requireNotNull(paged)
+        val q = requireNotNull(plain)
+        assertEquals("the page look takes the row case", SETTINGS.uppercase(), p.header.text)
+        assertEquals("and the row weight", FontWeight.Bold, weightOf(p))
+        assertEquals("the settings look keeps the page header case", SETTINGS, q.header.text)
+        assertEquals("and its weight", FontWeight.Light, weightOf(q))
     }
 
     @Test
@@ -1342,6 +1405,7 @@ class SettingsHostTest {
         private const val OTHER = "other"
         private const val PAGE = "pairing"
         private const val DEFAULT = "bluetooth"
+        private const val LED = "led"
         private const val NEW = "new"
         private const val OPEN_FRAMES = 30
         private const val RESIZE_FRAMES = 2

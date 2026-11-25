@@ -7,6 +7,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFontFamilyResolver
 import androidx.compose.ui.text.rememberTextMeasurer
+import net.seilent.funekit.Roles
 import net.seilent.funekit.Scale
 import net.seilent.funekit.kit.Band
 import net.seilent.funekit.kit.Chrome
@@ -26,7 +27,8 @@ fun settingsSwitch(m: RowsPage<*>, chrome: Chrome, to: Int, now: Long) = pivotSw
 
 @Composable
 fun rememberSettingsChrome(s: Scale, m: SettingsModel, look: HeaderLook): Chrome {
-    val c = rememberChrome(s, m.id.header, pivotNames(m.groups))
+    val r = if (look == HeaderLook.Page) Roles.settingsItem else Roles.pageHeader
+    val c = rememberChrome(s, m.id.header, pivotNames(m.groups), r.case, r.weight)
     return remember(c, look) { settingsChrome(c, look) }
 }
 
