@@ -119,6 +119,8 @@ abstract class RowsPage<R : Any>(entry: Long, page: PageId) : PivotPage(entry, p
 
     internal abstract fun keyOf(r: R): String
 
+    protected open val slack: Int = 0
+
     protected open fun pressLook(r: R): Boolean = true
 
     protected open fun accept(v: List<RowPivot<R>>) {}
@@ -152,11 +154,16 @@ abstract class RowsPage<R : Any>(entry: Long, page: PageId) : PivotPage(entry, p
 
     fun content(p: Int): Int = heights(p).sum()
 
-    fun base(p: Int): Int = max(0, content(p) - view)
+    fun base(p: Int): Int {
+        val over = content(p) - view
+        return if (over <= slack) 0 else over
+    }
 
     fun limit(p: Int): Int = max(base(p), pane(p).reach)
 
-    fun pad(p: Int): Int = if (pane(p).reach > base(p)) pane(p).reach + view - content(p) else 0
+    fun listHeight(p: Int): Int = if (base(p) == 0) max(view, content(p)) else view
+
+    fun pad(p: Int): Int = if (pane(p).reach > base(p)) pane(p).reach + listHeight(p) - content(p) else 0
 
     override fun poke() {
         wake.trySend(Unit)

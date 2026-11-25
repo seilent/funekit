@@ -29,6 +29,15 @@ class EqModelTest {
     private fun landed(rows: List<RowPivot<EqLine>> = outputs): Probe = probe().also { it.m.pivots = rows }
 
     @Test
+    fun aRowsPageOnePixelOverItsViewStillScrolls() {
+        val m = probe().m
+        m.view = outputs[0].rows.size * ROW - 1
+        m.pivots = outputs
+        assertEquals("premise: the pivot is 1 px over its view", 1, m.content(0) - m.view)
+        assertEquals("an EQ page keeps a 0 slack", 1, m.base(0))
+    }
+
+    @Test
     fun aSwitchOpensTheNewPivotAtItsFirstRowAndTop() {
         val m = landed().m
         m.switchTo(1, 0L)

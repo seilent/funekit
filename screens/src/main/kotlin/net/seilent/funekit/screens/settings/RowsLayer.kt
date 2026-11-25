@@ -203,7 +203,7 @@ fun <R : Any, L> RowsLayer(
             Box(Modifier.pxSize(s.widthPx, draw.top))
             key(m.names.getOrNull(p)) {
                 Box(Modifier.pxSize(s.widthPx, draw.view).graphicsLayer { clip = true }) {
-                    FuneList(a, t, Modifier.pxSize(s.widthPx, draw.view), layer) {
+                    FuneList(a, t, Modifier.pxSize(s.widthPx, m.listHeight(p)), layer) {
                         items(rows.size) { i ->
                             val row = rows[i]
                             val look = rememberLook(p, m.keyOf(row), m, covered = covered) { draw.look(p, i, frame) }

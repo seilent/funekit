@@ -46,7 +46,7 @@ class SettingsDraw(
         inks.keys.retainAll(m.groups.flatMap { it.rows }.toSet())
     }
 
-    override fun thumbAt(p: Int, off: Int): ThumbRect? = thumbOf(s, top, bottom, view.toLong(), m.content(p).toLong(), off.toLong())
+    override fun thumbAt(p: Int, off: Int): ThumbRect? = thumbOf(s, top, bottom, view.toLong(), (if (m.base(p) == 0) view else m.content(p)).toLong(), off.toLong())
 
     override fun look(p: Int, i: Int, now: Long): SettingLook = m.look(p, i, now)
 

@@ -17,6 +17,7 @@ import net.seilent.funekit.FuneTheme
 import net.seilent.funekit.Insets
 import net.seilent.funekit.Nav
 import net.seilent.funekit.Roles
+import net.seilent.funekit.Scale
 import net.seilent.funekit.Surface
 import net.seilent.funekit.Window
 import net.seilent.funekit.gen.Tok
@@ -193,9 +194,29 @@ class SettingsHostTest {
 
     private fun subRows(subs: List<Int>) = (0 until SUB_PIVOT_ROWS).map { i -> SettingRow("k$i", "row $i", "", sub = if (i in subs) "the sub of row $i" else null) }
 
+    private fun window(h: Int) = scale(Window(W, h, SDK, none, none, none, none, none), Nav.None, Surface.Page, false)
+
+    private fun slackRows(words: List<String> = WORDS) = Rows(pivot(*(0 until SLACK_ROWS).map { choice("r$it", words) }.toTypedArray()))
+
+    private fun dragBy(h: Int): Pair<Int, Int> {
+        val s = window(h)
+        val app = app(SettingsPage(ID, slackRows(), HeaderLook.Settings), root = true, s = s)
+        val (_, m) = open(app)
+        val pitch = px(Tok.settingsPitch, s.ppu)
+        rule.onRoot().performTouchInput { down(Offset(s.widthPx / 2f, (px(s.board.page_contentTop, s.ppu) + SLACK_FROM).toFloat())) }
+        frames(1)
+        repeat(PAN_STEPS) {
+            rule.onRoot().performTouchInput { moveBy(Offset(0f, -pitch.toFloat() / PAN_STEPS)) }
+            frames(1)
+        }
+        rule.onRoot().performTouchInput { up() }
+        frames(SETTLE_FRAMES)
+        return m.content(0) - m.view to m.pane.px
+    }
+
     private fun onRow(m: SettingsModel, y: Int) = Offset(page.widthPx / 2f, (px(page.board.page_contentTop, page.ppu) + y - m.pane.px).toFloat())
 
-    private fun app(vararg pages: SettingsPage, root: Boolean = false) = TestApp(page, page, null, StillLevel) { rule.mainClock.currentTime }.also {
+    private fun app(vararg pages: SettingsPage, root: Boolean = false, s: Scale = page) = TestApp(s, s, null, StillLevel) { rule.mainClock.currentTime }.also {
         it.settingsList = pages.toList()
         it.compose(rule, root)
         rule.waitForIdle()
@@ -1280,6 +1301,36 @@ class SettingsHostTest {
         assertEquals("the reserved band is the row's (funeOS player/ui/settings.cpp SettingsPage::measure :573, row_at :803-810, v0.4.4)", listOf(EAR), rows.opens)
     }
 
+    @Test
+    fun aDragOnAPivotOnePixelOverItsViewLeavesItsRowsInPlace() {
+        val (over, rest) = dragBy(ONE_OVER_H)
+        assertEquals("premise: the pivot is 1 px over its view", 1, over)
+        assertEquals("a drag by a row leaves the first row's top in place (funeOS player/ui/settings.cpp SettingsPage::overflow :549-553, v0.4.4)", 0, rest)
+    }
+
+    @Test
+    fun aDragOnAPivotTwoPixelsOverItsViewMovesItsRowsTwoPixels() {
+        val (over, rest) = dragBy(ONE_OVER_H - 1)
+        assertEquals("premise: 2 px over", 2, over)
+        assertEquals("the same drag moves the rows 2 px", 2, rest)
+    }
+
+    @Test
+    fun aLiftedSheetOnASlackPivotRisesByItsFullReach() {
+        val app = app(SettingsPage(ID, slackRows(FOUR), HeaderLook.Settings), s = window(ONE_OVER_H))
+        val (_, m) = open(app)
+        assertEquals("premise: the pivot is 1 px over its view", 1, m.content(0) - m.view)
+        rule.runOnIdle {
+            app.host.types.settings.drawOf(m)
+            m.down(SLACK_ROWS - 1, rule.mainClock.currentTime)
+            m.cancel(rule.mainClock.currentTime)
+        }
+        tap(app, m, SLACK_ROWS - 1)
+        assertTrue("premise: the sheet lifts its row", m.pane.reach > 0)
+        assertEquals("premise: the lift has landed", AimKind.None, m.aimKind)
+        assertEquals("the list rises by the full reach", m.pane.reach, m.pane.px)
+    }
+
     companion object {
         private const val W = 720
         private const val H = 1280
@@ -1336,6 +1387,9 @@ class SettingsHostTest {
         private const val EAR = "earEq"
         private const val CROSSFEED = "crossfeed"
         private const val TALL_TAP = 190
+        private const val SLACK_ROWS = 7
+        private const val ONE_OVER_H = 1262
+        private const val SLACK_FROM = 400
         private val ID = SettingsId(SETTINGS)
         private val WORDS = listOf("off", "low", "high")
         private val LATER = listOf("x", "y", "z")

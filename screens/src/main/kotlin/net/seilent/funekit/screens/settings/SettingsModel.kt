@@ -128,6 +128,8 @@ enum class AimKind { None, Into, Lift, Drop }
 class SettingsModel(entry: Long, page: SettingsId) : RowsPage<SettingRow>(entry, page) {
     val id: SettingsId = page
 
+    override val slack: Int = 1
+
     override fun keyOf(r: SettingRow): String = r.key
 
     override fun pressLook(r: SettingRow): Boolean = r.pressLook

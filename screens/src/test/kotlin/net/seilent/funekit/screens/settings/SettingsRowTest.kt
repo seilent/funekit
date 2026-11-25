@@ -56,6 +56,8 @@ class SettingsRowTest {
 
     private fun subbed(at: List<Int> = SUB_ROWS) = plain().mapIndexed { i, r -> if (i in at) r.copy(sub = "the sub of row $i") else r }
 
+    private fun window(h: Int) = scale(Window(A105_W, h, SDK, none, none, none, none, none), Nav.None, Surface.Page, false)
+
     private fun correctionEq(sub: String? = "headphone correction before EQ") = SettingRow("earEq", "correction eq", "off", SettingKind.Choice, sub = sub, tall = true)
 
     private fun shown(rows: List<SettingRow>): SettingsModel = model().also {
@@ -329,6 +331,35 @@ class SettingsRowTest {
         assertEquals("funeOS player/ui/settings.cpp SettingsPage::measure :562-563, v0.4.4", px(Tok.settingsPitch, a105.ppu), m.heights(0)[0])
     }
 
+    @Test
+    fun aPivotOnePixelOverItsViewHasNoScrollRange() {
+        val one = model()
+        val d = draw(one, window(ONE_OVER_H))
+        one.pivots = listOf(SettingPivot(LIBRARY, plain(SLACK_ROWS)))
+        assertEquals("premise: the pivot is 1 px over its view", 1, one.content(0) - one.view)
+        assertEquals("no scroll range (funeOS player/ui/settings.cpp SettingsPage::overflow :549-553, v0.4.4)", 0, one.base(0))
+        assertEquals(0, one.limit(0))
+        assertEquals("the list lays every row out", one.content(0), one.listHeight(0))
+        assertNull("no thumb", d.thumbAt(0, 0))
+        val two = model()
+        val d2 = draw(two, window(ONE_OVER_H - 1))
+        two.pivots = listOf(SettingPivot(LIBRARY, plain(SLACK_ROWS)))
+        assertEquals("premise: 2 px over", 2, two.content(0) - two.view)
+        assertEquals(2, two.base(0))
+        assertEquals(two.view, two.listHeight(0))
+        assertNotNull("a thumb", d2.thumbAt(0, 0))
+    }
+
+    @Test
+    fun aLiftOnASlackPivotKeepsItsFullReach() {
+        val m = model()
+        draw(m, window(ONE_OVER_H))
+        m.pivots = listOf(SettingPivot(LIBRARY, plain(SLACK_ROWS)))
+        m.pane(0).reach = REACH
+        assertTrue("premise: the lift reaches past the base", m.pane(0).reach > m.base(0))
+        assertEquals("the list scrolls by the full reach", m.limit(0), m.content(0) + m.pad(0) - m.listHeight(0))
+    }
+
     private companion object {
         const val A105_W = 720
         const val A105_H = 1280
@@ -346,6 +377,9 @@ class SettingsRowTest {
         const val CUT_OFF = 300
         const val A105_TALL = 199
         const val R1_TALL = 133
+        const val SLACK_ROWS = 7
+        const val ONE_OVER_H = 1262
+        const val REACH = 200
         const val SDK = 35
         const val EFFECTS = "effects"
         const val SYSTEM = "system"
