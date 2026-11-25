@@ -30,6 +30,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import kotlin.math.ceil
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -181,10 +182,13 @@ class SettingRowsTest {
         assertEquals("the row keeps the one line height (funeOS player/ui/settings.cpp SettingsPage::measure :555-580, v0.4.4)", A105_SUB_ROW, ink.size.px)
         val box = ink.size.subY + Metrics.ascent(m.subPx) + Metrics.descent(m.subPx)
         assertEquals("premise: the sub box bottom", A105_SUB_BOX, box)
+        assertEquals("the sub lays out on one line", listOf(1), sub.runs.map { it.layout.lineCount })
         val bmp = drawn(a105.widthPx, ink.size.px) { settingSub(ink, 1f) }
         assertTrue("premise: the sub draws", bmp.inked(0 until ink.right, ink.size.subY until box))
         assertFalse("no pixel right of the clip (funeOS player/ui/settings.cpp SettingsPage::draw_row :1955-1961, player/ui/rows.cpp draw_clipped :121-129, v0.4.4)", bmp.inked(ink.right until bmp.width, 0 until bmp.height))
-        assertFalse("no second line under the sub box", bmp.inked(0 until bmp.width, box until bmp.height))
+        val end = ceil(ink.subBase + sub.inkBottom).toInt()
+        assertTrue("premise: the row has room under the sub's ink", end < bmp.height)
+        assertFalse("no ink under the sub's own ink bottom, where a second line would draw", bmp.inked(0 until bmp.width, end until bmp.height))
         bmp.recycle()
     }
 
