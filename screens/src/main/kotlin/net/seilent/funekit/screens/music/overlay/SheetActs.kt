@@ -177,9 +177,8 @@ suspend fun artistRows(t: SheetTarget, src: MusicSource): List<Row> {
     return ids.mapNotNull { id -> v.indexOf(Listing.Artists, Kind.Artist, id)?.let { at -> v.page(Listing.Artists, at, 1).rows.firstOrNull() } }
 }
 
-suspend fun confirmDelete(word: String, playlist: Long, src: MusicSource) {
-    if (word == DELETE_PLAYLIST) src.playlists.delete(playlist)
-}
+suspend fun confirmDelete(word: String, playlist: Long, src: MusicSource): SheetDone? =
+    if (word == DELETE_PLAYLIST) listEdit(false, "") { src.playlists.delete(playlist) } else null
 
 suspend fun infoOf(d: SheetDone.Info, src: MusicSource): TrackInfo? =
     if (d.live) src.viewed { it.trackInfo(d.track) } else src.library.view(d.generation).trackInfo(d.track)

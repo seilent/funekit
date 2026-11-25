@@ -171,6 +171,27 @@ class SheetActsTest {
     }
 
     @Test
+    fun aRefusedPlaylistDeleteShowsTheDevicesLineAndKeepsTheList() {
+        val refused = object : Playlists by f.playlists {
+            override suspend fun delete(id: Long) = throw Refused(LINE)
+        }
+        val s = MusicSource(f.library, recording, f.quickplay, f.favorites, refused, f.lyrics)
+        val w = lists().first { it.writable }
+        assertEquals(SheetDone.Toast(LINE, ""), runBlocking { confirmDelete(DELETE_PLAYLIST, w.id, s) })
+        assertTrue("the list is still listed", lists().any { it.id == w.id })
+    }
+
+    @Test
+    fun aPlaylistDeleteWithNoCardShowsCardNotAvailable() {
+        val out = object : Playlists by f.playlists {
+            override suspend fun delete(id: Long) = throw NoCard()
+        }
+        val s = MusicSource(f.library, recording, f.quickplay, f.favorites, out, f.lyrics)
+        val w = lists().first { it.writable }
+        assertEquals(SheetDone.Toast(CARD_GONE, ""), runBlocking { confirmDelete(DELETE_PLAYLIST, w.id, s) })
+    }
+
+    @Test
     fun infoOnAQueueRowAfterTheLeaseOpensTheTrackInfo() {
         val a = album()
         runBlocking { f.player.play(Listing.AlbumTracks(a.id), gen(), 0, 0) }

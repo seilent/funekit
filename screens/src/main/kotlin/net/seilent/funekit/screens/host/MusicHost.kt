@@ -1223,7 +1223,12 @@ class MusicHost<S : Any> internal constructor(
         if (word == DELETE_PLAYLIST) {
             val ask = listOf(DELETE_PLAYLIST, KEEP_PLAYLIST)
             openMenu(MenuForm.Dlg, DELETE_ASK, ask, false, -1, 0, true, { k ->
-                if (ask[k] == DELETE_PLAYLIST) scope.launch(FailFast) { quiet { confirmDelete(DELETE_PLAYLIST, t.id, s) } }
+                if (ask[k] == DELETE_PLAYLIST) scope.launch(FailFast) {
+                    when (val d = quiet { confirmDelete(DELETE_PLAYLIST, t.id, s) }) {
+                        is SheetDone.Toast -> toast.show(now(), d.line, d.title)
+                        else -> Unit
+                    }
+                }
                 true
             }) { menu -> menu.focus.set(ask.indexOf(KEEP_PLAYLIST), ask.size, now(), false) }?.let(::libraryOver)
             return false
