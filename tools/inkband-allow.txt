@@ -3,7 +3,7 @@ r1/rowpress-0-btarc-held the Bluetooth headphones page: the search row and the d
 v1/rowpress-0-btarc-held the Bluetooth headphones page: the search row and the device rows are text (reported), the press glow is excluded and the page has no ring, tile or divider, so no region is gated
 a105/t5-100 at 100 ms the pivot switch is still in its out phase, which runs over pivotOut 133 ms: only the leaving pane draws, which the kit's songs rows stand in for and excludes, and the chrome is text (reported), so no region is gated
 a105/t14x-120-songs at 120 ms of the close the grid is at alpha 0.016 and the songs page fades back from 0.16, so every grid region reads under two levels or sits over page ink, and the page regions under the grid are text (reported) or excluded by the overlap, so no region is gated
-a105/rowpress-0-hubsongs-tap 150 ms after the up of a song row tap funeOS v0.4.3 opens now playing through the play open (hub_play, play_open): T7 turns the hub out on the NpLeave pane, which the kit draws through quads that record no region, so no region is gated
+a105/rowpress-0-hubsongs-tap 150 ms after the up of a song row tap funeOS v0.4.4 opens now playing through the play open (hub_play, play_open): T7 turns the hub out on the NpLeave pane, which the kit draws through quads that record no region, so no region is gated
 a105/rowpress-0-hubsongs-up 500 ms into the T7 of the play open now playing turns in on its plane, which the kit draws through quads that record no region, so no region is gated
 a105/t5-0-accentoff at 0 ms the pivot switch is in its out phase (pivotOut 133 ms): only the leaving pane draws, which the kit's songs rows stand in for and excludes, and the chrome is text (reported), so no region is gated
 a105/t5-17-accentoff at 17 ms the pivot switch is in its out phase (pivotOut 133 ms): only the leaving pane draws, which the kit's songs rows stand in for and excludes, and the chrome is text (reported), so no region is gated
@@ -85,8 +85,8 @@ r1/navbar-playing the songs list nine rows down shows only song rows, all text, 
 a105/rowpress-0-queue-up T7's NpIn arrival brings now playing in on its plane inside a kit quad that records no region, so no region gates
 r1/queuesheet-500-3 the row sheet panel is excluded (color.bgElevated, half contrast), its items and the queue rows under it are text and the page thumb lies under the panel, so no region gates
 r1/rowpress-0-queue-up T7's NpIn arrival brings now playing in on its plane inside a kit quad that records no region, so no region gates
-a105/queuex-150 the T4 pop into now playing 150 ms after the header up: funeOS v0.4.3 and the kit have run the 133 ms leave and hold now playing's content to motion.npContentDelay 200 ms, so the tile is the ground alone and no region gates
-r1/queuex-150 the T4 pop into now playing 150 ms after the header up: funeOS v0.4.3 and the kit have run the 133 ms leave and hold now playing's content to motion.npContentDelay 200 ms, so the tile is the ground alone and no region gates
+a105/queuex-150 the T4 pop into now playing 150 ms after the header up: funeOS v0.4.4 and the kit have run the 133 ms leave and hold now playing's content to motion.npContentDelay 200 ms, so the tile is the ground alone and no region gates
+r1/queuex-150 the T4 pop into now playing 150 ms after the header up: funeOS v0.4.4 and the kit have run the 133 ms leave and hold now playing's content to motion.npContentDelay 200 ms, so the tile is the ground alone and no region gates
 a105/rowpress-0-queue-tap T7 from the queue turns it out on the NpLeave pane inside a kit quad that records no region, so no region gates
 a105/toast-150 T7 150 ms after the songs pick turns the hub out on the NpLeave pane inside a kit quad that records no region, and its STATUS row lies in the excluded status band, so no region gates
 r1/toast-150 T7 150 ms after the songs pick turns the hub out on the NpLeave pane inside a kit quad that records no region, so no region gates
@@ -381,16 +381,16 @@ r1/press-0-volexit-down no funeOS reference in the set
 r1/press-0-volexit-held no funeOS reference in the set
 r1/press-0-volexit-up no funeOS reference in the set
 r1/track-toast-500 no funeOS reference in the set
-v1/eq-parametric no funeOS reference in the set: the v0.4.3 EQ shots are eq-500 and eqrows kinds, none of them this scene
-v1/eq-graphic no funeOS reference in the set: the v0.4.3 EQ shots are eq-500 and eqrows kinds, none of them this scene
-v1/eq-preamp-edit no funeOS reference in the set: the v0.4.3 EQ shots are eq-500 and eqrows kinds, none of them this scene
-r1/eq-parametric no funeOS reference in the set: the v0.4.3 EQ shots are eq-500 and eqrows kinds, none of them this scene
-r1/eq-graphic no funeOS reference in the set: the v0.4.3 EQ shots are eq-500 and eqrows kinds, none of them this scene
-r1/eq-preamp-edit no funeOS reference in the set: the v0.4.3 EQ shots are eq-500 and eqrows kinds, none of them this scene
-a105/eq-parametric no funeOS reference in the set: the v0.4.3 EQ shots are eq-500 and eqrows kinds, none of them this scene
-a105/eq-graphic no funeOS reference in the set: the v0.4.3 EQ shots are eq-500 and eqrows kinds, none of them this scene
-a105/eq-preamp-edit no funeOS reference in the set: the v0.4.3 EQ shots are eq-500 and eqrows kinds, none of them this scene
-a105/eq-parametric-large no funeOS reference in the set: the v0.4.3 EQ shots are eq-500 and eqrows kinds, none of them this scene
+v1/eq-parametric no funeOS reference in the set: the v0.4.4 EQ shots are eq-500 and eqrows kinds, none of them this scene
+v1/eq-graphic no funeOS reference in the set: the v0.4.4 EQ shots are eq-500 and eqrows kinds, none of them this scene
+v1/eq-preamp-edit no funeOS reference in the set: the v0.4.4 EQ shots are eq-500 and eqrows kinds, none of them this scene
+r1/eq-parametric no funeOS reference in the set: the v0.4.4 EQ shots are eq-500 and eqrows kinds, none of them this scene
+r1/eq-graphic no funeOS reference in the set: the v0.4.4 EQ shots are eq-500 and eqrows kinds, none of them this scene
+r1/eq-preamp-edit no funeOS reference in the set: the v0.4.4 EQ shots are eq-500 and eqrows kinds, none of them this scene
+a105/eq-parametric no funeOS reference in the set: the v0.4.4 EQ shots are eq-500 and eqrows kinds, none of them this scene
+a105/eq-graphic no funeOS reference in the set: the v0.4.4 EQ shots are eq-500 and eqrows kinds, none of them this scene
+a105/eq-preamp-edit no funeOS reference in the set: the v0.4.4 EQ shots are eq-500 and eqrows kinds, none of them this scene
+a105/eq-parametric-large no funeOS reference in the set: the v0.4.4 EQ shots are eq-500 and eqrows kinds, none of them this scene
 a105/cardbad-500-albums the hub under a card error draws only the chrome and the line card error, all text, and the residual pass gates the rest, so no region gates
 a105/cardbad-500-artists the hub under a card error draws only the chrome and the line card error, all text, and the residual pass gates the rest, so no region gates
 a105/cardbad-500-history History under a card error draws only the chrome and the line card error, all text, and the residual pass gates the rest, so no region gates
