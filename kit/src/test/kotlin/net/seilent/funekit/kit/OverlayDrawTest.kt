@@ -128,7 +128,7 @@ class OverlayDrawTest {
     }
 
     @Test
-    fun aHeldToastIsABlackStripAtEightTenthsAcrossTheTop() {
+    fun aHeldToastIsASolidBlackStripAcrossTheTop() {
         val t = Toast()
         t.show(0, "artist", "title")
         t.frame(ToastPlace.Top, 1280, 0)
@@ -137,7 +137,7 @@ class OverlayDrawTest {
             measurer.word("title", Roles.toastTitle, roleStyle(Roles.toastTitle, a105, unitDensity, Ink.white), fonts, unitDensity, null, a105.board.fontHanMinPx),
         )
         val px = shot { toast(t, ink, a105, 400) }
-        near(Math.round(0xFF * 0.2f), red(px, 5, 60))
+        near(0, red(px, 5, 60), 0)
         near(0xFF, red(px, 5, 121), 0)
         var text = 0
         for (y in 0 until 120) for (x in 48 until 300) text = maxOf(text, red(px, x, y))

@@ -279,7 +279,7 @@ class Toast {
         val h = px(Tok.toastHeight, s.ppu)
         val bottomEdge = if (bottom) min(y + h, bottomPx) else y + h
         val clip = Edges(px(Tok.edge, s.ppu), y, px(s.w - Tok.edge, s.ppu), bottomEdge)
-        return ToastLook(y, h, bottomEdge, f * Tok.scrim_overlay_alpha, clip, f * textAlpha(now), press.look(now.toFloat()))
+        return ToastLook(y, h, bottomEdge, f, clip, f * textAlpha(now), press.look(now.toFloat()))
     }
 }
 

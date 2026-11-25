@@ -75,13 +75,13 @@ r1/scan-12873-albums a scan on a library with no songs draws only the chrome and
 a105/folders-500-flac+live+Encore_Sessions_Recorded_Live_In_Osaka+Bonus the deepest folder shows the path line and one song row, all text, and no thumb, and the residual pass gates the rest, so no region gates
 r1/folders-500-flac+live+Encore_Sessions_Recorded_Live_In_Osaka+Bonus the deepest folder shows the path line and one song row, all text, and no thumb, and the residual pass gates the rest, so no region gates
 r1/navbar-hub-end the songs list set at its end shows only song rows, all text, no divider and no thumb, and the residual pass gates the rest, so no region gates
-a105/hub-songs-9-play-accentoff the songs list nine rows down shows only song rows, all text, no divider, the thumb faded and the toast strip excluded (a black scrim), and the residual pass gates the rest, so no region gates
+a105/hub-songs-9-play-accentoff the songs list nine rows down shows only song rows, all text, no divider, the thumb faded and the toast strip excluded (solid black), and the residual pass gates the rest, so no region gates
 a105/navbar-hub-end the songs list set at its end shows only song rows, all text, no divider and no thumb, and the residual pass gates the rest, so no region gates
-a105/navbar-playing the songs list nine rows down shows only song rows, all text, no divider, the thumb faded and the toast strip excluded (a black scrim), and the residual pass gates the rest, so no region gates
+a105/navbar-playing the songs list nine rows down shows only song rows, all text, no divider, the thumb faded and the toast strip excluded (solid black), and the residual pass gates the rest, so no region gates
 a105/hub-songs-@夜に駆ける-play-up-accentoff the songs list inside the kanji bucket shows only song rows, all text, no divider, and the toast strip and the thumb under it are excluded, and the residual pass gates the rest, so no region gates
 r1/hub-songs-@夜に駆ける-play-up-accentoff the songs list inside the kanji bucket shows only song rows, all text, no divider, and the toast strip and the thumb under it are excluded, and the residual pass gates the rest, so no region gates
-r1/hub-songs-9-play-accentoff the songs list nine rows down shows only song rows, all text, no divider, the thumb faded and the toast strip excluded (a black scrim), and the residual pass gates the rest, so no region gates
-r1/navbar-playing the songs list nine rows down shows only song rows, all text, no divider, the thumb faded and the toast strip excluded (a black scrim), and the residual pass gates the rest, so no region gates
+r1/hub-songs-9-play-accentoff the songs list nine rows down shows only song rows, all text, no divider, the thumb faded and the toast strip excluded (solid black), and the residual pass gates the rest, so no region gates
+r1/navbar-playing the songs list nine rows down shows only song rows, all text, no divider, the thumb faded and the toast strip excluded (solid black), and the residual pass gates the rest, so no region gates
 a105/rowpress-0-queue-up T7's NpIn arrival brings now playing in on its plane inside a kit quad that records no region, so no region gates
 r1/queuesheet-500-3 the row sheet panel is excluded (color.bgElevated, half contrast), its items and the queue rows under it are text and the page thumb lies under the panel, so no region gates
 r1/rowpress-0-queue-up T7's NpIn arrival brings now playing in on its plane inside a kit quad that records no region, so no region gates

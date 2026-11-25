@@ -543,8 +543,8 @@ class Regions(
 fun Regions.toast(name: String, t: Toast, ink: ToastInk, s: Scale, now: Long, w: Int) {
     val l = t.look(s, now) ?: return
     val strip = Box(0f, l.y.toFloat(), w.toFloat(), l.stripBottom.toFloat())
-    shade(strip, "under the toast strip: a black scrim, so the page under it no longer sits on color.bg")
-    skip("the strip is a black scrim 17 levels under color.bg; under the half contrast rule the page it darkens counts as ink") {
+    shade(strip, "under the toast strip: black at the toast's fade, solid once risen, so the page under it no longer sits on color.bg")
+    skip("the strip is black at the toast's fade, solid once risen, and cuts the page rows under it; under the half contrast rule their ink inside its window counts as the strip's ink, so that ink reaches the window edge") {
         add("$name.strip", Kind.Bar, strip, KitInk.black, l.scrim)
     }
     val c = l.clip

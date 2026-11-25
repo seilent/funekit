@@ -84,18 +84,28 @@ class ToastTest {
     }
 
     @Test
-    fun theStripIsBlackAtEightTenthsAndItsTextClipsAtTheEdges() {
+    fun theStripIsSolidBlackOnceRisenAndItsTextClipsAtTheEdges() {
         val t = Toast()
         t.show(0, "one", "first", track = true)
         t.frame(ToastPlace.Top, 1280, 0)
         val l = t.look(a105, 400)!!
-        assertEquals(0.8f, l.scrim, 0.001f)
+        assertEquals(1f, l.scrim, 0.001f)
         assertEquals(listOf(48, 0, 672, 120), listOf(l.clip.x0, l.clip.y0, l.clip.x1, l.clip.y1))
         t.down(400)
         assertTrue(t.tap(450))
         assertFalse(t.tap(460))
         t.hide()
         assertNull(t.look(a105, 500))
+    }
+
+    @Test
+    fun theStripFollowsTheFadeAsTheToastGoesOut() {
+        val t = Toast()
+        t.show(0, "one", "first")
+        t.frame(ToastPlace.Top, 1280, 0)
+        val fall = 100 + 3500 + 2 + 53L
+        assertEquals(0.5f, t.fade(fall), 0.01f)
+        assertEquals(t.fade(fall), t.look(a105, fall)!!.scrim, 0f)
     }
 
     @Test
