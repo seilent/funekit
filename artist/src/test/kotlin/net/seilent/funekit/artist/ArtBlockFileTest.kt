@@ -1,6 +1,8 @@
 package net.seilent.funekit.artist
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -91,5 +93,32 @@ class ArtBlockFileTest {
         ArtBlocks(File(tmp.root, "none.tsv"), ledger = ledger)
         assertEquals(emptyList<PushLedger.Push>(), ledger.pushes("v1"))
         assertEquals(emptyList<PushLedger.Held>(), ledger.held("v1"))
+    }
+
+    @Test
+    fun aSaveThatCannotRenameThrowsAndLeavesWhatIsAtTheFile() {
+        val f = File(tmp.root, "artblock.tsv")
+        val b = ArtBlocks(f)
+        b.add(ArtBlocks.Block("k2", null, "deezer", "y", "s", "B", 3))
+        b.add(ArtBlocks.Reject("m2", "m2", "B", "B", 4))
+        f.mkdir()
+        assertThrows(StoreException::class.java) { b.save() }
+        assertTrue(f.isDirectory)
+        f.delete()
+        b.save()
+        assertEquals(b.records(), ArtBlocks(f).records())
+    }
+
+    @Test
+    fun aSaveThatCannotWriteItsTmpThrowsAndKeepsTheFileAsSaved() {
+        val f = File(tmp.root, "artblock.tsv")
+        val b = ArtBlocks(f)
+        b.add(ArtBlocks.Block("k2", null, "deezer", "y", "s", "B", 3))
+        b.save()
+        val saved = f.readText()
+        b.add(ArtBlocks.Reject("m2", "m2", "B", "B", 4))
+        File(tmp.root, "artblock.tsv.tmp").mkdir()
+        assertThrows(StoreException::class.java) { b.save() }
+        assertEquals(saved, f.readText())
     }
 }
