@@ -11,19 +11,12 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
-import net.seilent.funekit.api.Busy
 import net.seilent.funekit.api.Card
-import net.seilent.funekit.api.Disconnected
 import net.seilent.funekit.api.EngineEvent
-import net.seilent.funekit.api.Expired
 import net.seilent.funekit.api.FailFast
-import net.seilent.funekit.api.NoCard
-import net.seilent.funekit.api.NoSpace
 import net.seilent.funekit.api.Player
 import net.seilent.funekit.api.PlayerState
-import net.seilent.funekit.api.Refused
 import net.seilent.funekit.api.Repeat
-import net.seilent.funekit.api.Stale
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.overlay.VolumeHud
 import net.seilent.funekit.kit.scrub.SeekRamp
@@ -265,5 +258,5 @@ internal class SeekHold(
         if (final) hud.seekFinal(at) else hud.seekDrop(at)
     }
 
-    private fun outcome(e: Exception): Boolean = e is Disconnected || e is Busy || e is Refused || e is NoCard || e is Stale || e is Expired || e is NoSpace
+    private fun outcome(e: Exception): Boolean = PLAYING.any { it.isInstance(e) }
 }

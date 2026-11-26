@@ -737,7 +737,7 @@ fun <S : Any> HomeLayer(
                     val asked = q != null && host.playOpen(npOpenForm(true, true), refused = untap) { q.play(t.item) }
                     if (!asked) untap()
                 } else {
-                    scope.launch(FailFast) { quiet { source?.resume() } }
+                    scope.launch(FailFast) { acted({ state.log(it) }, "resume", PLAYING) { source?.resume() } }
                     host.openNp(npOpenForm(true, true))
                 }
             },

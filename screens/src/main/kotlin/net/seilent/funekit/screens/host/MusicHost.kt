@@ -210,6 +210,7 @@ import net.seilent.funekit.screens.settings.SettingsPage
 import net.seilent.funekit.screens.settings.pivotNames
 import net.seilent.funekit.screens.settings.settingsChrome
 import net.seilent.funekit.screens.settings.valueSheet
+import kotlin.reflect.KClass
 
 private const val OVER = 1
 private const val LEAD_MS = 17L
@@ -280,6 +281,18 @@ private suspend fun deleteDone(act: suspend () -> DeleteDone): DeleteDone = try 
 } catch (_: Busy) {
     DeleteDone.Refused
 }
+
+internal suspend fun <T> acted(log: (String) -> Unit, what: String, met: Set<KClass<out Exception>>, block: suspend () -> T): T? = try {
+    block()
+} catch (e: Exception) {
+    if (met.none { it.isInstance(e) }) throw e
+    log("$what: ${e.message}")
+    null
+}
+
+internal val PLAYING: Set<KClass<out Exception>> = setOf(Disconnected::class, Busy::class, Refused::class, NoCard::class)
+
+internal val LEVEL: Set<KClass<out Exception>> = setOf(Disconnected::class, Busy::class, Refused::class)
 
 private class OwedExit(val album: Long, val artist: Long?)
 
@@ -635,8 +648,18 @@ class MusicHost<S : Any> internal constructor(
 
     private fun npSeekLive(): Boolean = stack.phase == Phase.Rest && stack.top?.let(::isNp) == true
 
+    private suspend fun <T> act(what: String, met: Set<KClass<out Exception>>, block: suspend () -> T): T? = acted(app::log, what, met, block)
+
+    private fun seekTo(ms: Long, s: MusicSource?) {
+        scope.launch(FailFast) { act("seek", PLAYING) { s?.player?.seek(ms) } }
+    }
+
+    private fun skipBy(d: Int, s: MusicSource?) {
+        scope.launch(FailFast) { act("skip", PLAYING) { npSkip(d, np, s, phone) } }
+    }
+
     fun up(t: Long, upX: Float?) {
-        if (np.seeking) np.seekUp(npSeekHalf.g, upX?.let { npSeekHalf.ux(it) } ?: np.seekX)?.let { ms -> if (npSeekLive()) scope.launch(FailFast) { quiet { src?.player?.seek(ms) } } }
+        if (np.seeking) np.seekUp(npSeekHalf.g, upX?.let { npSeekHalf.ux(it) } ?: np.seekX)?.let { ms -> if (npSeekLive()) seekTo(ms, src) }
         np.gestureUp()
         hubOf(stack.top)?.let {
             it.fade.release(t)
@@ -649,7 +672,7 @@ class MusicHost<S : Any> internal constructor(
     }
 
     fun skip(s: Swipe) {
-        if (!np.slide.touch && (s == Swipe.Left || s == Swipe.Right)) scope.launch(FailFast) { quiet { npSkip(pivotBy(s), np, src, phone) } }
+        if (!np.slide.touch && (s == Swipe.Left || s == Swipe.Right)) skipBy(pivotBy(s), src)
     }
 
     val npPan = object : Pan {
@@ -667,7 +690,7 @@ class MusicHost<S : Any> internal constructor(
 
         override fun end(s: Swipe) {
             if (np.seeking) {
-                np.seekUp(npSeekHalf.g, np.seekX)?.let { ms -> if (npSeekLive()) scope.launch(FailFast) { quiet { src?.player?.seek(ms) } } }
+                np.seekUp(npSeekHalf.g, np.seekX)?.let { ms -> if (npSeekLive()) seekTo(ms, src) }
                 return
             }
             val d = when (s) {
@@ -676,7 +699,7 @@ class MusicHost<S : Any> internal constructor(
                 else -> 0
             }
             val t = now()
-            if (np.slideUp(t, d, npArtHalf.g.s.w, npNanosAt(t))) scope.launch(FailFast) { quiet { if (d > 0) src?.player?.next() else src?.player?.prev() } }
+            if (np.slideUp(t, d, npArtHalf.g.s.w, npNanosAt(t))) scope.launch(FailFast) { act("slide", PLAYING) { if (d > 0) src?.player?.next() else src?.player?.prev() } }
         }
     }
 
@@ -893,7 +916,7 @@ class MusicHost<S : Any> internal constructor(
     private fun volStep(d: Int) {
         openVolume(now())
         scope.launch(FailFast) {
-            if (quiet { volume.step(d) } != null) openVolume(now())
+            if (act("volume step", LEVEL) { volume.step(d) } != null) openVolume(now())
         }
     }
 
@@ -905,7 +928,7 @@ class MusicHost<S : Any> internal constructor(
         val s = src ?: return
         if (!hud.seekMoved() || s.player.state.value.track != hud.seekTrack()) return
         val ms = hud.seekTo
-        scope.launch(FailFast) { quiet { s.player.seek(ms) } }
+        seekTo(ms, s)
     }
 
     private fun posOf(st: PlayerState): Long = st.anchor.ms(SystemClock.elapsedRealtimeNanos())
@@ -957,14 +980,14 @@ class MusicHost<S : Any> internal constructor(
 
     internal val seekOn: Boolean get() = seekHold.on
 
-    private fun volAct(act: VolumeHud.Act) {
+    private fun volAct(a: VolumeHud.Act) {
         val s = src
-        when (act) {
+        when (a) {
             VolumeHud.Act.Plus -> volStep(1)
             VolumeHud.Act.Minus -> volStep(-1)
-            VolumeHud.Act.Prev, VolumeHud.Act.Next -> scope.launch(FailFast) { quiet { npSkip(if (act == VolumeHud.Act.Next) 1 else -1, np, s, phone) } }
+            VolumeHud.Act.Prev, VolumeHud.Act.Next -> skipBy(if (a == VolumeHud.Act.Next) 1 else -1, s)
             VolumeHud.Act.Ring -> scope.launch(FailFast) {
-                quiet {
+                act("ring", PLAYING) {
                     val p = phone
                     if (np.variant && p != null) p.toggle() else s?.player?.toggle()
                 }
@@ -974,7 +997,7 @@ class MusicHost<S : Any> internal constructor(
                 volSets += n
                 scope.launch(FailFast) {
                     val done = try {
-                        quiet { volume.set(n) }
+                        act("volume set", LEVEL) { volume.set(n) }
                     } finally {
                         volSets.remove(n)
                     }
@@ -1707,7 +1730,7 @@ class MusicHost<S : Any> internal constructor(
                         live = rest && stack.top == sc, visible = sh.visible, frozen = sh.frozen,
                         hideFocus = stack.hideFocus, snap = stack.snap,
                         onAct = ::npTap,
-                        onSeek = { ms -> if (npSeekLive()) scope.launch(FailFast) { quiet { src?.player?.seek(ms) } } },
+                        onSeek = { ms -> if (npSeekLive()) seekTo(ms, src) },
                         split = split,
                         backdrop = backdrop,
                         onArtHold = ::npArtHold,

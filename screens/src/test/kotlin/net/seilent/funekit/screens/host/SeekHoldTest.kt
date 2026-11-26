@@ -12,10 +12,12 @@ import net.seilent.funekit.api.Card
 import net.seilent.funekit.api.Disconnected
 import net.seilent.funekit.api.NoSpace
 import net.seilent.funekit.api.EngineEvent
+import net.seilent.funekit.api.Expired
 import net.seilent.funekit.api.Player
 import net.seilent.funekit.api.PlayerState
 import net.seilent.funekit.api.Refused
 import net.seilent.funekit.api.Repeat
+import net.seilent.funekit.api.Stale
 import net.seilent.funekit.kit.overlay.VolumeHud
 import net.seilent.funekit.screens.music.testFake
 import org.junit.Assert.assertEquals
@@ -282,13 +284,22 @@ class SeekHoldTest {
     }
 
     @Test
-    fun aNoSpaceSeekEndsTheHoldWithItsLine() {
-        p.seekFail = NoSpace()
-        start()
-        tick(1000)
-        assertFalse("a NoSpace seek ends the hold as a seam outcome", hold.on)
-        assertEquals(listOf("seek hold: no space"), logs)
-        assertEquals(emptyList<Throwable>(), thrown)
+    fun aSeekOrRunInOutsideItsOutcomesPropagates() {
+        val outside = listOf(NoSpace(), Stale(STALE), Expired(EXPIRED))
+        for (e in outside) {
+            p.seekFail = e
+            start()
+            tick(1000)
+            hold.end(false, clock)
+        }
+        p.seekFail = null
+        for (e in outside) {
+            p.nextFail = e
+            toTheRunIn()
+            hold.end(false, clock)
+        }
+        assertEquals((outside + outside).map { it::class to it.message }, thrown.map { it::class to it.message })
+        assertTrue("no seek hold line, $logs", logs.none { it.startsWith("seek hold:") })
     }
 
     @Test
@@ -309,5 +320,7 @@ class SeekHoldTest {
         const val DUR = 377000L
         const val POS = 216000L
         const val NEAR_END = 375500L
+        const val STALE = 3L
+        const val EXPIRED = 2L
     }
 }

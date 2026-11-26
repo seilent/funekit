@@ -33,15 +33,19 @@ import net.seilent.funekit.fxU
 import net.seilent.funekit.kept
 import net.seilent.funekit.api.Anchor
 import net.seilent.funekit.api.ArtRef
+import net.seilent.funekit.api.Busy
 import net.seilent.funekit.api.Card
+import net.seilent.funekit.api.Disconnected
 import net.seilent.funekit.api.Kind
 import net.seilent.funekit.api.Library
 import net.seilent.funekit.api.LibraryView
 import net.seilent.funekit.api.Listing
 import net.seilent.funekit.api.LyricCopy
 import net.seilent.funekit.api.Lyrics
+import net.seilent.funekit.api.NoCard
 import net.seilent.funekit.api.Player
 import net.seilent.funekit.api.PlayerState
+import net.seilent.funekit.api.Refused
 import net.seilent.funekit.api.Row
 import net.seilent.funekit.core.Section
 import net.seilent.funekit.gen.Tok
@@ -116,8 +120,10 @@ class HostTest {
     private val np = scale(window, Nav.None, Surface.NowPlaying, false)
     private val hudAt = Offset(Tok.canvasW / 2 * np.ppu + (np.left - page.left), MID_U * np.ppu)
     private val plusAt = Offset(Tok.canvasW / 2 * np.ppu + (np.left - page.left), np.board.vol_plusY * np.ppu)
+    private val plateRingAt = Offset(Tok.canvasW / 2 * np.ppu + (np.left - page.left), np.board.vol_ringY * np.ppu)
     private val passAt = Offset(Tok.canvasW / 2 * np.ppu + (np.left - page.left), (np.h - Tok.gesture_bottom / 2) * np.ppu)
     private val titleAt = Tok.npTextX + TITLE_DX to np.board.npTitleY - TITLE_DY
+    private val artAt = Tok.npArtX + np.board.npArt / 2 to np.board.npArtTop + np.board.npArt / 2
     private val seekAt = (Tok.npSeekBandX0 + np.board.npSeekBandX1) / 2 to (np.board.npProgressY + np.board.npSeekBandBottom) / 2
     private val titlePx = Offset((Tok.npTextX + TITLE_DX) * np.ppu + (np.left - page.left), (np.board.npTitleY - TITLE_DY) * np.ppu)
     private val artPx = NpLayout(np).let { Offset(it.artX + it.artSide / 2f + (np.left - page.left), it.artY + it.artSide / 2f) }
@@ -162,7 +168,7 @@ class HostTest {
 
         override suspend fun set(pct: Int) {
             sets += pct
-            check(!refuse) { "refused" }
+            if (refuse) throw Refused()
             if (pct == this.pct) return
             val d = CompletableDeferred<Unit>()
             waits += d
@@ -171,6 +177,18 @@ class HostTest {
         }
 
         override fun maxPct(): Int? = cap
+    }
+
+    private class BusyLevel(var pct: Int) : VolumeLevel {
+        override fun percent(): Int = pct
+
+        override fun stepPct(): Int = STEP
+
+        override suspend fun step(detents: Int) = throw Busy()
+
+        override suspend fun set(pct: Int) {
+            this.pct = pct
+        }
     }
 
     private class StepLevel(var pct: Int) : VolumeLevel {
@@ -485,7 +503,7 @@ class HostTest {
     }
 
     @Test
-    fun aSetThatThrowsLeavesThePlateOnTheDevicesNumber() {
+    fun aRefusedVolumeSetLogsAndLeavesThePlate() {
         val level = SlowLevel(START)
         level.refuse = true
         val app = app(level)
@@ -496,6 +514,22 @@ class HostTest {
         assertTrue("premise: every set asked past the device's number", level.sets.all { it > START })
         assertEquals("premise: the device keeps its number", START, level.pct)
         assertEquals("the plate shows the device's number", START, app.host.hud.percent)
+        assertEquals("each refused set writes its line, ${app.logs}", level.sets.size, app.logs.count { it == "volume set: refused" })
+    }
+
+    @Test
+    fun aBusyVolumeStepLogsAndLeavesThePlate() {
+        val app = app(BusyLevel(START))
+        rule.runOnIdle { app.host.openVolume(rule.mainClock.currentTime) }
+        frames(OPEN_FRAMES)
+        val rev = rule.runOnIdle {
+            app.host.volPress(1)
+            app.host.hud.revision
+        }
+        frames(OPEN_FRAMES)
+        assertEquals(listOf("volume step: busy"), app.logs.filter { it.startsWith("volume step:") })
+        assertEquals("the plate keeps the level's number", START, app.host.hud.percent)
+        assertEquals("a busy step opens the plate no second time", rev, app.host.hud.revision)
     }
 
     @Test
@@ -2355,17 +2389,20 @@ class HostTest {
         }
     }
 
-    private fun seekApp(seeks: MutableList<Long>): TestApp {
-        val f = testFake(FakeSet.Demo)
-        val player = object : Player by f.player {
+    private fun seekApp(seeks: MutableList<Long>): TestApp = playingApp { p ->
+        object : Player by p {
             override suspend fun seek(ms: Long) {
                 seeks += ms
-                f.player.seek(ms)
+                p.seek(ms)
             }
         }
+    }
+
+    private fun playingApp(player: (Player) -> Player): TestApp {
+        val f = testFake(FakeSet.Demo)
         val ts = runBlocking { f.library.view().page(Listing.Songs, 0, ART_SONGS).rows.map { it.id }.take(2) }
         runBlocking { f.player.play(ts, 0, 0) }
-        val src = MusicSource(f.library, player, f.quickplay, f.favorites, f.playlists, f.lyrics)
+        val src = MusicSource(f.library, player(f.player), f.quickplay, f.favorites, f.playlists, f.lyrics)
         return TestApp(page, np, src, Level(START, null)) { rule.mainClock.currentTime }.also {
             it.compose(rule, root = true)
             rule.waitForIdle()
@@ -2435,6 +2472,70 @@ class HostTest {
         frames(OPEN_FRAMES)
         assertTrue("a seek drag ended after now playing leaves seeks nothing", seeks.isEmpty())
         assertFalse("the drag's end still ends the seek", m.seeking)
+    }
+
+    @Test
+    fun aSeekWhileThePlayerIsGoneLogsAndStaysOnNowPlaying() {
+        val app = playingApp { p ->
+            object : Player by p {
+                override suspend fun seek(ms: Long) = throw Disconnected()
+            }
+        }
+        npDown(app, seekAt)
+        assertTrue("premise: the seek band down seeks", app.music.np.seeking)
+        rule.runOnIdle { app.host.up(rule.mainClock.currentTime, null) }
+        until("the seek answers") { app.logs.any { it.startsWith("seek:") } }
+        assertEquals(listOf("seek: player disconnected"), app.logs.filter { it.startsWith("seek:") })
+        assertTrue("now playing stays on top", rule.runOnIdle { app.stack.phase == Phase.Rest && app.host.isNp(app.stack.top!!) })
+    }
+
+    @Test
+    fun aSwipeSkipTheDeviceRefusesLogs() {
+        val app = playingApp { p ->
+            object : Player by p {
+                override suspend fun next() = throw Refused(REFUSED_TEXT)
+            }
+        }
+        rule.runOnIdle { app.host.skip(Swipe.Left) }
+        until("the skip answers") { app.logs.any { it.startsWith("skip:") } }
+        assertEquals(listOf("skip: $REFUSED_TEXT"), app.logs.filter { it.startsWith("skip:") })
+    }
+
+    @Test
+    fun aSlideNextWithNoCardLogs() {
+        val app = playingApp { p ->
+            object : Player by p {
+                override suspend fun next() = throw NoCard()
+            }
+        }
+        val m = app.music.np
+        until("premise: now playing shows its next song") { m.shown.nextId != null }
+        npDown(app, artAt)
+        val x = artPx.x
+        rule.runOnIdle {
+            assertTrue("premise: the art down takes the slide", app.host.npPan.begin(x, x, artPx))
+            app.host.npPan.end(Swipe.Left)
+        }
+        until("the slide answers") { app.logs.any { it.startsWith("slide:") } }
+        assertEquals(listOf("slide: card not available"), app.logs.filter { it.startsWith("slide:") })
+    }
+
+    @Test
+    fun aBusyRingLogs() {
+        val app = playingApp { p ->
+            object : Player by p {
+                override suspend fun toggle() = throw Busy()
+            }
+        }
+        rule.runOnIdle { app.host.openVolume(rule.mainClock.currentTime) }
+        frames(OPEN_FRAMES)
+        assertEquals("premise: the plate is up", OverKind.Volume, rule.runOnIdle { app.stack.overlay?.kind })
+        rule.onRoot().performTouchInput {
+            down(plateRingAt)
+            up()
+        }
+        until("the ring answers") { app.logs.any { it.startsWith("ring:") } }
+        assertEquals(listOf("ring: busy"), app.logs.filter { it.startsWith("ring:") })
     }
 
     private fun rowInk(rest: Bitmap, plate: Bitmap, h: NpHalf = npFlat(NpLayout(np))): Pair<List<Int>, List<Int>> {
@@ -3559,5 +3660,6 @@ class HostTest {
         private const val MODE_ON = "lyrics mode on"
         private const val MODE_OFF = "lyrics mode off"
         private const val TITLE_DY = 4f
+        private const val REFUSED_TEXT = "usb dac"
     }
 }

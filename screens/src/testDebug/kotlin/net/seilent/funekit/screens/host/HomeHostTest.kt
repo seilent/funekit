@@ -37,6 +37,8 @@ import net.seilent.funekit.Window
 import net.seilent.funekit.api.ArtRef
 import net.seilent.funekit.api.Busy
 import net.seilent.funekit.api.Card
+import net.seilent.funekit.api.Disconnected
+import net.seilent.funekit.api.Expired
 import net.seilent.funekit.api.Kind
 import net.seilent.funekit.api.Library
 import net.seilent.funekit.api.LibraryView
@@ -46,6 +48,7 @@ import net.seilent.funekit.api.NoCard
 import net.seilent.funekit.api.Page
 import net.seilent.funekit.api.Player
 import net.seilent.funekit.api.Refused
+import net.seilent.funekit.api.Stale
 import net.seilent.funekit.api.pins
 import net.seilent.funekit.fake.FakeSet
 import net.seilent.funekit.gen.Tok
@@ -91,6 +94,7 @@ import net.seilent.funekit.screens.music.overlay.sheetItems
 import net.seilent.funekit.screens.music.testFake
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
@@ -133,6 +137,8 @@ class HomeHostTest {
     private var qpPlays = true
     private var qpBusy = false
     private var qpRefuses = false
+    private var qpFails: Exception? = null
+    private var qpGone = false
     private val zero = MutableStateFlow(0L)
 
     private val player = object : Player by fake.player {
@@ -165,9 +171,14 @@ class HomeHostTest {
             played += item
             if (qpBusy) throw Busy()
             if (qpRefuses) throw Refused()
+            qpFails?.let { throw it }
             if (!qpPlays) return false
             player.play(listOf(item.id), 0, 0)
             return true
+        }
+
+        override suspend fun resume() {
+            if (qpGone) throw Disconnected()
         }
     }
 
@@ -385,6 +396,36 @@ class HomeHostTest {
         until("the refusal lands") { stack.phase == Phase.Rest && !stack.armed }
         frames(HOLD)
         assertFalse("a refusal with no line shows no word", app.toast.visible(SystemClock.uptimeMillis()))
+    }
+
+    @Test
+    fun aTilePlayThatEndsWithNoRefusalLeavesTheTileToItsRelease() {
+        val data = songData(songs(TILES))
+        val qp = front(data)
+        for (e in listOf(Disconnected(), Stale(STALE), Expired(EXPIRED))) {
+            qpFails = e
+            played.clear()
+            val at = SystemClock.uptimeMillis()
+            tapTile(data, 1)
+            until("premise: the tile was asked to play") { played.isNotEmpty() }
+            assertTrue("premise: the play answers before the release", SystemClock.uptimeMillis() - at < Tok.motion_touchReturnDelay)
+            assertNotNull("${e::class.simpleName} leaves the tile to its release", qp.press.on.p.due(SystemClock.uptimeMillis().toFloat()))
+            until("the turn back lands") { stack.phase == Phase.Rest && !stack.armed }
+            frames(HOLD)
+            assertNull("${e::class.simpleName}: the tile releases on its own", qp.press.on.p.due(SystemClock.uptimeMillis().toFloat()))
+        }
+    }
+
+    @Test
+    fun aResumeWhileThePlayerIsGoneLogsAndOpensNowPlaying() {
+        qpGone = true
+        val ids = songs(TILES)
+        runBlocking { fake.player.play(listOf(ids[0]), 0, 0) }
+        val data = QpData(QpItem(QpKind.Song, ids[0], "playing", null), ids.drop(1).mapIndexed { k, id -> QpItem(QpKind.Song, id, "t$k", null) }, emptyList(), emptyList(), 1L)
+        front(data)
+        tapTile(data, 0)
+        until("now playing opens") { npOnTop() }
+        assertEquals(listOf("resume: player disconnected"), app.logs.filter { it.startsWith("resume:") })
     }
 
     @Test
@@ -1241,6 +1282,8 @@ class HomeHostTest {
         private const val HOLD = 300L
         private const val TAP_MS = 50L
         private const val TILES = 3
+        private const val STALE = 3L
+        private const val EXPIRED = 2L
         private const val SCROLL_TILES = 16
         private const val LOAD_TILES = 8
         private const val RGB = 0xFFFFFF
