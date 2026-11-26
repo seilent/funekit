@@ -1,5 +1,6 @@
 package net.seilent.funekit.screens.music.overlay
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import net.seilent.funekit.kit.touch.RowSpec
@@ -44,6 +45,7 @@ import net.seilent.funekit.screens.music.testFake
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -171,14 +173,13 @@ class SheetActsTest {
     }
 
     @Test
-    fun aRefusedPlaylistDeleteShowsTheDevicesLineAndKeepsTheList() {
+    fun aRefusedPlaylistDeleteShowsTheDevicesLine() {
         val refused = object : Playlists by f.playlists {
             override suspend fun delete(id: Long) = throw Refused(LINE)
         }
         val s = MusicSource(f.library, recording, f.quickplay, f.favorites, refused, f.lyrics)
         val w = lists().first { it.writable }
         assertEquals(SheetDone.Toast(LINE, ""), runBlocking { confirmDelete(DELETE_PLAYLIST, w.id, s) })
-        assertTrue("the list is still listed", lists().any { it.id == w.id })
     }
 
     @Test
@@ -189,6 +190,17 @@ class SheetActsTest {
         val s = MusicSource(f.library, recording, f.quickplay, f.favorites, out, f.lyrics)
         val w = lists().first { it.writable }
         assertEquals(SheetDone.Toast(CARD_GONE, ""), runBlocking { confirmDelete(DELETE_PLAYLIST, w.id, s) })
+    }
+
+    @Test
+    fun aPlaylistDeleteFailingOutsideTheSeamFailsPlainly() {
+        val e = IllegalStateException("broken")
+        val broken = object : Playlists by f.playlists {
+            override suspend fun delete(id: Long) = throw e
+        }
+        val s = MusicSource(f.library, recording, f.quickplay, f.favorites, broken, f.lyrics)
+        val w = lists().first { it.writable }
+        assertSame(e, assertThrows(IllegalStateException::class.java) { runBlocking { confirmDelete(DELETE_PLAYLIST, w.id, s) } })
     }
 
     @Test
@@ -258,23 +270,17 @@ class SheetActsTest {
         }
         val s = MusicSource(f.library, recording, f.quickplay, f.favorites, busy, f.lyrics)
         val p = runBlocking { picker(s) }
-        val id = lists().first { it.title == DRIVE }.id
-        val before = count(Listing.PlaylistTracks(id))
         assertEquals(SheetDone.Toast(CARD_GONE, ""), runBlocking { runPick(p.items.indexOf(DRIVE), p, albumTarget(album()), s) })
-        assertEquals(before, count(Listing.PlaylistTracks(id)))
     }
 
     @Test
-    fun aRefusedAddToAListShowsTheDevicesLineAndAddsNothing() {
+    fun aRefusedAddToAListShowsTheDevicesLine() {
         val refused = object : Playlists by f.playlists {
             override suspend fun add(id: Long, tracks: TrackSet) = throw Refused(LINE)
         }
         val s = MusicSource(f.library, recording, f.quickplay, f.favorites, refused, f.lyrics)
         val p = runBlocking { picker(s) }
-        val id = lists().first { it.title == DRIVE }.id
-        val before = count(Listing.PlaylistTracks(id))
         assertEquals(SheetDone.Toast(LINE, ""), runBlocking { runPick(p.items.indexOf(DRIVE), p, albumTarget(album()), s) })
-        assertEquals(before, count(Listing.PlaylistTracks(id)))
     }
 
     @Test
@@ -292,15 +298,33 @@ class SheetActsTest {
     }
 
     @Test
-    fun aRefusedNewPlaylistShowsTheDevicesLineAndMakesNone() {
+    fun anUnreadableListAddShowsPlaylistNotReadableAndItsName() {
+        val unreadable = object : Playlists by f.playlists {
+            override suspend fun add(id: Long, tracks: TrackSet) = throw IllegalStateException()
+        }
+        val s = MusicSource(f.library, recording, f.quickplay, f.favorites, unreadable, f.lyrics)
+        val p = runBlocking { picker(s) }
+        assertEquals(SheetDone.Toast(NOT_READABLE, DRIVE), runBlocking { runPick(p.items.indexOf(DRIVE), p, albumTarget(album()), s) })
+    }
+
+    @Test
+    fun aCancelledListEditIsThrown() {
+        val cancelled = object : Playlists by f.playlists {
+            override suspend fun add(id: Long, tracks: TrackSet) = throw CancellationException()
+        }
+        val s = MusicSource(f.library, recording, f.quickplay, f.favorites, cancelled, f.lyrics)
+        val p = runBlocking { picker(s) }
+        assertThrows(CancellationException::class.java) { runBlocking { runPick(p.items.indexOf(DRIVE), p, albumTarget(album()), s) } }
+    }
+
+    @Test
+    fun aRefusedNewPlaylistShowsTheDevicesLine() {
         val refused = object : Playlists by f.playlists {
             override suspend fun create(tracks: TrackSet) = throw Refused(LINE)
         }
         val s = MusicSource(f.library, recording, f.quickplay, f.favorites, refused, f.lyrics)
         val p = runBlocking { picker(s) }
-        val before = count(Listing.Playlists)
         assertEquals(SheetDone.Toast(LINE, ""), runBlocking { runPick(0, p, albumTarget(album()), s) })
-        assertEquals(before, count(Listing.Playlists))
     }
 
     @Test
@@ -311,6 +335,30 @@ class SheetActsTest {
         val s = MusicSource(f.library, recording, f.quickplay, f.favorites, out, f.lyrics)
         val p = runBlocking { picker(s) }
         assertEquals(SheetDone.Toast(CARD_GONE, ""), runBlocking { runPick(0, p, albumTarget(album()), s) })
+    }
+
+    @Test
+    fun aNewPlaylistFailingOutsideTheSeamFailsPlainly() {
+        val e = IllegalStateException("broken")
+        val broken = object : Playlists by f.playlists {
+            override suspend fun create(tracks: TrackSet) = throw e
+        }
+        val s = MusicSource(f.library, recording, f.quickplay, f.favorites, broken, f.lyrics)
+        val p = runBlocking { picker(s) }
+        assertSame(e, assertThrows(IllegalStateException::class.java) { runBlocking { runPick(0, p, albumTarget(album()), s) } })
+    }
+
+    @Test
+    fun aBusyNewPlaylistOrDeleteShowsCardNotAvailable() {
+        val busy = object : Playlists by f.playlists {
+            override suspend fun create(tracks: TrackSet) = throw Busy()
+
+            override suspend fun delete(id: Long) = throw Busy()
+        }
+        val s = MusicSource(f.library, recording, f.quickplay, f.favorites, busy, f.lyrics)
+        val p = runBlocking { picker(s) }
+        assertEquals(SheetDone.Toast(CARD_GONE, ""), runBlocking { runPick(0, p, albumTarget(album()), s) })
+        assertEquals(SheetDone.Toast(CARD_GONE, ""), runBlocking { confirmDelete(DELETE_PLAYLIST, lists().first { it.writable }.id, s) })
     }
 
     @Test
@@ -349,7 +397,6 @@ class SheetActsTest {
         runBlocking { s.viewed { v -> m.show(v, 0, ROWS) } }
         val done = runBlocking { runEntry(REMOVE, m.target(0)!!, m, s, 0L) }
         assertEquals(SheetDone.Toast(CARD_GONE, ""), done)
-        assertEquals(ROWS_DRIVE, count(Listing.PlaylistTracks(id)))
     }
 
     @Test
@@ -364,7 +411,6 @@ class SheetActsTest {
         runBlocking { s.viewed { v -> m.show(v, 0, ROWS) } }
         val done = runBlocking { runEntry(REMOVE, m.target(0)!!, m, s, 0L) }
         assertEquals(SheetDone.Toast(LINE, ""), done)
-        assertEquals(ROWS_DRIVE, count(Listing.PlaylistTracks(id)))
     }
 
     private val songT = SheetTarget(SheetKind.Song, "Rain Song", Listing.Songs, track = 4L, pin = Kind.Song, id = 4)

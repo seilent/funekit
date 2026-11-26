@@ -109,7 +109,7 @@ suspend fun runPick(i: Int, p: Picker, t: SheetTarget, src: MusicSource): SheetD
     when (to) {
         PickTo.New -> {
             var made: Long? = null
-            listEdit(false, name) { made = src.playlists.create(tracks) }?.let { return it }
+            listWrite { made = src.playlists.create(tracks) }?.let { return it }
             val id = made ?: return SheetDone.Close
             name = src.viewed { v -> v.page(Listing.Playlists, 0, v.page(Listing.Playlists, 0, 0).total).rows.firstOrNull { it.id == id }?.title } ?: name
         }
@@ -126,18 +126,22 @@ suspend fun runEntry(word: String, t: SheetTarget, view: ListViewModel?, src: Mu
 }
 
 suspend fun listEdit(favorites: Boolean, name: String, edit: suspend () -> Unit): SheetDone? = try {
-    edit()
-    null
+    listWrite(edit)
 } catch (e: CancellationException) {
     throw e
+} catch (_: IllegalStateException) {
+    if (favorites) SheetDone.Toast(FAVS_UNREADABLE, "") else SheetDone.Toast(NOT_READABLE, name)
+}
+
+private suspend fun listWrite(edit: suspend () -> Unit): SheetDone? = try {
+    edit()
+    null
 } catch (_: NoCard) {
     SheetDone.Toast(CARD_GONE, "")
 } catch (_: Busy) {
     SheetDone.Toast(CARD_GONE, "")
 } catch (e: Refused) {
     if (e.text.isBlank()) SheetDone.Close else SheetDone.Toast(e.text, "")
-} catch (_: IllegalStateException) {
-    if (favorites) SheetDone.Toast(FAVS_UNREADABLE, "") else SheetDone.Toast(NOT_READABLE, name)
 }
 
 suspend fun runSheet(word: String, t: SheetTarget, src: MusicSource): SheetDone {
@@ -178,7 +182,7 @@ suspend fun artistRows(t: SheetTarget, src: MusicSource): List<Row> {
 }
 
 suspend fun confirmDelete(word: String, playlist: Long, src: MusicSource): SheetDone? =
-    if (word == DELETE_PLAYLIST) listEdit(false, "") { src.playlists.delete(playlist) } else null
+    if (word == DELETE_PLAYLIST) listWrite { src.playlists.delete(playlist) } else null
 
 suspend fun infoOf(d: SheetDone.Info, src: MusicSource): TrackInfo? =
     if (d.live) src.viewed { it.trackInfo(d.track) } else src.library.view(d.generation).trackInfo(d.track)
