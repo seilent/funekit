@@ -1,6 +1,8 @@
 package net.seilent.funekit.screens.music.overlay
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import net.seilent.funekit.kit.touch.RowSpec
@@ -10,6 +12,7 @@ import net.seilent.funekit.api.Listing
 import net.seilent.funekit.api.NoCard
 import net.seilent.funekit.api.Player
 import net.seilent.funekit.api.Playlists
+import net.seilent.funekit.api.Quickplay
 import net.seilent.funekit.api.Refused
 import net.seilent.funekit.api.Row
 import net.seilent.funekit.api.TrackSet
@@ -157,6 +160,21 @@ class SheetActsTest {
         runBlocking { runSheet(UNPIN_QP, albumTarget(a), src) }
         assertFalse(runBlocking { f.library.view().pinned(Kind.Album, a.id) })
         assertEquals(r0 + 2, f.quickplay.revision.value)
+    }
+
+    @Test
+    fun aPinPickedAfterQuickplayWentAwayPinsNothing() {
+        val gone = object : Quickplay by f.quickplay {
+            override val available: StateFlow<Boolean> = MutableStateFlow(false)
+
+            override suspend fun pin(kind: Kind, id: Long) = throw UnsupportedOperationException()
+
+            override suspend fun unpin(kind: Kind, id: Long) = throw UnsupportedOperationException()
+        }
+        val s = MusicSource(f.library, recording, gone, f.favorites, f.playlists, f.lyrics)
+        val t = albumTarget(album())
+        assertEquals(SheetDone.Close, runBlocking { runSheet(PIN, t, s) })
+        assertEquals(SheetDone.Close, runBlocking { runSheet(UNPIN_QP, t, s) })
     }
 
     @Test

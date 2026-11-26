@@ -36,7 +36,6 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
@@ -59,6 +58,7 @@ import net.seilent.funekit.api.FailFast
 import net.seilent.funekit.api.Kind as ApiKind
 import net.seilent.funekit.api.Listing
 import net.seilent.funekit.api.NoCard
+import net.seilent.funekit.api.NoSpace
 import net.seilent.funekit.api.PlayerState
 import net.seilent.funekit.api.Refused
 import net.seilent.funekit.api.Row
@@ -244,14 +244,6 @@ fun <S : Any> pageThumbAtSwap(top: S, at: Long, thumb: (S) -> PageThumb?) {
 
 private fun scaleKey(s: Scale): List<Any> = listOf(s.ppu, s.stdPpu, s.widthPx, s.heightPx, s.stdContentBottom)
 
-private suspend fun <T> quiet(block: suspend () -> T): T? = try {
-    block()
-} catch (e: CancellationException) {
-    throw e
-} catch (e: Exception) {
-    null
-}
-
 internal data class PlayDone(val sent: Boolean, val refused: Boolean = false, val word: String? = null)
 
 internal suspend fun played(block: suspend () -> Boolean): PlayDone = try {
@@ -293,6 +285,22 @@ internal suspend fun <T> acted(log: (String) -> Unit, what: String, met: Set<KCl
 internal val PLAYING: Set<KClass<out Exception>> = setOf(Disconnected::class, Busy::class, Refused::class, NoCard::class)
 
 internal val LEVEL: Set<KClass<out Exception>> = setOf(Disconnected::class, Busy::class, Refused::class)
+
+internal val READ: Set<KClass<out Exception>> = setOf(Disconnected::class, Busy::class)
+
+internal val READ_AT: Set<KClass<out Exception>> = setOf(Disconnected::class, Busy::class, Expired::class)
+
+internal val QUEUE: Set<KClass<out Exception>> = setOf(Disconnected::class, Busy::class, NoCard::class, Stale::class)
+
+internal val ENQUEUE: Set<KClass<out Exception>> = setOf(Disconnected::class, Busy::class, Refused::class, NoCard::class, Stale::class, Expired::class)
+
+internal val SHEET: Set<KClass<out Exception>> = setOf(Disconnected::class, Busy::class, Refused::class, NoCard::class, NoSpace::class, Stale::class, Expired::class)
+
+internal val PICK: Set<KClass<out Exception>> = setOf(Disconnected::class, Busy::class, Stale::class, Expired::class)
+
+internal val DROP: Set<KClass<out Exception>> = setOf(Disconnected::class, Stale::class)
+
+internal val HEART: Set<KClass<out Exception>> = setOf(Disconnected::class, Busy::class, Refused::class, NoCard::class, Stale::class)
 
 private class OwedExit(val album: Long, val artist: Long?)
 
@@ -1092,7 +1100,7 @@ class MusicHost<S : Any> internal constructor(
         val s = src ?: return
         val over = stack.overlay
         scope.launch(FailFast) {
-            val info = quiet { infoOf(d, s) } ?: return@launch
+            val info = act("info", READ_AT) { infoOf(d, s) } ?: return@launch
             val lines = infoLines(info, infoMax64(env.page), infoWidth())
             if (swap) {
                 val o = stack.overlay
@@ -1128,13 +1136,13 @@ class MusicHost<S : Any> internal constructor(
     private fun openPicker(t: SheetTarget, s: MusicSource) {
         val over = stack.overlay
         scope.launch(FailFast) {
-            val p = quiet { picker(s) } ?: return@launch refuse(over)
+            val p = act("picker", READ) { picker(s) } ?: return@launch refuse(over)
             stack.swapMenu(over) { at ->
                 menuHost.menu.open(MenuForm.Sheet, t.title, p.items, at)
                 menuHost.act = { k ->
                     menuHost.act = { false }
                     scope.launch(FailFast) {
-                        when (val d = quiet { runPick(k, p, t, s) }) {
+                        when (val d = act("pick", PICK) { runPick(k, p, t, s) }) {
                             is SheetDone.Toast -> toast.show(now(), d.line, d.title)
                             else -> Unit
                         }
@@ -1149,10 +1157,10 @@ class MusicHost<S : Any> internal constructor(
     private fun goAlbum(track: Long, generation: Long, s: MusicSource) {
         val over = stack.overlay
         scope.launch(FailFast) {
-            val row = quiet {
+            val row = act("album", READ_AT) {
                 val v = s.library.view(generation)
-                val a = v.trackIds(track)?.album ?: return@quiet null
-                val at = v.indexOf(Listing.Albums, ApiKind.Album, a) ?: return@quiet null
+                val a = v.trackIds(track)?.album ?: return@act null
+                val at = v.indexOf(Listing.Albums, ApiKind.Album, a) ?: return@act null
                 v.page(Listing.Albums, at, 1).rows.firstOrNull()
             }
             if (stack.overlay !== over || over?.closing == true) return@launch
@@ -1164,7 +1172,7 @@ class MusicHost<S : Any> internal constructor(
     private fun goArtist(t: SheetTarget, s: MusicSource) {
         val over = stack.overlay
         scope.launch(FailFast) {
-            val rows = quiet { artistRows(t, s) }
+            val rows = act("artist", READ_AT) { artistRows(t, s) }
             if (stack.overlay !== over || over?.closing == true) return@launch
             if (rows.isNullOrEmpty()) return@launch refuse(over)
             if (rows.size == 1) return@launch sheetPush(MusicPage.Artist(rows[0].id), MoveKind.T3, -1, -1L, null, over)
@@ -1204,7 +1212,7 @@ class MusicHost<S : Any> internal constructor(
             val row = sourceRow(t)
             scope.launch(FailFast) {
                 val id = (l as? Listing.PlaylistTracks)?.playlist
-                val gone = id != null && quiet { s.viewed { v -> v.indexOf(Listing.Playlists, ApiKind.Playlist, id) } } == null
+                val gone = id != null && act("open playlist", READ) { s.viewed { v -> v.indexOf(Listing.Playlists, ApiKind.Playlist, id) } } == null
                 if (stack.overlay !== over || over?.closing == true) return@launch
                 if (gone) return@launch refuse(over)
                 sheetPush(MusicPage.ListView(l), MoveKind.T3, row, -1L, head, over)
@@ -1232,7 +1240,7 @@ class MusicHost<S : Any> internal constructor(
         if (t.kind == SheetKind.Entry && word != INFO) {
             val v = modelOf(stack.top) as? ListViewModel
             scope.launch(FailFast) {
-                when (val d = quiet { runEntry(word, t, v, s, now()) }) {
+                when (val d = act("entry", READ) { runEntry(word, t, v, s, now()) }) {
                     is SheetDone.Toast -> toast.show(now(), d.line, d.title)
                     else -> Unit
                 }
@@ -1241,14 +1249,14 @@ class MusicHost<S : Any> internal constructor(
         }
         if (t.kind == SheetKind.Queue && word != INFO) {
             val q = queueOf(stack.top) ?: return true
-            scope.launch(FailFast) { quiet { q.verb(word, t.slot, t.revision, s, now()) } }
+            scope.launch(FailFast) { act("queue", QUEUE) { q.verb(word, t.slot, t.revision, s, now()) } }
             return true
         }
         if (word == DELETE_PLAYLIST) {
             val ask = listOf(DELETE_PLAYLIST, KEEP_PLAYLIST)
             openMenu(MenuForm.Dlg, DELETE_ASK, ask, false, -1, 0, true, { k ->
                 if (ask[k] == DELETE_PLAYLIST) scope.launch(FailFast) {
-                    when (val d = quiet { confirmDelete(DELETE_PLAYLIST, t.id, s) }) {
+                    when (val d = act("delete playlist", DROP) { confirmDelete(DELETE_PLAYLIST, t.id, s) }) {
                         is SheetDone.Toast -> toast.show(now(), d.line, d.title)
                         else -> Unit
                     }
@@ -1270,7 +1278,7 @@ class MusicHost<S : Any> internal constructor(
             return true
         }
         scope.launch(FailFast) {
-            when (val d = quiet { runSheet(word, t, s) }) {
+            when (val d = act("sheet", SHEET) { runSheet(word, t, s) }) {
                 is SheetDone.Toast -> toast.show(now(), d.line, d.title)
                 else -> Unit
             }
@@ -1366,7 +1374,7 @@ class MusicHost<S : Any> internal constructor(
             return true
         }
         scope.launch(FailFast) {
-            val pinned = t.pin?.takeIf { pins }?.let { k -> quiet { s.viewed { v -> v.pinned(k, t.id) } } } ?: false
+            val pinned = t.pin?.takeIf { pins }?.let { k -> act("pinned", READ) { s.viewed { v -> v.pinned(k, t.id) } } } ?: false
             if (stack.phase != Phase.Rest || stack.overlay != null) return@launch
             open(pinned)
         }
@@ -1389,8 +1397,8 @@ class MusicHost<S : Any> internal constructor(
     private fun artistRing(am: ArtistModel, i: Int): Boolean {
         if (i == RING_ADD) {
             scope.launch(FailFast) {
-                quiet {
-                    val p = src?.player ?: return@quiet
+                act("artist add", ENQUEUE) {
+                    val p = src?.player ?: return@act
                     artistAdd(p, am)?.let { toast.show(now(), it, am.name.orEmpty()) }
                 }
             }
@@ -1969,16 +1977,16 @@ class MusicHost<S : Any> internal constructor(
 
     internal val npBackdrop: NpBackdrop get() = backdrop
 
-    internal fun npTap(act: NpAct) {
+    internal fun npTap(a: NpAct) {
         if (stack.phase != Phase.Rest || stack.top?.let(::isNp) != true) return
-        when (act) {
+        when (a) {
             NpAct.Back -> stack.back(popKind)
             NpAct.Lyrics -> if (np.lyricsView) lyricsToggle()
             NpAct.LyricsSheet -> openOffset()
             NpAct.Queue -> openQueue()
             NpAct.Info -> npInfo()
             NpAct.Controls -> openVolume(now())
-            else -> scope.launch(FailFast) { quiet { npAct(act, np, src, phone, toast, env.now) } }
+            else -> scope.launch(FailFast) { act("now playing", HEART) { npAct(a, np, src, phone, toast, env.now) } }
         }
     }
 

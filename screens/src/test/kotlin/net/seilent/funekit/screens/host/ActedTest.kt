@@ -16,7 +16,10 @@ import org.junit.Test
 
 class ActedTest {
     private val outcomes: List<Exception> = listOf(Disconnected(), Busy(BUSY_TEXT), Refused(REFUSED_TEXT), NoCard(), NoSpace(), Stale(STALE), Expired(EXPIRED))
-    private val sets = mapOf("PLAYING" to PLAYING, "LEVEL" to LEVEL)
+    private val sets = mapOf(
+        "PLAYING" to PLAYING, "LEVEL" to LEVEL, "READ" to READ, "READ_AT" to READ_AT, "QUEUE" to QUEUE,
+        "ENQUEUE" to ENQUEUE, "SHEET" to SHEET, "PICK" to PICK, "DROP" to DROP, "HEART" to HEART,
+    )
 
     @Test
     fun aMetOutcomeIsLoggedAndAnswersNull() {
@@ -44,6 +47,14 @@ class ActedTest {
     fun eachActsSetIsTheOutcomesItsCallsMeet() {
         assertEquals(setOf(Disconnected::class, Busy::class, Refused::class, NoCard::class), PLAYING)
         assertEquals(setOf(Disconnected::class, Busy::class, Refused::class), LEVEL)
+        assertEquals(setOf(Disconnected::class, Busy::class), READ)
+        assertEquals(setOf(Disconnected::class, Busy::class, Expired::class), READ_AT)
+        assertEquals(setOf(Disconnected::class, Busy::class, NoCard::class, Stale::class), QUEUE)
+        assertEquals(setOf(Disconnected::class, Busy::class, Refused::class, NoCard::class, Stale::class, Expired::class), ENQUEUE)
+        assertEquals(setOf(Disconnected::class, Busy::class, Refused::class, NoCard::class, NoSpace::class, Stale::class, Expired::class), SHEET)
+        assertEquals(setOf(Disconnected::class, Busy::class, Stale::class, Expired::class), PICK)
+        assertEquals(setOf(Disconnected::class, Stale::class), DROP)
+        assertEquals(setOf(Disconnected::class, Busy::class, Refused::class, NoCard::class, Stale::class), HEART)
     }
 
     private companion object {

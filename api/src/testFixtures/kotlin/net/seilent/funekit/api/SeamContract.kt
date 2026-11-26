@@ -1513,10 +1513,10 @@ abstract class SeamContract {
             val id = checkNotNull(s.playlists.create(TrackSet.Ids(listOf(a))))
             s.until(s.playlists.revision) { it > r }
             val add = runCatching { s.playlists.add(id, TrackSet.Ids(listOf(-1, c))) }.exceptionOrNull()
-            assertTrue("$add", add is IllegalArgumentException)
+            assertTrue("$add", add is Refused && add.text.isBlank())
             assertEquals(listOf(a), view.allRows(Listing.PlaylistTracks(id)).map { it.id })
             val fav = runCatching { s.favorites.add(TrackSet.Ids(listOf(-1, f))) }.exceptionOrNull()
-            assertTrue("$fav", fav is IllegalArgumentException)
+            assertTrue("$fav", fav is Refused && fav.text.isBlank())
             assertFalse(s.favorites.has(f))
         }
     }

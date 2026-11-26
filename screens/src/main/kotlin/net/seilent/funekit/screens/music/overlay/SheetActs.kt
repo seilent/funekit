@@ -166,8 +166,8 @@ suspend fun runSheet(word: String, t: SheetTarget, src: MusicSource): SheetDone 
             if (n <= 0) return SheetDone.Close
             return SheetDone.Toast(if (n == 1) SONG_ADDED else SONGS_ADDED, t.title)
         }
-        PIN -> t.pin?.let { src.quickplay.pin(it, t.id) }
-        UNPIN_QP, UNPIN -> t.pin?.let { src.quickplay.unpin(it, t.id) }
+        PIN -> if (src.quickplay.available.value) t.pin?.let { src.quickplay.pin(it, t.id) }
+        UNPIN_QP, UNPIN -> if (src.quickplay.available.value) t.pin?.let { src.quickplay.unpin(it, t.id) }
         INFO -> t.track?.let { return SheetDone.Info(it, listing == Listing.Queue, t.generation) }
         DELETE_PLAYLIST -> if (t.kind == SheetKind.Playlist) return SheetDone.Confirm(t.id)
     }

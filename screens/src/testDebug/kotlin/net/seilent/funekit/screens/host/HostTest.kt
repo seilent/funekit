@@ -36,6 +36,7 @@ import net.seilent.funekit.api.ArtRef
 import net.seilent.funekit.api.Busy
 import net.seilent.funekit.api.Card
 import net.seilent.funekit.api.Disconnected
+import net.seilent.funekit.api.Favorites
 import net.seilent.funekit.api.Kind
 import net.seilent.funekit.api.Library
 import net.seilent.funekit.api.LibraryView
@@ -47,6 +48,7 @@ import net.seilent.funekit.api.Player
 import net.seilent.funekit.api.PlayerState
 import net.seilent.funekit.api.Refused
 import net.seilent.funekit.api.Row
+import net.seilent.funekit.api.Stale
 import net.seilent.funekit.core.Section
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.MenuForm
@@ -2398,11 +2400,11 @@ class HostTest {
         }
     }
 
-    private fun playingApp(player: (Player) -> Player): TestApp {
+    private fun playingApp(favorites: (Favorites) -> Favorites = { it }, player: (Player) -> Player = { it }): TestApp {
         val f = testFake(FakeSet.Demo)
         val ts = runBlocking { f.library.view().page(Listing.Songs, 0, ART_SONGS).rows.map { it.id }.take(2) }
         runBlocking { f.player.play(ts, 0, 0) }
-        val src = MusicSource(f.library, player(f.player), f.quickplay, f.favorites, f.playlists, f.lyrics)
+        val src = MusicSource(f.library, player(f.player), f.quickplay, favorites(f.favorites), f.playlists, f.lyrics)
         return TestApp(page, np, src, Level(START, null)) { rule.mainClock.currentTime }.also {
             it.compose(rule, root = true)
             rule.waitForIdle()
@@ -2536,6 +2538,23 @@ class HostTest {
         }
         until("the ring answers") { app.logs.any { it.startsWith("ring:") } }
         assertEquals(listOf("ring: busy"), app.logs.filter { it.startsWith("ring:") })
+    }
+
+    @Test
+    fun aStaleHeartLogsAndKeepsTheHeart() {
+        val app = playingApp(favorites = { fv ->
+            object : Favorites by fv {
+                override suspend fun toggle(track: Long): Boolean = throw Stale(STALE)
+            }
+        })
+        val m = app.music.np
+        until("premise: now playing shows its track") { m.shown.track != null }
+        val was = rule.runOnIdle { m.favorite }
+        rule.runOnIdle { app.host.npTap(NpAct.Favorite) }
+        until("the heart answers") { app.logs.any { it.startsWith("now playing:") } }
+        assertEquals(listOf("now playing: ${Stale(STALE).message}"), app.logs.filter { it.startsWith("now playing:") })
+        assertEquals("the heart stays as it was", was, rule.runOnIdle { m.favorite })
+        assertFalse("no toast", app.toast.visible(rule.mainClock.currentTime))
     }
 
     private fun rowInk(rest: Bitmap, plate: Bitmap, h: NpHalf = npFlat(NpLayout(np))): Pair<List<Int>, List<Int>> {
