@@ -1,6 +1,7 @@
 package net.seilent.funekit.screens.eq
 
 import androidx.compose.runtime.State
+import net.seilent.funekit.api.engine.EqLevels
 
 enum class EqKind { On, Mode, Profile, Preset, SavePreset, DeletePreset, RenamePreset, ExportPreset, Import, Preamp, AutoPreamp, Total, Peak, Band, Gain, AddBand, RemoveBand, ResetCustom }
 
@@ -28,6 +29,7 @@ data class EqPivot(
     val headset: String? = null,
     val peak: String? = null,
     val target: Long? = null,
+    val levels: EqLevels? = null,
 )
 
 enum class EqOutcome { Done, Refused, Stale, NoSpace, NameTaken, NameNotAllowed, Failed }
@@ -87,4 +89,16 @@ interface EqRows {
     suspend fun remove(slot: String): EqOutcome
 
     fun hasEntry(slot: String): Boolean = true
+}
+
+internal const val CAP_OFF = 2
+
+internal fun eqOff(l: EqLevels): Boolean = l.level == 1 || l.level == CAP_OFF
+
+fun eqLevelRows(rows: List<EqRow>, levels: EqLevels?, on: Boolean, listed: Boolean): List<EqRow> {
+    if (levels == null) return rows
+    val head = listOfNotNull(EqRow(EqKind.Total).takeIf { eqOff(levels) || (levels.dop && on && listed) })
+    val at = rows.indexOfFirst { it.kind == EqKind.Preamp }
+    if (at < 0) return rows + head
+    return rows.take(at + 1) + head + listOfNotNull(EqRow(EqKind.Peak).takeIf { on && listed }) + rows.drop(at + 1)
 }

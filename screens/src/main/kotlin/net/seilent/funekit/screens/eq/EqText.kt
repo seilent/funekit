@@ -1,5 +1,6 @@
 package net.seilent.funekit.screens.eq
 
+import net.seilent.funekit.api.engine.EqLevels
 import net.seilent.funekit.gen.Tok
 import kotlin.math.pow
 import kotlin.math.roundToInt
@@ -23,6 +24,9 @@ private const val FX_BITS = 16
 private const val Q_STEP = 10
 private const val FRESH_Q = 140
 private const val PARSE_CAP = 40
+private const val DSD_BASE = 32
+private const val RATE_KHZ = 1000
+private const val RATE_TENTH = 100
 
 private val sixth = LongArray(SIXTHS) { (FX * OCTAVE.pow(it.toDouble() / SIXTHS)).roundToLong() }
 
@@ -121,6 +125,12 @@ internal fun eqFreqText(milliHz: Int, grid: Int): String {
     if (hz < KHZ || (grid < 0 && hz % HZ_ROUND != 0L)) return "$hz hz"
     val d = (milliHz + HALF_TENTH_KHZ) / TENTH_KHZ
     return "${d / TEN}" + (if (d % TEN != 0L) ".${d % TEN}" else "") + " khz"
+}
+
+internal fun eqCapText(l: EqLevels): String {
+    if (l.dsd != 0) return "dsd${DSD_BASE shl l.dsd}"
+    val r = l.rateHz
+    return "${r / RATE_KHZ}" + (if (r % RATE_KHZ != 0) ".${r % RATE_KHZ / RATE_TENTH}" else "") + " khz"
 }
 
 internal fun eqGainText(gain10: Int, plus: Boolean): String = (if (plus && gain10 > 0) "+" else "") + fixedText(gain10.toLong(), 1) + " db"

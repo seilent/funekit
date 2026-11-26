@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.takeWhile
 import net.seilent.funekit.Fonts
 import net.seilent.funekit.Roles
+import net.seilent.funekit.api.engine.EqLevels
 import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.Accent
 import net.seilent.funekit.kit.Edges
@@ -69,6 +70,10 @@ private const val NOT_SAVED = "preset not saved"
 private const val NOT_RENAMED = "preset not renamed"
 private const val NOT_DELETED = "preset not deleted"
 private const val GAIN = "gain"
+private const val PEAK_GAIN = "peak gain"
+private const val EQ_OFF_AT = "eq off at"
+private const val EQ_OFF_DOP = "eq off for dop"
+private const val DOP_TRIM10 = -5
 private val fieldTitles = listOf("type", "frequency", GAIN, "q")
 
 internal data class EqPaneLine(
@@ -129,7 +134,7 @@ class EqRowsPane(private val header: String, private val rows: EqRows) : EqPane 
         EqKind.Import -> "import"
         EqKind.Preamp, EqKind.AutoPreamp -> "preamp"
         EqKind.Total -> "total"
-        EqKind.Peak -> "peak gain"
+        EqKind.Peak -> PEAK_GAIN
         EqKind.Band -> (r.band + 1).toString()
         EqKind.Gain -> p.gains.getOrNull(r.band)?.let { eqFreqText(eqGridMilliHz(it.grid), it.grid) } ?: ""
         EqKind.AddBand -> "add band"
@@ -143,7 +148,25 @@ class EqRowsPane(private val header: String, private val rows: EqRows) : EqPane 
         EqKind.Band -> p.bands.getOrNull(r.band)?.let(::eqBandText) ?: ""
         EqKind.Gain -> p.gains.getOrNull(r.band)?.let { eqGainText(it.gain10, true) } ?: ""
         EqKind.RemoveBand -> p.bands.size.toString()
+        EqKind.Total -> p.levels?.let { totalText(it) } ?: r.value
+        EqKind.Peak -> p.levels?.let { peakText(it) } ?: r.value
         else -> r.value
+    }
+
+    private fun totalText(l: EqLevels): String = if (eqOff(l)) "$EQ_OFF_AT ${eqCapText(l)}" else if (l.dop) EQ_OFF_DOP else ""
+
+    private fun peakText(l: EqLevels): String = when {
+        l.level == CAP_OFF -> eqGainText(0, true)
+        l.level != 1 && l.dop -> eqGainText(DOP_TRIM10 * l.dopTrim, true)
+        else -> l.peak10?.let { eqGainText(it, true) } ?: ""
+    }
+
+    private fun peakLine(p: EqPivot): String {
+        val l = p.levels ?: return ""
+        if (p.rows.none { it.kind == EqKind.Peak }) return ""
+        if (eqOff(l)) return totalText(l)
+        val v = peakText(l)
+        return if (v.isEmpty()) "" else "$PEAK_GAIN $v"
     }
 
     private fun linesOf(p: EqPivot): List<EqPaneLine> = p.rows.map { r ->
@@ -522,7 +545,11 @@ class EqRowsPane(private val header: String, private val rows: EqRows) : EqPane 
 
         private fun cols(v: Int) = listOf(AdjustCol(eqEntryText(EqField.Gain, v), if (pre) "preamp db" else "gain db", !eqAtEnd(EqField.Gain, pre, v, 1), !eqAtEnd(EqField.Gain, pre, v, -1)))
 
-        private fun line2(p: EqPivot, v: Int): String = if (pre && p.peak != null) p.peak else "${l.title} ${eqGainText(v, !pre)}"
+        private fun line2(p: EqPivot, v: Int): String {
+            if (pre && p.peak != null) return p.peak
+            val peak = if (pre) peakLine(p) else ""
+            return peak.ifEmpty { "${l.title} ${eqGainText(v, !pre)}" }
+        }
 
         override fun open(now: Long): Boolean {
             val p = pivotOf(slot) ?: return false

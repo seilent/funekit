@@ -1,6 +1,12 @@
 package net.seilent.funekit.screens.eq
 
+import net.seilent.funekit.api.engine.EqLevels
+import net.seilent.funekit.screens.music.nowplaying.AdjustHud
+import net.seilent.funekit.screens.settings.FieldSheet
+import net.seilent.funekit.screens.settings.RowAdjust
+import net.seilent.funekit.screens.settings.SettingSheet
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class EqRowsPaneTest {
@@ -36,6 +42,41 @@ class EqRowsPaneTest {
     private fun lines(p: EqPivot, header: String = EQ): List<EqPaneLine> =
         EqRowsPane(header, StillRows(listOf(p))).pivots.value.single().rows.map { it as EqPaneLine }
 
+    private fun leveled(levels: EqLevels, on: Boolean = true, listed: Boolean = true, rows: List<EqRow> = parametric.rows): EqPivot =
+        parametric.copy(rows = eqLevelRows(rows, levels, on, listed), levels = levels)
+
+    private fun valueOf(p: EqPivot, kind: EqKind): String = lines(p).single { it.kind == kind }.value
+
+    private class HudActs(private val hud: AdjustHud) : EqActs {
+        var made: RowAdjust? = null
+
+        override fun now(): Long = 0L
+
+        override fun sheet(sheet: SettingSheet, pick: (Int) -> Boolean, closed: () -> Unit): Boolean = false
+
+        override fun fields(sheet: FieldSheet): Boolean = false
+
+        override fun adjust(make: (AdjustHud, (Boolean) -> Unit) -> RowAdjust): Boolean = make(hud) {}.also { made = it }.open(0L)
+
+        override fun focus(key: String) {}
+
+        override fun toast(line1: String, line2: String) {}
+
+        override fun close() {}
+
+        override fun handOff() {}
+
+        override fun launch(block: suspend () -> Unit) {}
+    }
+
+    private fun hudLine(p: EqPivot): String {
+        val hud = AdjustHud()
+        val pane = EqRowsPane(EQ, StillRows(listOf(p)))
+        val pivot = pane.pivots.value.single()
+        pane.tap(pivot.name, pivot.rows.first { (it as EqPaneLine).kind == EqKind.Preamp }, HudActs(hud))
+        return hud.line2
+    }
+
     @Test
     fun aPivotsRowsKeyBySlotKindAndBand() {
         assertEquals(
@@ -68,6 +109,94 @@ class EqRowsPaneTest {
     fun thePivotsTakeTheSuppliersNamesInOrder() {
         val pane = EqRowsPane(EQ, StillRows(listOf(parametric, graphic)))
         assertEquals(listOf(HEADPHONES, BLUETOOTH), pane.pivots.value.map { it.name })
+    }
+
+    @Test
+    fun aCappedCurveListsTotalEqOffAtItsRate() {
+        assertEquals("eq off at 88.2 khz", valueOf(leveled(EqLevels(level = 1, rateHz = 88200)), EqKind.Total))
+        assertEquals("eq off at 96 khz", valueOf(leveled(EqLevels(level = 2, rateHz = 96000)), EqKind.Total))
+    }
+
+    @Test
+    fun aDsdCapReadsItsDsdRate() {
+        assertEquals("eq off at dsd64", valueOf(leveled(EqLevels(level = 2, dsd = 1)), EqKind.Total))
+        assertEquals("eq off at dsd128", valueOf(leveled(EqLevels(level = 1, dsd = 2)), EqKind.Total))
+    }
+
+    @Test
+    fun aListedCurveWithEqOnListsPeakGainAfterTotal() {
+        val p = leveled(EqLevels(level = 1, rateHz = 44100, peak10 = -15))
+        assertEquals(
+            listOf(
+                EqKind.On, EqKind.Mode, EqKind.Profile, EqKind.SavePreset, EqKind.Import, EqKind.Preamp, EqKind.Total, EqKind.Peak,
+                EqKind.Band, EqKind.Band, EqKind.AddBand, EqKind.RemoveBand,
+            ),
+            p.rows.map { it.kind },
+        )
+        assertEquals(listOf("total", "peak gain"), lines(p).filter { it.kind == EqKind.Total || it.kind == EqKind.Peak }.map { it.title })
+        assertEquals("-1.5 db", valueOf(p, EqKind.Peak))
+    }
+
+    @Test
+    fun peakGainReadsZeroAtLevelTwo() {
+        assertEquals("0.0 db", valueOf(leveled(EqLevels(level = 2, rateHz = 44100, peak10 = 35)), EqKind.Peak))
+    }
+
+    @Test
+    fun aDopCurveListsTotalEqOffForDopAndThePeakFromTheTrim() {
+        val dop = EqLevels(dop = true, dopTrim = 3, peak10 = 12)
+        val p = leveled(dop)
+        assertEquals("eq off for dop", valueOf(p, EqKind.Total))
+        assertEquals("-1.5 db", valueOf(p, EqKind.Peak))
+        assertTrue("eq off lists neither", leveled(dop, on = false).rows.none { it.kind == EqKind.Total || it.kind == EqKind.Peak })
+    }
+
+    @Test
+    fun anUnknownPeakListsPeakGainWithNoValue() {
+        val p = leveled(EqLevels(rateHz = 44100))
+        assertTrue("no total", p.rows.none { it.kind == EqKind.Total })
+        assertEquals(EqKind.Peak, p.rows[p.rows.indexOfFirst { it.kind == EqKind.Preamp } + 1].kind)
+        assertEquals("", valueOf(p, EqKind.Peak))
+    }
+
+    @Test
+    fun totalGoesLastWithNoPreamp() {
+        val off = listOf(EqRow(EqKind.On, "on"), EqRow(EqKind.Profile, "off"), EqRow(EqKind.Import))
+        val p = leveled(EqLevels(level = 2, rateHz = 44100), listed = false, rows = off)
+        assertEquals(listOf(EqKind.On, EqKind.Profile, EqKind.Import, EqKind.Total), p.rows.map { it.kind })
+        assertEquals("eq off at 44.1 khz", valueOf(p, EqKind.Total))
+    }
+
+    @Test
+    fun thePreampHudTakesThePeakLine() {
+        assertEquals("PEAK GAIN -1.5 DB", hudLine(leveled(EqLevels(rateHz = 44100, peak10 = -15))))
+        assertEquals("a capped curve takes the total", "EQ OFF AT 44.1 KHZ", hudLine(leveled(EqLevels(level = 1, rateHz = 44100))))
+        assertEquals("no peak yet keeps the preamp line", "PREAMP -6.1 DB", hudLine(leveled(EqLevels(rateHz = 44100))))
+        assertEquals("the supplier's own line wins", "SUPPLIED", hudLine(leveled(EqLevels(peak10 = -15)).copy(peak = "supplied")))
+    }
+
+    @Test
+    fun levelsLandingUnderTheOpenPreampHudMoveItsSecondLine() {
+        val rows = StillRows(listOf(leveled(EqLevels(rateHz = 44100))))
+        val hud = AdjustHud()
+        val acts = HudActs(hud)
+        val pane = EqRowsPane(EQ, rows)
+        val pivot = pane.pivots.value.single()
+        pane.tap(pivot.name, pivot.rows.first { (it as EqPaneLine).kind == EqKind.Preamp }, acts)
+        assertEquals("premise: no peak yet", "PREAMP -6.1 DB", hud.line2)
+        rows.pivots.value = listOf(leveled(EqLevels(rateHz = 44100, peak10 = -15)))
+        checkNotNull(acts.made).landed()
+        assertEquals("PEAK GAIN -1.5 DB", hud.line2)
+        rows.pivots.value = listOf(leveled(EqLevels(level = 1, rateHz = 44100, peak10 = -15)))
+        checkNotNull(acts.made).landed()
+        assertEquals("a cap landing takes the total", "EQ OFF AT 44.1 KHZ", hud.line2)
+    }
+
+    @Test
+    fun nullLevelsAndUncappedLevelsWithEqOffReturnTheRowsAsTheyCame() {
+        assertEquals(parametric.rows, eqLevelRows(parametric.rows, null, on = true, listed = true))
+        assertEquals(parametric.rows, eqLevelRows(parametric.rows, EqLevels(), on = false, listed = true))
+        assertEquals("the supplier's own text stays", "supplied", lines(parametric.copy(rows = parametric.rows + EqRow(EqKind.Total, "supplied"))).last().value)
     }
 
     companion object {
