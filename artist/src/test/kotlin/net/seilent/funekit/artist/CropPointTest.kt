@@ -2,6 +2,7 @@ package net.seilent.funekit.artist
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -155,16 +156,29 @@ class CropPointTest {
     }
 
     @Test
-    fun aFailedCropWriteStillSavesThePicksAndIsLogged() {
+    fun aCropSaveThatCannotRenameThrowsAndLeavesWhatIsThere() {
+        val c = crops()
+        val p = pick()
+        c.set(p, 120 to 333)
+        val f = File(tmp.root, "artcrop.tsv").also { it.mkdir() }
+        assertThrows(StoreException::class.java) { c.save() }
+        assertTrue(f.isDirectory)
+        f.delete()
+        c.save()
+        assertEquals(120 to 333, crops().get(p))
+    }
+
+    @Test
+    fun aFailedCropWriteThrowsAfterThePicksLand() {
         File(tmp.root, "artcrop.tsv.tmp").mkdirs()
         val saved = ArrayList<String>()
         val own = ArtPicks(File(tmp.root, "artpick.tsv"), crops()) { saved += it }
         val (k, k2) = ArtPicks.keys("Halves", null, false)
         val p = ArtPicks.Pick(k, k2, "Halves", ArtPicks.IMAGE, Sources.LINK, url, url, "", null, null, time.now++).also { own.add(it) }
         own.setPoint(p, 120 to 333)
-        own.save()
+        assertThrows(StoreException::class.java) { own.save() }
         assertEquals(listOf(p), ArtPicks(File(tmp.root, "artpick.tsv")).list())
-        assertTrue(saved.single().startsWith("artcrop save failed"))
+        assertEquals(emptyList<String>(), saved)
     }
 
     @Test

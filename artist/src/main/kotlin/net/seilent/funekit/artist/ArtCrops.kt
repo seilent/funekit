@@ -42,12 +42,7 @@ class ArtCrops(private val file: File? = null, private val log: (String) -> Unit
         val f = file ?: return
         val text = encode()
         f.parentFile?.mkdirs()
-        val t = File(f.path + ".tmp")
-        t.writeText(text, Charsets.UTF_8)
-        if (!t.renameTo(f)) {
-            f.delete()
-            t.renameTo(f)
-        }
+        syncedWrite(f, text, f.absoluteFile.parentFile, {})
     }
 
     @Synchronized

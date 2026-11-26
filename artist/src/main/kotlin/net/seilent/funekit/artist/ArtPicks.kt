@@ -1,7 +1,6 @@
 package net.seilent.funekit.artist
 
 import java.io.File
-import java.io.IOException
 
 class ArtPicks(private val file: File? = null, private val crops: ArtCrops = ArtCrops(), private val log: (String) -> Unit = {}) {
     data class Pick(
@@ -96,20 +95,11 @@ class ArtPicks(private val file: File? = null, private val crops: ArtCrops = Art
 
     @Synchronized
     fun save() {
-        try {
-            crops.save()
-        } catch (e: IOException) {
-            log("artcrop save failed ${e.message}")
+        file?.let { f ->
+            f.parentFile?.mkdirs()
+            syncedWrite(f, encode(), f.absoluteFile.parentFile, {})
         }
-        val f = file ?: return
-        val text = encode()
-        f.parentFile?.mkdirs()
-        val t = File(f.path + ".tmp")
-        t.writeText(text, Charsets.UTF_8)
-        if (!t.renameTo(f)) {
-            f.delete()
-            t.renameTo(f)
-        }
+        crops.save()
     }
 
     @Synchronized

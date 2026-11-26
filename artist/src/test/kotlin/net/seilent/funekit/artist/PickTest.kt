@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Rule
@@ -122,6 +123,33 @@ class PickTest {
         assertNotNull(a.get("TSUKI", null, 240, 320))
         assertEquals(2, http.calls.count { it == gone })
         assertNull(picks.of(null, p.name)!!.failedAt)
+    }
+
+    @Test
+    fun aPickSaveThatCannotRenameThrowsAndLeavesWhatIsThere() {
+        val p = pick()
+        val f = File(tmp.root, "artpick.tsv").also { it.mkdir() }
+        assertThrows(StoreException::class.java) { picks.save() }
+        assertTrue(f.isDirectory)
+        f.delete()
+        picks.save()
+        assertEquals(listOf(p), ArtPicks(f).list())
+    }
+
+    @Test
+    fun aFoundPickWhosePicksSaveFailsServesItsArtNextWithNoFetch() {
+        val url = "https://example.org/found.jpg"
+        val p = pick(url = url, source = Sources.LINK)
+        picks.failed(p, time.now)
+        time.now += ArtistArt.TTL_MS
+        http.queued[url] = ArrayDeque(listOf(Response(200, Images.jpeg(Images.photo(900, 900), 92))))
+        val f = File(tmp.root, "artpick.tsv").also { it.mkdir() }
+        val a = art()
+        assertThrows(StoreException::class.java) { a.get("TSUKI", null, 240, 320) }
+        f.delete()
+        val calls = http.calls.size
+        assertNotNull(a.get("TSUKI", null, 240, 320))
+        assertEquals(calls, http.calls.size)
     }
 
     @Test
