@@ -74,6 +74,10 @@ class FakeLibrary internal constructor(
 
     @Volatile
     private var failNext = false
+
+    @Volatile
+    private var notReadNext = 0
+    private var notRead = 0
     private val built = AtomicLong()
     private val loads = AtomicLong()
     private val busy = AtomicReference<Pair<String, Listing?>?>()
@@ -128,10 +132,10 @@ class FakeLibrary internal constructor(
         val total = lock.withLock { catalog().trackCount }
         val first = current.catalog.trackCount == 0
         _state.update { it.copy(first = first) }
-        progress(ScanProgress(true, 0, false))
+        progress(ScanProgress(true, 0, false, notRead))
         for (step in 1..SCAN_STEPS) {
             delay(latencyMs)
-            progress(ScanProgress(true, total * step / SCAN_STEPS, false))
+            progress(ScanProgress(true, total * step / SCAN_STEPS, false, notRead))
         }
         val found = lock.withLock {
             if (failNext) {
@@ -142,16 +146,22 @@ class FakeLibrary internal constructor(
                 cut = cut + dropsOwed.getAndSet(emptySet())
                 publish(catalog())
                 gone = before - current.catalog.trackIds
+                notRead = notReadNext
+                notReadNext = 0
                 current.catalog.trackCount
             }
         }
         if (gone.isNotEmpty()) dropped(gone)
         _state.update { it.copy(first = false) }
-        progress(ScanProgress(false, found ?: total, found == null))
+        progress(ScanProgress(false, found ?: total, found == null, notRead))
     }
 
     internal fun failNextScan() {
         failNext = true
+    }
+
+    internal fun notReadNextScan(n: Int) {
+        notReadNext = n
     }
 
     internal fun busyNext(text: String, listing: Listing?) {

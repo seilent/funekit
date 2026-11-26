@@ -52,6 +52,8 @@ class Fake(
 
     fun failNextScan() = library.failNextScan()
 
+    fun notReadNextScan(n: Int) = library.notReadNextScan(n)
+
     fun dropAtRescan(album: Long) = library.dropAtRescan(album)
 
     fun busyNext(text: String, listing: Listing? = null) = library.busyNext(text, listing)

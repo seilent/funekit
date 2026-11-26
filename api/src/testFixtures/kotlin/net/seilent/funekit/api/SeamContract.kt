@@ -299,6 +299,7 @@ abstract class SeamContract {
         s.until(s.library.generation) { it > g }
         val done = s.until(s.library.scan) { !it.running && seen.any { p -> p.running } }
         assertFalse(done.failed)
+        assertEquals("a scan that read everything has a not read count of 0", 0, done.notRead)
         if (s.caps.scanProgress) {
             assertTrue(done.found > 0)
             val running = seen.filter { it.running }.map { it.found }

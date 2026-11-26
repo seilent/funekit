@@ -21,6 +21,7 @@ import net.seilent.funekit.api.Expired
 import net.seilent.funekit.api.Kind
 import net.seilent.funekit.api.LibraryView
 import net.seilent.funekit.api.Listing
+import net.seilent.funekit.api.ScanProgress
 import net.seilent.funekit.api.TrackInfo
 import net.seilent.funekit.api.allRows
 import net.seilent.funekit.api.engine.Dac
@@ -204,6 +205,33 @@ class FakeTest {
         f.library.rescan()
         f.library.generation.first { it > next }
         assertNull("a later rescan keeps it out", f.library.view().indexOf(Listing.Albums, Kind.Album, a))
+    }
+
+    @Test
+    fun aNotReadCountHoldsUntilADoneScanReadsEverything() = runTest {
+        val f = fake()
+        val seen = mutableListOf<ScanProgress>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { f.library.scan.toList(seen) }
+        suspend fun scan(): List<ScanProgress> {
+            val from = seen.size
+            f.library.rescan()
+            f.library.scan.first { !it.running && seen.drop(from).any { p -> p.running } }
+            return seen.drop(from)
+        }
+        f.notReadNextScan(3)
+        assertEquals("a scan that could not read 3 ends with 3", 3, scan().last().notRead)
+        f.failNextScan()
+        val failed = scan()
+        assertEquals("a running scan keeps the last count", listOf(3), failed.filter { it.running }.map { it.notRead }.distinct())
+        assertTrue("premise: the scan failed", failed.last().failed)
+        assertEquals("a failed scan keeps the last count", 3, failed.last().notRead)
+        f.notReadNextScan(5)
+        f.failNextScan()
+        val again = scan().last()
+        assertTrue("premise: the scan failed", again.failed)
+        assertEquals("a failed scan takes no hook", 3, again.notRead)
+        assertEquals("the next done scan takes the hook", 5, scan().last().notRead)
+        assertEquals("a scan that reads everything ends with 0", 0, scan().last().notRead)
     }
 
     @Test

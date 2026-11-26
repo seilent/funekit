@@ -94,7 +94,7 @@ class ApiShapeTest {
             TrackInfo::class.java to listOf("path", "lines"),
             TrackIds::class.java to listOf("artists", "album", "genre", "folders"),
             Root::class.java to listOf("id", "uri", "available"),
-            ScanProgress::class.java to listOf("running", "found", "failed"),
+            ScanProgress::class.java to listOf("running", "found", "failed", "notRead"),
             LibraryState::class.java to listOf("card", "first"),
             Outputs::class.java to listOf("offered", "dac", "held", "asks", "usbWhy", "dop"),
             ScrobbleView::class.java to listOf(

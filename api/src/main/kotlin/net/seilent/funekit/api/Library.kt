@@ -62,7 +62,7 @@ data class TrackInfo(val path: String, val lines: List<String>)
 
 data class TrackIds(val artists: List<Long>, val album: Long?, val genre: Long?, val folders: List<Long>)
 
-data class ScanProgress(val running: Boolean, val found: Int, val failed: Boolean)
+data class ScanProgress(val running: Boolean, val found: Int, val failed: Boolean, val notRead: Int = 0)
 
 class Expired(val generation: Long) : Exception("generation $generation expired")
 
