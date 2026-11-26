@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -650,6 +651,14 @@ class LookupTest {
         assertEquals(dazbee, a!!.mbid)
         assertEquals("DAZBEE official", a.name)
         assertNotNull(art().cachedEntry("DAZBEE official", null))
+    }
+
+    @Test
+    fun aRefreshWhoseNameRecordCannotBeSavedThrows() {
+        sources = Sources.COMMONS.copy(deezer = true)
+        val a = art()
+        assertTrue(java.io.File(tmp.root, "art/bare.properties").mkdir())
+        assertThrows(StoreException::class.java) { a.refresh("DAZBEE official", null, 240, 320) }
     }
 
     @Test

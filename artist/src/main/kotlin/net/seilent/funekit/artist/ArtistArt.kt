@@ -103,13 +103,13 @@ class ArtistArt(
         val pass = Pass(if (search) steps else emptyList(), HashMap(m?.kept.orEmpty()))
         val found = find(name, tag, id, key, w, h, on, now, pass)
         if (found == null) {
+            due(now)
             if (!kept) {
                 cache.putMiss(key, now, on, floor, keyHash, pass.kept)
                 if (pass.skipped.get() && blocks.drop(key, id, name.trim(), now)) blocks.save()
             } else if (hit != null) {
                 cache.putFailed(key, hit.at, now)
             }
-            due(now)
             return null
         }
         return keep(name, tag, key, found, w, h, now)
@@ -128,6 +128,8 @@ class ArtistArt(
         if (cache.hit(key)?.let { it.source !in on && !blocked(it) } == true) return null
         val found = try {
             if (online()) find(name, tag, id, key, w, h, on, now, Pass(emptyList(), HashMap())) else null
+        } catch (e: StoreException) {
+            throw e
         } catch (e: IOException) {
             null
         }
@@ -175,8 +177,8 @@ class ArtistArt(
         val jpeg = src?.takeIf { check(it) == null }?.let { Backdrop.render(codec, it, w, h, upscale = true, point = picks.point(p)) }
         if (src == null || jpeg == null) {
             picks.failed(p, now)
-            picks.save()
             due(now)
+            picks.save()
             return null
         }
         picks.ifCurrent(p) {
@@ -448,6 +450,8 @@ class ArtistArt(
                 cache.drop(e.key)
                 blocks.drop(e.key, e.mbid, e.name, clock())
                 n++
+            } catch (e: StoreException) {
+                throw e
             } catch (_: IOException) {
             }
         }

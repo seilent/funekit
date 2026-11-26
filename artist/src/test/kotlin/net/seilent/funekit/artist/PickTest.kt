@@ -137,6 +137,17 @@ class PickTest {
     }
 
     @Test
+    fun aFailedPickFetchWhosePicksSaveFailsStillComesDue() {
+        pick(url = "https://example.org/gone.jpg", source = Sources.LINK)
+        File(tmp.root, "artpick.tsv").mkdir()
+        val a = art()
+        a.beginMark()
+        val now = time.now
+        assertThrows(StoreException::class.java) { a.get("TSUKI", null, 240, 320) }
+        assertEquals(now + ArtistArt.TTL_MS, a.mark().until)
+    }
+
+    @Test
     fun aFoundPickWhosePicksSaveFailsServesItsArtNextWithNoFetch() {
         val url = "https://example.org/found.jpg"
         val p = pick(url = url, source = Sources.LINK)

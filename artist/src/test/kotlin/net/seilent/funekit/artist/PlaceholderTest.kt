@@ -4,10 +4,13 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import java.security.MessageDigest
+import java.util.Properties
 
 class PlaceholderTest {
     @get:Rule
@@ -124,6 +127,18 @@ class PlaceholderTest {
         assertEquals(1, art().scanPlaceholders())
         assertNull(cache.hit(key))
         assertEquals(1, blocks.drops().size)
+    }
+
+    @Test
+    fun aPlaceholderScanPassesAStoreError() {
+        hit(Sources.DEEZER, "", silhouette)
+        val hash = MessageDigest.getInstance("SHA-1").digest(key.toByteArray()).joinToString("") { "%02x".format(it) }.take(20)
+        val meta = tmp.root.resolve("art/$hash.meta")
+        val p = Properties().apply { meta.reader().use { load(it) } }
+        p.remove("sha")
+        meta.writer().use { p.store(it, null) }
+        tmp.root.resolve("art/$hash.meta.tmp").mkdir()
+        assertThrows(StoreException::class.java) { art().scanPlaceholders() }
     }
 
     @Test

@@ -5,6 +5,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -186,6 +187,18 @@ class MissFloorTest {
         val m = cache.miss(key)!!
         assertEquals(Size(360, 480), m.floor)
         assertFalse(Sources.DEEZER in m.sources)
+    }
+
+    @Test
+    fun aMissWhoseRecordCannotBeSavedStillComesDue() {
+        search(null)
+        val hash = MessageDigest.getInstance("SHA-1").digest(key.toByteArray()).joinToString("") { "%02x".format(it) }.take(20)
+        File(dir, "$hash.miss").mkdir()
+        val a = art()
+        a.beginMark()
+        val now = time.now
+        assertThrows(StoreException::class.java) { a.get(name, null, 240, 320) }
+        assertEquals(now + ArtistArt.TTL_MS, a.mark().until)
     }
 
     @Test
