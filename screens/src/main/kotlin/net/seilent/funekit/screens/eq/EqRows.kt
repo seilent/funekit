@@ -34,6 +34,8 @@ data class EqPivot(
 
 enum class EqOutcome { Done, Refused, Stale, NoSpace, NameTaken, NameNotAllowed, Failed }
 
+data class EqSaved(val outcome: EqOutcome, val name: String)
+
 class EqEntry(
     val title: String,
     val start: String,
@@ -64,7 +66,7 @@ interface EqRows {
 
     suspend fun pick(slot: String, kind: EqKind, key: String): EqOutcome
 
-    suspend fun save(slot: String): EqOutcome = EqOutcome.Refused
+    suspend fun save(slot: String): EqSaved = EqSaved(EqOutcome.Refused, "")
 
     suspend fun resetCustom(slot: String): EqOutcome = EqOutcome.Refused
 

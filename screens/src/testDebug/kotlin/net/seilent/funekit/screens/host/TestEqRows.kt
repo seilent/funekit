@@ -16,6 +16,7 @@ import net.seilent.funekit.screens.eq.EqOutcome
 import net.seilent.funekit.screens.eq.EqPivot
 import net.seilent.funekit.screens.eq.EqRow
 import net.seilent.funekit.screens.eq.EqRows
+import net.seilent.funekit.screens.eq.EqSaved
 import net.seilent.funekit.screens.eq.eqGridMilliHz
 import net.seilent.funekit.screens.eq.eqGridOf
 
@@ -67,6 +68,7 @@ class TestEqRows(start: List<EqPivot>) : EqRows {
     var typed = true
     var answer = EqOutcome.Done
     var holds = false
+    var saved = ""
     private val held = mutableListOf<Held>()
     var choiceOf: (String, EqKind) -> List<EqChoice> = { _, _ -> emptyList() }
     var currentOf: (String, EqKind) -> String? = { _, _ -> null }
@@ -119,7 +121,7 @@ class TestEqRows(start: List<EqPivot>) : EqRows {
 
     override suspend fun pick(slot: String, kind: EqKind, key: String): EqOutcome = send(slot, "pick $slot $kind $key") { rowValue(it, kind, key) }
 
-    override suspend fun save(slot: String): EqOutcome = send(slot, "save $slot") { it }
+    override suspend fun save(slot: String): EqSaved = EqSaved(send(slot, "save $slot") { it }, saved)
 
     override suspend fun delete(slot: String, key: String): EqOutcome = send(slot, "delete $slot $key") { it }
 

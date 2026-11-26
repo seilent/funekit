@@ -372,10 +372,13 @@ class EqRowsPane(private val header: String, private val rows: EqRows) : EqPane 
             EqKind.Band -> if (l.band in p.bands.indices) acts.fields(BandSheet(p.name, p.slot, l.band, p.target, acts))
             EqKind.AddBand -> add(p, acts)
             EqKind.RemoveBand -> remove(p, acts)
-            EqKind.SavePreset -> send(acts, p.name, false, { rows.save(p.slot) }) { r ->
-                when (r) {
-                    EqOutcome.Done, EqOutcome.Stale, EqOutcome.Refused, EqOutcome.NoSpace -> Unit
-                    else -> acts.toast(NOT_SAVED, "")
+            EqKind.SavePreset -> {
+                lateinit var saved: EqSaved
+                send(acts, p.name, false, { rows.save(p.slot).also { saved = it }.outcome }) { r ->
+                    when (r) {
+                        EqOutcome.Done, EqOutcome.Stale, EqOutcome.Refused, EqOutcome.NoSpace -> Unit
+                        else -> acts.toast(NOT_SAVED, saved.name)
+                    }
                 }
             }
             EqKind.DeletePreset -> delete(p, acts)

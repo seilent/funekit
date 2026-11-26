@@ -490,12 +490,15 @@ class EqPaneHostTest {
 
     @Test
     fun aFailedPresetSendToastsItsVerbAndThePresetsName() {
-        val rows = TestEqRows(outputs()).also { it.answer = EqOutcome.Failed }
+        val rows = TestEqRows(outputs()).also {
+            it.answer = EqOutcome.Failed
+            it.saved = SAVED
+        }
         presets(rows)
         val app = app(rows)
         val m = open(app)
         val save = spyTap(app, m, "$HP_SLOT:SavePreset")
-        assertEquals("a save toasts its verb over nothing", listOf("preset not saved / "), save.toasts)
+        assertEquals("a save toasts its verb over the saved name", listOf("preset not saved / $SAVED"), save.toasts)
         val rename = spyTap(app, m, "$HP_SLOT:RenamePreset")
         rule.runOnIdle { rows.entries.last().done(TYPED) }
         assertEquals("a rename toasts its verb over the old name", listOf("preset not renamed / $PRESET"), rename.toasts)
@@ -728,6 +731,7 @@ class EqPaneHostTest {
         private const val RENAME = "hp:RenamePreset"
         private const val PRESET = "HD 650"
         private const val PRESET_KEY = "hd650"
+        private const val SAVED = "Preset 2"
         private const val TYPED = "WARM"
         private const val TYPED_DB = "-3"
         private const val PREAMP10 = -61
