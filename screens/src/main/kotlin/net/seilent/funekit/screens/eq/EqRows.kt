@@ -85,4 +85,6 @@ interface EqRows {
     suspend fun add(slot: String, band: EqBand): EqOutcome
 
     suspend fun remove(slot: String): EqOutcome
+
+    fun hasEntry(slot: String): Boolean = true
 }

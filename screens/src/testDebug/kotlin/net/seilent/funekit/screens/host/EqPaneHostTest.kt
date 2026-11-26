@@ -35,9 +35,11 @@ import net.seilent.funekit.screens.eq.EqRow
 import net.seilent.funekit.screens.eq.EqRowsPane
 import net.seilent.funekit.screens.eq.RowEnter
 import net.seilent.funekit.screens.music.nowplaying.AdjustHit
+import net.seilent.funekit.screens.music.nowplaying.AdjustHud
 import net.seilent.funekit.screens.settings.AimKind
 import net.seilent.funekit.screens.settings.FieldSheet
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -90,6 +92,12 @@ class EqPaneHostTest {
 
     private fun pane(app: TestApp): EqRowsPane = app.eqList.single().pane as EqRowsPane
 
+    private fun rowAt(app: TestApp, m: EqModel, key: String): Offset {
+        val d = rule.runOnIdle { app.host.types.eq.drawOf(m) }
+        val i = m.rows(m.pivot).indexOfFirst { it.key == key }
+        return Offset(page.widthPx / 2f, (d.top + m.tops(m.pivot)[i] + m.heights(m.pivot)[i] / 2).toFloat())
+    }
+
     private fun line(m: EqModel, key: String): EqLine = m.rows(m.pivot).first { it.key == key }
 
     private fun tapRow(app: TestApp, m: EqModel, key: String) {
@@ -132,8 +140,7 @@ class EqPaneHostTest {
         rule.runOnUiThread { v.draw(Canvas(b)) }
     }
 
-    private fun holdNumber(app: TestApp) {
-        val hud = app.host.fieldSheet!!.hud
+    private fun holdNumber(app: TestApp, hud: AdjustHud = app.host.fieldSheet!!.hud) {
         shot()
         val x = px(Tok.edge, page.stdPpu) + 2f
         val y = px(page.board.overlayRingY, page.stdPpu) - 2f
@@ -628,6 +635,82 @@ class EqPaneHostTest {
         assertEquals("-24 to +12 db", gain.refusal("12.1"))
     }
 
+    @Test
+    fun aHoldOnPreampWithNoTypedEntryOpensNothingAndItsLiftTaps() {
+        val rows = TestEqRows(listOf(EqPivot(HP_SLOT, HP, listOf(EqRow(EqKind.On, "on"), EqRow(EqKind.Preamp))))).also { it.typed = false }
+        val app = app(rows)
+        val m = open(app)
+        val at = rowAt(app, m, PREAMP)
+        rule.onRoot().performTouchInput { down(at) }
+        frames(1)
+        assertTrue("premise: the down presses the preamp row", m.lit.on(m.rows(m.pivot).indexOfFirst { it.key == PREAMP }, now()))
+        frames(HOLD_FRAMES)
+        assertNull("the hold opens nothing", app.stack.overlay)
+        assertEquals("no entry", emptyList<EqEntry>(), rows.entries)
+        rule.onRoot().performTouchInput { up() }
+        frames(OPEN_FRAMES)
+        assertEquals("the lift taps the row", OverKind.Adjust, app.stack.overlay?.kind)
+    }
+
+    @Test
+    fun aHeldHudNumberWithNoTypedEntryKeepsTheHud() {
+        val rows = TestEqRows(outputs()).also { it.typed = false }
+        val app = app(rows)
+        val m = open(app)
+        tapRow(app, m, PREAMP)
+        val hud = app.stack.overlay?.hud as AdjustHud
+        holdNumber(app, hud)
+        assertTrue("the hud stays", hud.shown)
+        assertEquals("the adjust stays up", OverKind.Adjust, app.stack.overlay?.kind)
+        assertEquals("no entry", emptyList<EqEntry>(), rows.entries)
+    }
+
+    @Test
+    fun aHeldBandFieldWithNoTypedEntryKeepsTheBandSheet() {
+        val rows = TestEqRows(outputs()).also { it.typed = false }
+        val app = app(rows)
+        val m = open(app)
+        tapRow(app, m, BAND_0)
+        val sheet = app.host.fieldSheet
+        val over = app.stack.overlay
+        assertTrue("premise: the band sheet is up", sheet != null && over != null)
+        val held = rule.runOnIdle { app.menuHost.hold!!(GAIN) }
+        frames(CUT_FRAMES)
+        assertSame("the band sheet stays", over, app.stack.overlay)
+        assertSame(sheet, app.host.fieldSheet)
+        assertFalse("the held field takes no entry", held)
+        assertEquals("no entry", emptyList<EqEntry>(), rows.entries)
+    }
+
+    @Test
+    fun aHeldBandHudNumberWithNoTypedEntryKeepsTheBandSheetAndItsHud() {
+        val rows = TestEqRows(outputs()).also { it.typed = false }
+        val app = app(rows)
+        val m = open(app)
+        gainHud(app, m)
+        val over = app.stack.overlay
+        holdNumber(app)
+        assertSame("the band sheet stays", over, app.stack.overlay)
+        assertTrue("its hud stays", app.host.fieldSheet?.hud?.shown == true)
+        assertEquals("no entry", emptyList<EqEntry>(), rows.entries)
+    }
+
+    @Test
+    fun aTapOnRenamePresetWithNoTypedEntryOpensNothing() {
+        val rows = TestEqRows(listOf(EqPivot(HP_SLOT, HP, listOf(EqRow(EqKind.On, "on"), EqRow(EqKind.RenamePreset))))).also { it.typed = false }
+        presets(rows)
+        val app = app(rows)
+        val m = open(app)
+        val at = rowAt(app, m, RENAME)
+        rule.onRoot().performTouchInput { down(at) }
+        frames(1)
+        assertTrue("premise: the down presses the rename row", m.lit.on(m.rows(m.pivot).indexOfFirst { it.key == RENAME }, now()))
+        rule.onRoot().performTouchInput { up() }
+        frames(OPEN_FRAMES)
+        assertEquals("no entry", emptyList<EqEntry>(), rows.entries)
+        assertNull("nothing opens", app.stack.overlay)
+    }
+
     companion object {
         private const val W = 720
         private const val H = 1280
@@ -642,6 +725,7 @@ class EqPaneHostTest {
         private const val BAND_1 = "hp:Band:1"
         private const val CARD = "card/a.txt"
         private const val PREAMP = "hp:Preamp"
+        private const val RENAME = "hp:RenamePreset"
         private const val PRESET = "HD 650"
         private const val PRESET_KEY = "hd650"
         private const val TYPED = "WARM"
@@ -653,6 +737,7 @@ class EqPaneHostTest {
         private const val GAIN = 2
         private const val LONG = 24
         private const val OPEN_FRAMES = 30
+        private const val HOLD_FRAMES = 40
         private const val STEP_FRAMES = 2
         private const val CUT_FRAMES = 2
         private const val FRAME = 16L

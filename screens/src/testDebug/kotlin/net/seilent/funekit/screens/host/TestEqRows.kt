@@ -64,6 +64,7 @@ class TestEqRows(start: List<EqPivot>) : EqRows {
     val sends = mutableListOf<String>()
     val entries = mutableListOf<EqEntry>()
     var opens: (EqEntry) -> Boolean = { true }
+    var typed = true
     var answer = EqOutcome.Done
     var holds = false
     private val held = mutableListOf<Held>()
@@ -137,4 +138,6 @@ class TestEqRows(start: List<EqPivot>) : EqRows {
     override suspend fun add(slot: String, band: EqBand): EqOutcome = send(slot, "add $slot") { withBands(it, it.bands + band) }
 
     override suspend fun remove(slot: String): EqOutcome = send(slot, "remove $slot") { withBands(it, it.bands.dropLast(1)) }
+
+    override fun hasEntry(slot: String): Boolean = typed
 }

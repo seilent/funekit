@@ -368,6 +368,7 @@ class EqRowsPane(private val header: String, private val rows: EqRows) : EqPane 
         val l = line as? EqPaneLine ?: return false
         if (l.kind != EqKind.Preamp && l.kind != EqKind.Gain) return false
         val p = pivotNamed(pivot) ?: return false
+        if (!rows.hasEntry(p.slot)) return false
         if (numberOf(p, l) == null) return false
         val g = gen(p.name)
         return showSheet(
@@ -451,6 +452,7 @@ class EqRowsPane(private val header: String, private val rows: EqRows) : EqPane 
     }
 
     private fun rename(p: EqPivot, key: String, name: String, start: String, acts: EqActs, g: Int = gen(p.name)) {
+        if (!rows.hasEntry(p.slot)) return
         val t0 = p.target
         rows.entry(
             EqEntry(RENAME, start, true, "", "", 0, 1, NAME_MAX, { rows.renameRefusal(p.slot, key, it) }, { text ->
@@ -555,6 +557,7 @@ class EqRowsPane(private val header: String, private val rows: EqRows) : EqPane 
         }
 
         override fun number(side: Int): Boolean {
+            if (!rows.hasEntry(slot)) return false
             val e = valueEntry(name, slot, l, acts) ?: return false
             end(true)
             return rows.entry(e)
@@ -712,7 +715,7 @@ class EqRowsPane(private val header: String, private val rows: EqRows) : EqPane 
             return true
         }
 
-        override fun typed(i: Int): Boolean = i in 1 until items.size
+        override fun typed(i: Int): Boolean = rows.hasEntry(slot) && i in 1 until items.size
 
         private fun entryFor(i: Int, adjust: Boolean): EqEntry? {
             val b = band() ?: return null
