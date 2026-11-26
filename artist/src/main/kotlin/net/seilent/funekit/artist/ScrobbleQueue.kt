@@ -2,7 +2,6 @@ package net.seilent.funekit.artist
 
 import net.seilent.funekit.core.PlayEntry
 import java.io.File
-import java.io.FileOutputStream
 import java.io.IOException
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -95,16 +94,6 @@ data class Listen(
             )
         }
     }
-}
-
-internal fun syncedWrite(f: File, text: String, dir: File, dirSync: (File) -> Unit) {
-    val tmp = File(f.path + ".tmp")
-    FileOutputStream(tmp).use { o ->
-        o.write(text.toByteArray())
-        o.fd.sync()
-    }
-    if (!tmp.renameTo(f)) throw IOException("rename ${tmp.name}")
-    dirSync(dir)
 }
 
 class ScrobbleQueue(private val dir: File, private val dirSync: (File) -> Unit = {}) {

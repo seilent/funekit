@@ -1,7 +1,6 @@
 package net.seilent.funekit.artist
 
 import java.io.File
-import java.io.IOException
 import java.security.MessageDigest
 import kotlin.math.abs
 import kotlin.random.Random
@@ -120,4 +119,4 @@ class Lrclib(
     }
 }
 
-class LyricsFileException(message: String, cause: Throwable? = null) : IOException(message, cause)
+class LyricsFileException(message: String, cause: Throwable? = null) : StoreException(message, cause)
