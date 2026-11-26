@@ -15,6 +15,7 @@ class Fake(
     latencyMs: Long,
     leaseMs: Long,
     val pinCap: Int? = null,
+    val eqCap: Int? = null,
     trackRefs: Boolean = false,
     services: Boolean = false,
     lyricsCarried: Boolean = false,
@@ -30,7 +31,7 @@ class Fake(
     val favorites = FakeFavorites(store, library, latencyMs)
     val playlists = FakePlaylists(store, library)
     val settings = FakeSettings(player)
-    val eq = FakeEq()
+    val eq = FakeEq(eqCap)
     val lyrics = FakeLyrics(set, latencyMs, lyricsCarried)
     val scrobbling = FakeScrobbling()
 

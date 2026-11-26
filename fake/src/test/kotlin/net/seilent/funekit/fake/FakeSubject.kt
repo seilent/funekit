@@ -13,7 +13,7 @@ import java.nio.ByteBuffer
 @OptIn(ExperimentalCoroutinesApi::class)
 internal fun TestScope.fakeSubject(edge: Edge, refs: Boolean = false, lyricsCarried: Boolean = false): Subject {
     val clock = { testScheduler.currentTime * MILLI }
-    val f = Fake(backgroundScope, clock, FakeSet.valueOf(edge.name), LATENCY, LEASE, PIN_CAP, trackRefs = refs, services = refs, lyricsCarried = lyricsCarried)
+    val f = Fake(backgroundScope, clock, FakeSet.valueOf(edge.name), LATENCY, LEASE, PIN_CAP, eqCap = EQ_CAP, trackRefs = refs, services = refs, lyricsCarried = lyricsCarried)
     val tracks = Fixture.ALBUMS.flatMap { it.tracks }
     return Subject(
         player = f.player,
@@ -29,7 +29,7 @@ internal fun TestScope.fakeSubject(edge: Edge, refs: Boolean = false, lyricsCarr
         loads = { f.library.pageLoads },
         imageSide = { pngSide(it) },
         wait = VIRTUAL,
-        caps = Caps(artRefs = !refs, outcomes = true, pinCap = f.pinCap, firstIndex = true, trackRefs = refs),
+        caps = Caps(artRefs = !refs, outcomes = true, pinCap = f.pinCap, eqCap = f.eqCap, firstIndex = true, trackRefs = refs),
         engine = EngineSubject(
             settings = f.settings,
             brokenTrack = tracks.first { it.broken }.id,
@@ -64,5 +64,6 @@ private val VIRTUAL = object : Wait {
 private const val WAIT_MS = 60_000L
 private const val LATENCY = 40L
 private const val PIN_CAP = 8
+private const val EQ_CAP = 3
 private const val LEASE = 5_000L
 private const val MILLI = 1_000_000L

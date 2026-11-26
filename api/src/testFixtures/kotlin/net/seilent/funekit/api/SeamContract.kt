@@ -37,6 +37,7 @@ data class Caps(
     val fetchDefault: Boolean = false,
     val outcomes: Boolean = false,
     val pinCap: Int? = null,
+    val eqCap: Int? = null,
     val firstIndex: Boolean = false,
     val trackRefs: Boolean = false,
 )

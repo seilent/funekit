@@ -8,11 +8,19 @@ import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runTest
 import net.seilent.funekit.api.engine.Crossfeed
 import net.seilent.funekit.api.engine.Dac
+import net.seilent.funekit.api.engine.EQ_CUSTOM
+import net.seilent.funekit.api.engine.EQ_OFF
+import net.seilent.funekit.api.engine.EqAnswer
+import net.seilent.funekit.api.engine.EqFilter
+import net.seilent.funekit.api.engine.EqFilterType
+import net.seilent.funekit.api.engine.EqLevels
+import net.seilent.funekit.api.engine.EqView
 import net.seilent.funekit.api.engine.Output
 import net.seilent.funekit.api.engine.ReplayGain
 import net.seilent.funekit.api.engine.Tube
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
@@ -38,6 +46,23 @@ abstract class ApiContract : SeamContract() {
     private fun engine(s: Subject): EngineSubject = checkNotNull(s.engine) { "an ApiContract subject passes its engine" }
 
     private suspend fun routed(s: Subject, track: Long): PlayerState = s.until(s.player.state) { it.playing && it.track == track && it.input != null }
+
+    private fun eqOf(s: Subject): Eq = checkNotNull(s.eq) { "an ApiContract subject passes its eq" }
+
+    private suspend fun imports(s: Subject, name: String): EqView {
+        val r = eqOf(s).import(name, AUTOEQ)
+        assertEquals(EqAnswer.Done, r.answer)
+        assertEquals(name, r.name)
+        return s.until(eqOf(s).view) { it.key == name }
+    }
+
+    private fun still(v: EqView): EqView = v.copy(levels = EqLevels())
+
+    private suspend fun custom(s: Subject, preamp10: Int): EqView {
+        assertEquals(EqAnswer.Done, eqOf(s).pick(EQ_CUSTOM).answer)
+        assertEquals(EqAnswer.Done, eqOf(s).preamp(preamp10).answer)
+        return s.until(eqOf(s).view) { it.key == EQ_CUSTOM && it.shown?.preamp10 == preamp10 }
+    }
 
     private suspend fun firstSong(view: LibraryView, folder: Long): Long {
         val row = view.page(Listing.Folder(folder), 0, 1).rows.first()
@@ -362,23 +387,176 @@ abstract class ApiContract : SeamContract() {
     }
 
     @Test
-    fun eqTakesAutoEqProfilesAndOff() = runTest {
+    fun eqAnImportAddsAPresetAndShowsIt() = runTest {
         val s = open(Edge.Main)
-        val eq = checkNotNull(s.eq)
-        val profile = "Preamp: -6.2 dB\nFilter 1: ON PK Fc 105 Hz Gain -2.4 dB Q 0.70"
-        val set = eq.setEq(profile)
-        assertTrue(set.ok)
-        assertEquals(profile, set.profile)
-        assertEquals(profile, s.until(eq.profile) { it != null })
-        val refused = eq.setEq("nothing here")
-        assertFalse(refused.ok)
-        assertNull(refused.profile)
-        assertTrue(refused.log.isNotEmpty())
-        assertEquals(profile, eq.profile.value)
-        val off = eq.setEq(null)
-        assertTrue(off.ok)
-        assertNull(off.profile)
-        assertNull(s.until(eq.profile) { it == null })
+        val eq = eqOf(s)
+        val r = eq.import(ROOM, AUTOEQ)
+        assertEquals(EqAnswer.Done, r.answer)
+        assertEquals(ROOM, r.name)
+        val v = s.until(eq.view) { it.key == ROOM }
+        assertEquals(listOf(ROOM), v.presets)
+        assertNotNull(v.shown)
+    }
+
+    @Test
+    fun eqAnImportOfAKnownNameAndCurveReusesItsPreset() = runTest {
+        val s = open(Edge.Main)
+        val eq = eqOf(s)
+        imports(s, ROOM)
+        val again = eq.import(ROOM, AUTOEQ)
+        assertEquals(EqAnswer.Done, again.answer)
+        assertEquals(ROOM, again.name)
+        assertEquals(listOf(ROOM), eq.view.value.presets)
+    }
+
+    @Test
+    fun eqARefusedImportAddsNothing() = runTest {
+        val s = open(Edge.Main)
+        val eq = eqOf(s)
+        val before = eq.view.value
+        val r = eq.import(ROOM, "nothing here")
+        assertEquals(EqAnswer.Refused, r.answer)
+        assertTrue(r.log.isNotEmpty())
+        assertEquals(still(before), still(eq.view.value))
+    }
+
+    @Test
+    fun eqOffKeepsTheKeyAndOnShowsItAgain() = runTest {
+        val s = open(Edge.Main)
+        val eq = eqOf(s)
+        val shown = imports(s, ROOM).shown
+        assertEquals(EqAnswer.Done, eq.on(false).answer)
+        val off = s.until(eq.view) { !it.on }
+        assertEquals(ROOM, off.key)
+        assertEquals(shown, off.shown)
+        assertEquals(EqAnswer.Done, eq.on(true).answer)
+        val on = s.until(eq.view) { it.on }
+        assertEquals(ROOM, on.key)
+        assertEquals(shown, on.shown)
+    }
+
+    @Test
+    fun eqTheBandsListWhileEqIsOff() = runTest {
+        val s = open(Edge.Main)
+        val eq = eqOf(s)
+        imports(s, ROOM)
+        assertEquals(EqAnswer.Done, eq.on(false).answer)
+        assertNotNull(s.until(eq.view) { !it.on }.shown)
+    }
+
+    @Test
+    fun eqAnEditOfAPresetMakesCustomFromItsCurve() = runTest {
+        val s = open(Edge.Main)
+        val eq = eqOf(s)
+        val preset = checkNotNull(imports(s, ROOM).shown)
+        assertEquals(EqAnswer.Done, eq.preamp(-40).answer)
+        val v = s.until(eq.view) { it.shown?.preamp10 == -40 }
+        assertEquals(EQ_CUSTOM, v.key)
+        assertEquals(preset.filters, v.shown?.filters)
+    }
+
+    @Test
+    fun eqAnEditOfAPresetKeepsAnUnsavedCustomAsAPreset() = runTest {
+        val s = open(Edge.Main)
+        val eq = eqOf(s)
+        custom(s, -20)
+        imports(s, ROOM)
+        val r = eq.preamp(-40)
+        assertEquals(EqAnswer.Done, r.answer)
+        assertEquals(PRESET_1, r.name)
+        val v = s.until(eq.view) { it.key == EQ_CUSTOM }
+        assertTrue(PRESET_1 in v.presets)
+        assertEquals(EqAnswer.Done, eq.pick(PRESET_1).answer)
+        assertEquals(-20, s.until(eq.view) { it.key == PRESET_1 }.shown?.preamp10)
+    }
+
+    @Test
+    fun eqSaveTakesTheFirstFreePresetNumberAndShowsIt() = runTest {
+        val s = open(Edge.Main)
+        val eq = eqOf(s)
+        custom(s, -20)
+        val first = eq.save()
+        assertEquals(EqAnswer.Done, first.answer)
+        assertEquals(PRESET_1, first.name)
+        assertEquals(PRESET_1, s.until(eq.view) { PRESET_1 in it.presets }.key)
+        assertEquals(EqAnswer.Done, eq.preamp(-30).answer)
+        s.until(eq.view) { it.key == EQ_CUSTOM }
+        val second = eq.save()
+        assertEquals(EqAnswer.Done, second.answer)
+        assertEquals(PRESET_2, second.name)
+        val v = s.until(eq.view) { PRESET_2 in it.presets }
+        assertEquals(PRESET_2, v.key)
+        assertEquals(listOf(PRESET_1, PRESET_2), v.presets)
+    }
+
+    @Test
+    fun eqResetCustomLeavesOneFreshFilter() = runTest {
+        val s = open(Edge.Main)
+        val eq = eqOf(s)
+        assertEquals(EqAnswer.Done, eq.pick(EQ_CUSTOM).answer)
+        val n = checkNotNull(s.until(eq.view) { it.key == EQ_CUSTOM }.shown).filters.size
+        assertEquals(EqAnswer.Done, eq.preamp(-20).answer)
+        assertEquals(EqAnswer.Done, eq.add(SHELF).answer)
+        assertEquals(EqAnswer.Done, eq.add(SHELF).answer)
+        s.until(eq.view) { it.shown?.preamp10 == -20 && it.shown?.filters?.size == n + 2 }
+        assertEquals(EqAnswer.Done, eq.resetCustom().answer)
+        val v = s.until(eq.view) { it.shown?.filters?.size == 1 }
+        assertEquals(listOf(FRESH), v.shown?.filters)
+        assertEquals(0, v.shown?.preamp10)
+    }
+
+    @Test
+    fun eqDeletingTheShownPresetTurnsTheKeyOff() = runTest {
+        val s = open(Edge.Main)
+        val eq = eqOf(s)
+        imports(s, ROOM)
+        assertEquals(EqAnswer.Done, eq.delete(ROOM).answer)
+        val v = s.until(eq.view) { ROOM !in it.presets }
+        assertEquals(EQ_OFF, v.key)
+        assertEquals(emptyList<String>(), v.presets)
+    }
+
+    @Test
+    fun eqAFullStoreAnswersNoSpace() = runTest {
+        val s = open(Edge.Main)
+        val eq = eqOf(s)
+        val cap = checkNotNull(s.caps.eqCap) { "an ApiContract subject passes its eq cap" }
+        val names = (1..cap).map { "$ROOM $it" }
+        for (n in names) imports(s, n)
+        assertEquals(EqAnswer.NoSpace, eq.import("$ROOM ${cap + 1}", AUTOEQ).answer)
+        assertEquals(EqAnswer.Done, eq.pick(EQ_CUSTOM).answer)
+        s.until(eq.view) { it.key == EQ_CUSTOM }
+        assertEquals(EqAnswer.NoSpace, eq.save().answer)
+        assertEquals(names, eq.view.value.presets)
+    }
+
+    @Test
+    fun eqPresetsListDigitAware() = runTest {
+        val s = open(Edge.Main)
+        val eq = eqOf(s)
+        imports(s, PRESET_10)
+        imports(s, PRESET_2)
+        assertEquals(listOf(PRESET_2, PRESET_10), eq.view.value.presets)
+    }
+
+    @Test
+    fun eqPresetsListInFileNameOrder() = runTest {
+        val s = open(Edge.Main)
+        val eq = eqOf(s)
+        imports(s, ROOM)
+        imports(s, ROOM_2)
+        assertEquals(listOf(ROOM_2, ROOM), eq.view.value.presets)
+    }
+
+    @Test
+    fun eqAnUnchangedValueAnswersDone() = runTest {
+        val s = open(Edge.Main)
+        val eq = eqOf(s)
+        val v = imports(s, ROOM)
+        val r = eq.preamp(checkNotNull(v.shown).preamp10)
+        assertEquals(EqAnswer.Done, r.answer)
+        assertNull(r.name)
+        assertEquals(still(v), still(eq.view.value))
     }
 
     @Test
@@ -397,5 +575,13 @@ abstract class ApiContract : SeamContract() {
         const val DAC_VOLUME = 195
         val DAC_A = Dac(1, 1, "a")
         val DAC_B = Dac(1, 2, "b")
+        const val ROOM = "Room One"
+        const val ROOM_2 = "Room One 2"
+        const val AUTOEQ = "Preamp: -3 dB\nFilter 1: ON PK Fc 1000 Hz Gain 2 dB Q 1.41"
+        const val PRESET_1 = "Preset 1"
+        const val PRESET_2 = "Preset 2"
+        const val PRESET_10 = "Preset 10"
+        val FRESH = EqFilter(EqFilterType.Peak, 1_000_000, 0, 140)
+        val SHELF = EqFilter(EqFilterType.LowShelf, 105_000, -24, 70)
     }
 }

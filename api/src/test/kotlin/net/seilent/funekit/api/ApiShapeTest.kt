@@ -4,6 +4,13 @@ import kotlin.metadata.KmClass
 import kotlin.metadata.isSecondary
 import kotlin.metadata.jvm.KotlinClassMetadata
 import net.seilent.funekit.api.engine.Crossfeed
+import net.seilent.funekit.api.engine.EqAnswer
+import net.seilent.funekit.api.engine.EqCurve
+import net.seilent.funekit.api.engine.EqFilter
+import net.seilent.funekit.api.engine.EqFilterType
+import net.seilent.funekit.api.engine.EqLevels
+import net.seilent.funekit.api.engine.EqPart
+import net.seilent.funekit.api.engine.EqView
 import net.seilent.funekit.api.engine.Format
 import net.seilent.funekit.api.engine.Output
 import net.seilent.funekit.api.engine.Outputs
@@ -39,6 +46,9 @@ class ApiShapeTest {
         assertEquals("Output", listOf("System", "BitPerfect", "Usb"), Output.entries.map { it.name })
         assertEquals("ScrobbleService", listOf("LastFm", "ListenBrainz"), ScrobbleService.entries.map { it.name })
         assertEquals("Card", listOf("Present", "Out", "Error", "Held"), Card.entries.map { it.name })
+        assertEquals("EqFilterType", listOf("Off", "Peak", "LowShelf", "HighShelf"), EqFilterType.entries.map { it.name })
+        assertEquals("EqPart", listOf("Type", "Freq", "Gain", "Q"), EqPart.entries.map { it.name })
+        assertEquals("EqAnswer", listOf("Done", "Refused", "NoSpace", "Failed", "Fitting"), EqAnswer.entries.map { it.name })
     }
 
     @Test
@@ -91,6 +101,10 @@ class ApiShapeTest {
                 "lastFm", "lastFmUser", "listenBrainz", "listenBrainzUser", "queued", "lastFmNote", "listenBrainzNote", "signingIn",
                 "appKey",
             ),
+            EqView::class.java to listOf("on", "key", "presets", "shown", "missing", "levels"),
+            EqCurve::class.java to listOf("preamp10", "filters"),
+            EqFilter::class.java to listOf("type", "milliHz", "gain10", "q100"),
+            EqLevels::class.java to listOf("level", "rateHz", "dsd", "dop", "dopTrim", "peak10"),
         )
         assertEquals(emptyList<String>(), misses(want) { fields(it) })
     }
