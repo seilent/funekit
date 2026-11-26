@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -44,6 +45,8 @@ class KeepTest {
     }
 
     private fun files() = dir.listFiles()!!.map { it.name }.sorted()
+
+    private fun hashOf(key: String) = java.security.MessageDigest.getInstance("SHA-1").digest(key.toByteArray()).joinToString("") { "%02x".format(it) }.take(20)
 
     @Test
     fun anOffSourcePhotoIsShownAndNeverLookedUpOrMissed() {
@@ -113,5 +116,33 @@ class KeepTest {
         assertFalse(meta.exists())
         assertEquals(9L, cache.miss("k")!!.at)
         assertTrue(File(dir, miss.name).isFile)
+    }
+
+    @Test
+    fun aCacheSaveThatCannotRenameThrowsAndLeavesWhatIsThere() {
+        val names = File(dir, "names.properties").also { it.mkdirs() }
+        assertThrows(StoreException::class.java) { cache.putMbid("Radiohead", radiohead, time.now) }
+        assertTrue(names.isDirectory)
+        names.delete()
+        cache.putMbid("Radiohead", radiohead, time.now)
+        assertEquals(radiohead, ArtCache(dir).mbid("Radiohead")!!.mbid)
+    }
+
+    @Test
+    fun aCacheWriteThatCannotRenameThrowsAndLeavesWhatIsThere() {
+        keep()
+        val jpg = File(dir, "${hashOf(utada)}.240x320.jpg").also { it.mkdir() }
+        assertThrows(StoreException::class.java) { cache.putRendered(utada, 240, 320, Images.jpeg(Images.photo(240, 320), 92)) }
+        assertTrue(jpg.isDirectory)
+        assertNull(cache.rendered(utada, 240, 320))
+    }
+
+    @Test
+    fun aClearThatCannotRewriteAMissDropsNoHit() {
+        keep()
+        cache.putMiss(radiohead, time.now, setOf(Sources.DEEZER, Wikimedia.SOURCE), Size(240, 320))
+        File(dir, "${hashOf(radiohead)}.miss.tmp").mkdir()
+        assertThrows(StoreException::class.java) { cache.clearSource(Sources.DEEZER) }
+        assertNotNull(cache.hit(utada))
     }
 }

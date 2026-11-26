@@ -1,6 +1,7 @@
 package net.seilent.funekit.artist
 
 import java.io.File
+import java.io.StringWriter
 import java.security.MessageDigest
 import java.util.Properties
 import java.util.zip.CRC32
@@ -303,14 +304,6 @@ class ArtCache(private val dir: File) {
     @Synchronized
     fun clearSource(source: String, seen: (Entry, Set<Long>) -> Unit = { _, _ -> }): List<Entry> {
         listed = null
-        val gone = ArrayList<Entry>()
-        for (key in hits { it.getProperty("source") == source }) {
-            hit(key)?.let {
-                seen(it, crcs(key))
-                gone += it
-            }
-            dropFiles(key)
-        }
         for (f in files(".miss") + files(".meta")) {
             val p = load(f)
             if (p.getProperty("state") != "miss") continue
@@ -318,6 +311,14 @@ class ArtCache(private val dir: File) {
             if (source !in was) continue
             p.setProperty("sources", (was - source).sorted().joinToString(","))
             save(f, p)
+        }
+        val gone = ArrayList<Entry>()
+        for (key in hits { it.getProperty("source") == source }) {
+            hit(key)?.let {
+                seen(it, crcs(key))
+                gone += it
+            }
+            dropFiles(key)
         }
         return gone
     }
@@ -423,22 +424,12 @@ class ArtCache(private val dir: File) {
 
     private fun save(f: File, p: Properties) {
         dir.mkdirs()
-        val t = File(dir, f.name + ".tmp")
-        t.writer(Charsets.UTF_8).use { p.store(it, null) }
-        if (!t.renameTo(f)) {
-            f.delete()
-            t.renameTo(f)
-        }
+        syncedWrite(f, StringWriter().also { p.store(it, null) }.toString().toByteArray(), dir, {})
     }
 
     private fun write(f: File, b: ByteArray) {
         dir.mkdirs()
-        val t = File(dir, f.name + ".tmp")
-        t.writeBytes(b)
-        if (!t.renameTo(f)) {
-            f.delete()
-            t.renameTo(f)
-        }
+        syncedWrite(f, b, dir, {})
     }
 
     companion object {
