@@ -37,7 +37,10 @@ class ArtGoldenTest {
             val m = c.miss(key)!!
             c.putMiss(key, m.at, m.sources, m.floor!!, m.keyHash)
         }
-        for (n in names.filter { it.endsWith(".meta") || it.endsWith(".miss") }) assertEquals(n, props(golden("cache/$n")), props(File(dir, n).readBytes()))
+        for (n in names.filter { it.endsWith(".meta") || it.endsWith(".miss") }) {
+            val want = props(golden("cache/$n")) + if (n.endsWith(".meta")) mapOf("renders" to "") else emptyMap()
+            assertEquals(n, want, props(File(dir, n).readBytes()))
+        }
         assertEquals("UC0000000000000000000002", c.hit("name:name c")!!.channel)
         assertEquals(mapOf("yt" to "1799999997000", "ytFailed" to "1799999997500"), c.miss("name:name d")!!.kept)
         assertEquals(emptyMap<String, String>(), c.miss("name:name e")!!.kept)

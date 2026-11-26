@@ -4,6 +4,7 @@ import java.io.File
 import java.io.StringWriter
 import java.security.MessageDigest
 import java.util.Properties
+import java.util.TreeMap
 import java.util.zip.CRC32
 
 class ArtCache(private val dir: File) {
@@ -183,6 +184,7 @@ class ArtCache(private val dir: File) {
         p.setProperty("at", e.at.toString())
         p.setProperty("id", e.id)
         p.setProperty("sha", e.sha.ifEmpty { sha256(source) })
+        p.setProperty(RENDERS, "")
         if (e.resolvedBy.isNotEmpty()) p.setProperty("resolvedBy", e.resolvedBy)
         if (e.w > 0 && e.h > 0) {
             p.setProperty("w", e.w.toString())
@@ -213,7 +215,16 @@ class ArtCache(private val dir: File) {
     }
 
     @Synchronized
-    fun putRendered(key: String, w: Int, h: Int, jpeg: ByteArray) = write(jpg(key, w, h), jpeg)
+    fun putRendered(key: String, w: Int, h: Int, jpeg: ByteArray) {
+        val m = meta(key)
+        val p = load(m)
+        if (p.getProperty("state") != "hit") return
+        val r = renders(key, p)
+        r["${w}x$h"] = CRC32().apply { update(jpeg) }.value
+        p.setProperty(RENDERS, field(r))
+        save(m, p)
+        write(jpg(key, w, h), jpeg)
+    }
 
     @Synchronized
     fun full(key: String): Full? {
@@ -339,7 +350,7 @@ class ArtCache(private val dir: File) {
         val gone = ArrayList<Entry>()
         for (key in hits { it.getProperty("source") == source }) {
             hit(key)?.let {
-                seen(it, crcs(key))
+                seen(it, held(key, load(meta(key))))
                 gone += it
             }
             dropFiles(key)
@@ -350,7 +361,7 @@ class ArtCache(private val dir: File) {
     @Synchronized
     fun clearAll(seen: (Entry, Set<Long>) -> Unit = { _, _ -> }): List<Entry> {
         val gone = entries().filterNot { it.key.startsWith(ArtPicks.PREFIX) }
-        for (e in gone) seen(e, crcs(e.key))
+        for (e in gone) seen(e, held(e.key, load(meta(e.key))))
         val keep = picked()
         dir.listFiles()?.forEach { if (it.name.substringBefore('.') !in keep) it.delete() }
         nameMap = null
@@ -412,14 +423,41 @@ class ArtCache(private val dir: File) {
 
     @Synchronized
     fun crcs(key: String): Set<Long> {
-        val h = hash(key)
-        val out = (dir.listFiles { f -> f.name.startsWith("$h.") && f.name.endsWith(".jpg") && f.name != "$h.full.jpg" } ?: emptyArray())
-            .mapTo(HashSet()) { CRC32().apply { update(it.readBytes()) }.value }
-        val p = load(meta(key))
+        val m = meta(key)
+        val p = load(m)
+        if (p.getProperty("state") != "hit") return emptySet()
+        if (p.getProperty(RENDERS) == null) {
+            p.setProperty(RENDERS, field(renders(key, p)))
+            save(m, p)
+        }
+        return held(key, p)
+    }
+
+    private fun held(key: String, p: Properties): Set<Long> {
+        val out = renders(key, p).values.toHashSet()
         p.getProperty("pushCrc")?.toLongOrNull()?.let { out += it }
         p.getProperty("cropCrcs", "").split(',').mapNotNullTo(out) { it.toLongOrNull() }
         return out
     }
+
+    private fun renders(key: String, p: Properties): TreeMap<String, Long> {
+        val out = TreeMap<String, Long>()
+        val f = p.getProperty(RENDERS)
+        if (f != null) {
+            for (item in f.split(',')) {
+                val crc = item.substringAfter(':', "").toLongOrNull() ?: continue
+                out[item.substringBefore(':')] = crc
+            }
+            return out
+        }
+        val h = hash(key)
+        dir.listFiles { x -> x.name.startsWith("$h.") && x.name.endsWith(".jpg") && x.name != "$h.full.jpg" }?.forEach {
+            out[it.name.removePrefix("$h.").removeSuffix(".jpg")] = CRC32().apply { update(it.readBytes()) }.value
+        }
+        return out
+    }
+
+    private fun field(r: Map<String, Long>) = r.entries.joinToString(",") { "${it.key}:${it.value}" }
 
     private fun dropFiles(key: String) {
         val h = hash(key)
@@ -462,6 +500,7 @@ class ArtCache(private val dir: File) {
         private val MISS_KEYS = setOf("state", "key", "at", "sources", "keyHash", "cleaned", "floor")
         private const val NO_FOCUS = "none"
         private const val CROP_CRCS = 8
+        private const val RENDERS = "renders"
 
         fun sha256(b: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(b).joinToString("") { "%02x".format(it) }
     }
