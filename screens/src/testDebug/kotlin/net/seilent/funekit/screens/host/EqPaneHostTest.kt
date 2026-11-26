@@ -40,6 +40,7 @@ import net.seilent.funekit.screens.settings.AimKind
 import net.seilent.funekit.screens.settings.FieldSheet
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -569,6 +570,226 @@ class EqPaneHostTest {
     }
 
     @Test
+    fun aCardChangeCutsAnEqPickSheetAndSendsNothing() {
+        val p = graphic(HP_SLOT, HP, List(LONG) { 0 })
+        val rows = TestEqRows(listOf(p.copy(rows = p.rows.filter { it.kind != EqKind.Preset } + p.rows.filter { it.kind == EqKind.Preset })))
+        profiles(rows)
+        val app = app(rows)
+        val m = open(app)
+        val last = m.rows(m.pivot).lastIndex
+        rule.runOnIdle { m.aimTo(m.base(m.pivot), AimKind.Into) }
+        frames(OPEN_FRAMES)
+        rule.runOnIdle {
+            m.down(last, now())
+            m.cancel(now())
+        }
+        frames(OPEN_FRAMES)
+        val before = m.pane.px
+        tapRow(app, m, PRESET_ROW)
+        assertEquals("premise: the pick sheet is up", OverKind.Sheet, app.stack.overlay?.kind)
+        assertTrue("premise: the sheet lifts the row", m.pane.px > before)
+        rule.runOnIdle { app.host.closeLibrarySheets(newCard = true) }
+        frames(SNAP_FRAMES)
+        assertEquals("the card change drops the row at once", before, m.pane.px)
+        frames(OPEN_FRAMES)
+        assertNull("the card change cuts the pick sheet", app.stack.overlay)
+        assertEquals("the cut sends nothing", emptyList<String>(), rows.sends)
+    }
+
+    @Test
+    fun aCardChangeDuringALiftPastTheListEndDropsTheRowToTheEnd() {
+        val p = graphic(HP_SLOT, HP, List(LONG) { 0 })
+        val rows = TestEqRows(listOf(p.copy(rows = p.rows.filter { it.kind != EqKind.Preset } + p.rows.filter { it.kind == EqKind.Preset })))
+        profiles(rows)
+        val app = app(rows)
+        val m = open(app)
+        val last = m.rows(m.pivot).lastIndex
+        val end = m.base(m.pivot)
+        rule.runOnIdle { m.aimTo(end - m.heights(m.pivot)[last], AimKind.Into) }
+        frames(OPEN_FRAMES)
+        rule.runOnIdle {
+            m.down(last, now())
+            m.cancel(now())
+        }
+        frames(OPEN_FRAMES)
+        assertTrue("premise: the list rests short of its end", m.pane.px < end)
+        rule.runOnIdle { app.host.eqTap(m, line(m, PRESET_ROW)) }
+        var n = 0
+        while (m.aimKind != AimKind.Lift && n < OPEN_FRAMES) {
+            frames(1)
+            n++
+        }
+        assertEquals("premise: the sheet lifts the row", AimKind.Lift, m.aimKind)
+        assertTrue("premise: the lift aims past the list end", m.target() > end)
+        assertTrue("premise: the row is short of the list end", m.pane.px < end)
+        rule.runOnIdle { app.host.closeLibrarySheets(newCard = true) }
+        frames(OPEN_FRAMES)
+        assertNull("premise: the card change cuts the pick sheet", app.stack.overlay)
+        assertEquals("the cut's drop lands the row at the list end", end, m.pane.px)
+    }
+
+    @Test
+    fun aCardChangeCutsTheBandSheetAndItsTypeChoice() {
+        val rows = TestEqRows(outputs())
+        val app = app(rows)
+        val m = open(app)
+        tapRow(app, m, BAND_0)
+        assertNotNull("premise: the band sheet is up", app.host.fieldSheet)
+        rule.runOnIdle { app.host.closeLibrarySheets(newCard = true) }
+        frames(OPEN_FRAMES)
+        assertNull("the card change cuts the band sheet", app.host.fieldSheet)
+        assertNull(app.stack.overlay)
+        tapRow(app, m, BAND_0)
+        pick(app, 0)
+        assertEquals("premise: the type choice is up", TYPE, app.menu.title)
+        rule.runOnIdle { app.host.closeLibrarySheets(newCard = true) }
+        frames(OPEN_FRAMES)
+        assertNull("the card change cuts the type choice", app.stack.overlay)
+        assertNull(app.host.fieldSheet)
+        assertEquals("the cut sends nothing", emptyList<String>(), rows.sends)
+    }
+
+    @Test
+    fun aCardChangeCutsAnEqSheetWhoseOpenIsQueued() {
+        val rows = TestEqRows(outputs())
+        profiles(rows)
+        val app = app(rows)
+        val m = open(app)
+        rule.runOnIdle {
+            app.host.eqTap(m, line(m, "$HP_SLOT:Profile"))
+            app.host.closeLibrarySheets(newCard = true)
+        }
+        frames(OPEN_FRAMES)
+        assertNull("the queued sheet is cut", app.stack.overlay)
+    }
+
+    @Test
+    fun aCardChangeCutsAQueuedBandSheet() {
+        val rows = TestEqRows(outputs())
+        val app = app(rows)
+        val m = open(app)
+        rule.runOnIdle {
+            app.host.eqTap(m, line(m, BAND_0))
+            app.host.closeLibrarySheets(newCard = true)
+        }
+        frames(OPEN_FRAMES)
+        assertNull("the queued band sheet is cut", app.host.fieldSheet)
+        tapRow(app, m, BAND_0)
+        assertNotNull("a second tap opens the band sheet", app.host.fieldSheet)
+    }
+
+    @Test
+    fun aCardChangeDisarmsTheCutSheet() {
+        val rows = TestEqRows(outputs())
+        profiles(rows)
+        val app = app(rows)
+        val m = open(app)
+        tapRow(app, m, "$HP_SLOT:Profile")
+        assertEquals("premise: the pick sheet is up", OverKind.Sheet, app.stack.overlay?.kind)
+        rule.runOnIdle {
+            app.host.closeLibrarySheets(newCard = true)
+            app.menuHost.act(0)
+        }
+        frames(OPEN_FRAMES)
+        assertEquals("a press after the call picks nothing", emptyList<String>(), rows.sends)
+    }
+
+    @Test
+    fun aBandAddRepliedAfterACardChangeOpensNoSheet() {
+        val rows = TestEqRows(outputs(1)).also { it.holds = true }
+        val app = app(rows)
+        val m = open(app)
+        val s = spyTap(app, m, "$HP_SLOT:AddBand")
+        assertEquals("premise: the add waits for its reply", listOf("add $HP_SLOT"), rows.sends)
+        rule.runOnIdle { app.host.closeLibrarySheets(newCard = true) }
+        frames(OPEN_FRAMES)
+        rule.runOnIdle { rows.reply(EqOutcome.Done) }
+        frames(OPEN_FRAMES)
+        assertEquals("the late add asks for no band sheet", 0, s.fieldAsks)
+        assertNull(app.host.fieldSheet)
+    }
+
+    @Test
+    fun aCardChangeKeepsTheTypeValueSheet() {
+        val rows = TestEqRows(outputs())
+        val app = app(rows)
+        val m = open(app)
+        assertTrue("premise: the row takes a type value sheet", rule.runOnIdle { pane(app).hold(m.names[m.pivot], line(m, PREAMP), app.host.actsOf(m)) })
+        frames(OPEN_FRAMES)
+        val o = app.stack.overlay
+        assertEquals("premise: the type value sheet is up", OverKind.Sheet, o?.kind)
+        rule.runOnIdle { app.host.closeLibrarySheets(newCard = true) }
+        frames(OPEN_FRAMES)
+        assertSame("the type value sheet stays", o, app.stack.overlay)
+    }
+
+    @Test
+    fun aCardChangeKeepsTheDeleteAndResetConfirms() {
+        val rows = TestEqRows(outputs().map { it.copy(rows = it.rows + EqRow(EqKind.ResetCustom)) })
+        presets(rows)
+        val app = app(rows)
+        val m = open(app)
+        for (key in listOf("$HP_SLOT:DeletePreset", "$HP_SLOT:ResetCustom")) {
+            tapRow(app, m, key)
+            val o = app.stack.overlay
+            assertEquals("premise: the confirm is up, $key", OverKind.Dlg, o?.kind)
+            rule.runOnIdle { app.host.closeLibrarySheets(newCard = true) }
+            frames(OPEN_FRAMES)
+            assertSame("the card change keeps the confirm, $key", o, app.stack.overlay)
+            pick(app, 1)
+        }
+        assertEquals("no send", emptyList<String>(), rows.sends)
+    }
+
+    @Test
+    fun aCardChangeKeepsTheBandFieldHudOwedOrShownAndThePreampAdjust() {
+        val rows = TestEqRows(outputs())
+        val app = app(rows)
+        val m = open(app)
+        tapRow(app, m, BAND_0)
+        rule.runOnIdle {
+            app.menuHost.act(GAIN)
+            app.host.closeLibrarySheets(newCard = true)
+        }
+        frames(OPEN_FRAMES)
+        assertTrue("the owed band hud opens over its sheet", app.host.fieldSheet?.hud?.shown == true)
+        val over = app.stack.overlay
+        rule.runOnIdle { app.host.closeLibrarySheets(newCard = true) }
+        frames(OPEN_FRAMES)
+        assertTrue("the shown band hud stays", app.host.fieldSheet?.hud?.shown == true)
+        assertSame("over its sheet", over, app.stack.overlay)
+        exit()
+        back()
+        tapRow(app, m, PREAMP)
+        val adjust = app.stack.overlay
+        assertEquals("premise: the preamp adjust is up", OverKind.Adjust, adjust?.kind)
+        rule.runOnIdle { app.host.closeLibrarySheets(newCard = true) }
+        frames(OPEN_FRAMES)
+        assertSame("the card change keeps the adjust", adjust, app.stack.overlay)
+    }
+
+    @Test
+    fun aLibraryRevisionKeepsTheEqSheets() {
+        val rows = TestEqRows(outputs())
+        profiles(rows)
+        val app = app(rows)
+        val m = open(app)
+        tapRow(app, m, "$HP_SLOT:Profile")
+        val sheet = app.stack.overlay
+        assertEquals("premise: the pick sheet is up", OverKind.Sheet, sheet?.kind)
+        rule.runOnIdle { app.host.closeLibrarySheets() }
+        frames(OPEN_FRAMES)
+        assertSame("a library revision keeps the pick sheet", sheet, app.stack.overlay)
+        pick(app, 1)
+        tapRow(app, m, BAND_0)
+        val band = app.stack.overlay
+        assertNotNull("premise: the band sheet is up", app.host.fieldSheet)
+        rule.runOnIdle { app.host.closeLibrarySheets() }
+        frames(OPEN_FRAMES)
+        assertSame("a library revision keeps the band sheet", band, app.stack.overlay)
+    }
+
+    @Test
     fun aBackOutOfAnAdjustWithNoStepSendsNothing() {
         val rows = TestEqRows(outputs())
         val app = app(rows)
@@ -728,6 +949,8 @@ class EqPaneHostTest {
         private const val BAND_1 = "hp:Band:1"
         private const val CARD = "card/a.txt"
         private const val PREAMP = "hp:Preamp"
+        private const val PRESET_ROW = "hp:Preset"
+        private const val TYPE = "type"
         private const val RENAME = "hp:RenamePreset"
         private const val PRESET = "HD 650"
         private const val PRESET_KEY = "hd650"
@@ -744,6 +967,7 @@ class EqPaneHostTest {
         private const val HOLD_FRAMES = 40
         private const val STEP_FRAMES = 2
         private const val CUT_FRAMES = 2
+        private const val SNAP_FRAMES = 3
         private const val FRAME = 16L
         private const val HALF_WAY = 0.5f
         private const val EPS = 0.01f

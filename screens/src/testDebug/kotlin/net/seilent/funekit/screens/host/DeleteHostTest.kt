@@ -655,6 +655,26 @@ class DeleteHostTest {
     }
 
     @Test
+    fun theLibraryCloseCutsASongSheetOrJumpGridWhoseOpenIsQueued() {
+        launch()
+        val s = song()
+        val hub = screen(MusicPage.Hub)
+        on(hub)
+        rule.runOnIdle {
+            assertTrue("premise: the sheet asks to open", app.host.openMusic(songTarget(s)))
+            app.host.closeLibrarySheets()
+        }
+        frames(OPEN_FRAMES)
+        assertNull("the queued song sheet is cut", rule.runOnIdle { stack.overlay })
+        rule.runOnIdle {
+            app.host.openJump(hub)
+            app.host.closeLibrarySheets()
+        }
+        frames(OPEN_FRAMES)
+        assertNull("the queued jump grid is cut", rule.runOnIdle { stack.overlay })
+    }
+
+    @Test
     fun theLibraryCloseFiresNoPendingJumpPick() {
         launch(root = true)
         val hub = screen(MusicPage.Hub)

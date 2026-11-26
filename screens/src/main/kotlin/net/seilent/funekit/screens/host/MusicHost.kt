@@ -118,6 +118,7 @@ import net.seilent.funekit.screens.eq.EqLayer
 import net.seilent.funekit.screens.eq.EqLine
 import net.seilent.funekit.screens.eq.EqModel
 import net.seilent.funekit.screens.eq.EqPage
+import net.seilent.funekit.screens.eq.EqRowsPane
 import net.seilent.funekit.screens.music.MusicPage
 import net.seilent.funekit.screens.music.MusicSource
 import net.seilent.funekit.screens.music.PageModel
@@ -364,6 +365,7 @@ class MusicHost<S : Any> internal constructor(
     private val volumeOverlay = Overlay(OverKind.Volume, hud) { if (hud.pendingSeek() != null) volSeek() }
     private val menuOvers = ArrayList<Overlay>()
     private val libraryOvers = ArrayList<Overlay>()
+    private val valueOvers = ArrayList<Overlay>()
     private val exits = ArrayList<OwedExit>()
     private var exitEpoch = 0
     private val backdrop = NpBackdrop()
@@ -777,14 +779,16 @@ class MusicHost<S : Any> internal constructor(
             return
         }
         if (row.words.isEmpty()) return
-        openSheet(valueSheet(row)) { i ->
+        val o = openSheet(valueSheet(row)) { i ->
             val n = row.values.size
             val v = row.values.getOrNull(if (row.kind == SettingKind.Steps) n - 1 - i else i) ?: return@openSheet true
             if (!m.holds(row.key)) return@openSheet true
             val opens = menuOpens
             if (row.kind == SettingKind.Draft) rows.draft(row.key, v) else scope.launch(FailFast, CoroutineStart.UNDISPATCHED) { rows.set(row.key, v) }
             menuOpens == opens
-        }
+        } ?: return
+        valueOvers.retainAll { v -> menuOvers.any { it === v } }
+        valueOvers += o
     }
 
     private fun editEnd() {
@@ -1343,11 +1347,44 @@ class MusicHost<S : Any> internal constructor(
         exitEpoch++
     }
 
+    private fun cardOver(o: Overlay): Boolean {
+        val r = fieldRun
+        return eqSheets.any { it.over === o && it.card } || valueOvers.any { it === o } || r != null && r.over === o && !r.want && !r.sheet.hud.shown
+    }
+
+    private fun cardEnd(o: Overlay) {
+        if (menuOvers.any { it === o }) {
+            menuHost.act = { false }
+            menuHost.hold = null
+            menuHost.scrim = { false }
+        }
+        if (liftOver === o) liftModel?.drop(0f)
+        eqSheets.firstOrNull { it.over === o }?.let { e ->
+            eqSheets -= e
+            if (!e.picked) e.closed()
+        }
+        if (!stack.holds(o)) return
+        val r = fieldRun
+        if (r != null && r.over === o) {
+            fieldRun = null
+            r.sheet.dismiss()
+            offsetSync(r)
+        }
+        edit?.takeIf { it.first === o }?.let { (_, m) ->
+            m.endEdit()
+            edit = null
+        }
+    }
+
     fun closeLibrarySheets(newCard: Boolean = false) {
         check(Looper.myLooper() == Looper.getMainLooper()) { "MusicHost.closeLibrarySheets runs on the main thread only" }
         warm()
-        val o = stack.overlay
-        if (o != null && (o === jump || libraryOvers.any { it === o })) stack.cutOverlay(o)
+        val o = stack.overlay ?: (menuOvers + jump).firstOrNull { stack.holds(it) }
+        val card = o != null && newCard && cardOver(o)
+        if (o != null && (o === jump || libraryOvers.any { it === o } || card)) {
+            if (card) cardEnd(o)
+            stack.cutOverlay(o)
+        }
         searchAt = null
         val top = stack.top
         val h = hubOf(top)
@@ -1356,7 +1393,9 @@ class MusicHost<S : Any> internal constructor(
             h.poke()
             if (empty) stack.leave({ it === top }, popKind)
         }
-        if (newCard) dropExits()
+        if (!newCard) return
+        dropExits()
+        types.eq.panes.values.forEach { (it as? EqRowsPane)?.cut() }
     }
 
     fun openMusic(t: SheetTarget): Boolean {
@@ -1669,9 +1708,9 @@ class MusicHost<S : Any> internal constructor(
 
         override fun now(): Long = this@MusicHost.now()
 
-        override fun sheet(sheet: SettingSheet, pick: (Int) -> Boolean, closed: () -> Unit): Boolean {
+        override fun sheet(sheet: SettingSheet, pick: (Int) -> Boolean, closed: () -> Unit, keep: Boolean): Boolean {
             if (!eqLive(m)) return false
-            val e = EqSheet(closed)
+            val e = EqSheet(closed, sheet.form == MenuForm.Sheet && !keep)
             e.over = openSheet(sheet) { i -> pick(i).also { if (it) e.picked = true } } ?: return false
             eqSheets += e
             own = e.over
@@ -2455,7 +2494,7 @@ private class FieldRun(val sheet: FieldSheet, val owner: Any?, val reopens: () -
     var scrim: () -> Boolean = { false }
 }
 
-private class EqSheet(val closed: () -> Unit) {
+private class EqSheet(val closed: () -> Unit, val card: Boolean) {
     var over: Overlay? = null
     var seen = false
     var picked = false

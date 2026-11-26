@@ -52,7 +52,7 @@ class EqRowsPaneTest {
 
         override fun now(): Long = 0L
 
-        override fun sheet(sheet: SettingSheet, pick: (Int) -> Boolean, closed: () -> Unit): Boolean = false
+        override fun sheet(sheet: SettingSheet, pick: (Int) -> Boolean, closed: () -> Unit, keep: Boolean): Boolean = false
 
         override fun fields(sheet: FieldSheet): Boolean = false
 

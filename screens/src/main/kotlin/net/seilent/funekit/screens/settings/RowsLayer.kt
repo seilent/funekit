@@ -151,6 +151,7 @@ fun <R : Any, L> RowsLayer(
         var t0 = -1L
         var e = 0f
         try {
+            if (d <= 0f && !t.scroll.dragging && !t.moving) state.dispatchRawDelta(to - from)
             while (e < d) {
                 if (t.scroll.dragging || t.moving || m.aimCut != cut || t.cuts != cuts) break
                 withFrameMillis { at ->

@@ -75,7 +75,7 @@ interface EqPane {
 interface EqActs {
     fun now(): Long
 
-    fun sheet(sheet: SettingSheet, pick: (Int) -> Boolean, closed: () -> Unit = {}): Boolean
+    fun sheet(sheet: SettingSheet, pick: (Int) -> Boolean, closed: () -> Unit = {}, keep: Boolean = false): Boolean
 
     fun fields(sheet: FieldSheet): Boolean
 

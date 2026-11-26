@@ -1063,6 +1063,19 @@ class HostTest {
         assertFalse("the edit ends", e.editing)
     }
 
+    @Test
+    fun aCardChangeCutsTheLyricsOffsetSheetAndRestoresItsLiveEdit() {
+        val e = Edit().also { it.editing = true }
+        val app = lyricsApp(e)
+        rule.runOnIdle { app.host.openOffset() }
+        frames(OPEN_FRAMES)
+        assertFalse("premise: the live edit shows no hud", app.host.fieldSheet!!.hud.shown)
+        rule.runOnIdle { app.host.closeLibrarySheets(newCard = true) }
+        frames(OPEN_FRAMES)
+        assertNull("the card change cuts the offset sheet", app.host.fieldSheet)
+        assertEquals("the cut restores the live edit", listOf("restore", "end"), e.calls)
+    }
+
     private fun carriedApp(e: MovingEdit): TestApp = lyricsApp(e).also {
         rule.runOnIdle { it.music.np.lyrics.load(1, CARRIED_COPY, CARRIED, carries = true) }
         frames(CUT_FRAMES)

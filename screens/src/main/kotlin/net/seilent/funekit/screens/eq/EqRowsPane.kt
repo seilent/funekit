@@ -115,6 +115,7 @@ class EqRowsPane(private val header: String, private val rows: EqRows) : EqPane 
     private val gens = mutableStateMapOf<String, Int>()
     private var ppu = 0f
     private var open by mutableStateOf<Opened?>(null)
+    private var cuts = 0
 
     private fun pivotNamed(name: String): EqPivot? = rows.pivots.value.firstOrNull { it.name == name }
 
@@ -310,6 +311,10 @@ class EqRowsPane(private val header: String, private val rows: EqRows) : EqPane 
         open = null
     }
 
+    internal fun cut() {
+        cuts++
+    }
+
     override fun left(pivot: String) {
         gens[pivot] = gen(pivot) + 1
         owed.remove(pivot)
@@ -341,7 +346,7 @@ class EqRowsPane(private val header: String, private val rows: EqRows) : EqPane 
         }
     }
 
-    private fun showSheet(p: EqPivot, acts: EqActs, sheet: SettingSheet, pick: (Int) -> Boolean, closed: () -> Unit): Boolean {
+    private fun showSheet(p: EqPivot, acts: EqActs, sheet: SettingSheet, pick: (Int) -> Boolean, keep: Boolean = false, closed: () -> Unit): Boolean {
         val o = Opened(p.name, p.slot, p.target, acts)
         val shown = acts.sheet(
             sheet,
@@ -350,6 +355,7 @@ class EqRowsPane(private val header: String, private val rows: EqRows) : EqPane 
                 if (open === o) open = null
                 closed()
             },
+            keep,
         )
         if (!shown) return false
         open = o
@@ -406,6 +412,7 @@ class EqRowsPane(private val header: String, private val rows: EqRows) : EqPane 
                 if (gen(p.name) == g && pivotOf(p.slot)?.target == p.target) valueEntry(p.name, p.slot, l, acts)?.let(rows::entry)
                 false
             },
+            keep = true,
         ) {}
     }
 
@@ -438,11 +445,12 @@ class EqRowsPane(private val header: String, private val rows: EqRows) : EqPane 
         val n = p.bands.size
         val t0 = p.target
         val g = gen(p.name)
+        val c = cuts
         send(acts, p.name, true, { rows.add(p.slot, freshBand) }) { r ->
             if (r != EqOutcome.Done || gen(p.name) != g) return@send
             acts.focus(eqKey(p.slot, EqKind.Band, n))
             val q = snapshotFlow { pivotOf(p.slot)?.takeIf { gen(p.name) == g } }.first { q -> q == null || q.target != t0 || q.bands.size > n }
-            if (q != null && q.target == t0 && q.bands.size > n) acts.fields(BandSheet(q.name, q.slot, n, t0, acts))
+            if (q != null && q.target == t0 && q.bands.size > n && cuts == c) acts.fields(BandSheet(q.name, q.slot, n, t0, acts))
         }
     }
 

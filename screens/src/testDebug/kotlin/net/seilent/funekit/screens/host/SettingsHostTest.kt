@@ -1270,6 +1270,47 @@ class SettingsHostTest {
     }
 
     @Test
+    fun aCardChangeCutsTheValueSheetAndKeepsTheRangeAdjust() {
+        val rows = hudRows().also { it.pivots.value = pivot(*(0 until LIFT_ROWS).map { r -> choice("r$r", FOUR) }.toTypedArray(), balance()) }
+        val app = app(SettingsPage(ID, rows, HeaderLook.Settings), root = true)
+        val (_, m) = open(app)
+        rule.runOnIdle {
+            app.host.types.settings.drawOf(m)
+            m.down(LIFT_ROW, rule.mainClock.currentTime)
+            m.cancel(rule.mainClock.currentTime)
+        }
+        val before = m.pane.px
+        tap(app, m, LIFT_ROW)
+        assertTrue("premise: the lift moved the pane, ${m.pane.px} against $before", m.pane.px > before)
+        rule.runOnIdle { app.host.closeLibrarySheets(newCard = true) }
+        frames(SNAP_FRAMES)
+        assertEquals("the card change drops the row at once", before, m.pane.px)
+        frames(OPEN_FRAMES)
+        assertTrue("the card change cuts the value sheet", closed(app))
+        assertEquals("the cut sends no set", emptyList<Map<String, String>>(), rows.sets)
+        tap(app, m, LIFT_ROWS)
+        val adjust = app.stack.overlay
+        assertEquals("premise: the balance adjust is up", OverKind.Adjust, adjust?.kind)
+        rule.runOnIdle { app.host.closeLibrarySheets(newCard = true) }
+        frames(OPEN_FRAMES)
+        assertSame("the card change keeps the range adjust", adjust, app.stack.overlay)
+    }
+
+    @Test
+    fun aCardChangeCutsAQueuedValueSheet() {
+        val rows = Rows(pivot(choice("a")))
+        val app = app(SettingsPage(ID, rows, HeaderLook.Settings))
+        val (_, m) = open(app)
+        rule.runOnIdle {
+            app.host.settingsTap(m, m.rows(m.pivot)[0])
+            app.host.closeLibrarySheets(newCard = true)
+        }
+        frames(OPEN_FRAMES)
+        assertTrue("the queued value sheet is cut", closed(app))
+        assertNull("the cut ends the row's edit", m.editing)
+    }
+
+    @Test
     fun aHeldDownOnTheSettingsHeaderDuringItsExitHoldsTheBack() {
         val app = app(SettingsPage(ID, Rows(pivot(choice("a"))), HeaderLook.Settings), root = true)
         open(app)
@@ -1410,6 +1451,7 @@ class SettingsHostTest {
         private const val OPEN_FRAMES = 30
         private const val RESIZE_FRAMES = 2
         private const val CLOSE_FRAMES = 4
+        private const val SNAP_FRAMES = 3
         private const val EXIT_FRAMES = 3
         private const val DRAG_Y = 400f
         private const val TALLER = 600

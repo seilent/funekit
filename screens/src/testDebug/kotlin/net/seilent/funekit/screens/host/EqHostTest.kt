@@ -426,11 +426,11 @@ class EqHostTest {
             picks += i
             true
         }
-        assertTrue(rule.runOnIdle { acts.sheet(sheet(), pick) { closed++ } })
+        assertTrue(rule.runOnIdle { acts.sheet(sheet(), pick, closed = { closed++ }) })
         frames(OPEN_FRAMES)
         back()
         assertEquals("closed after a back", 1, closed)
-        assertTrue(rule.runOnIdle { acts.sheet(sheet(), pick) { closed++ } })
+        assertTrue(rule.runOnIdle { acts.sheet(sheet(), pick, closed = { closed++ }) })
         frames(OPEN_FRAMES)
         rule.runOnIdle { if (app.menuHost.act(1)) app.stack.accept() }
         frames(OPEN_FRAMES)
