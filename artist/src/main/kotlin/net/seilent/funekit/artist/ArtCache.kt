@@ -32,12 +32,13 @@ class ArtCache(private val dir: File) {
     class Looked(val mbid: String?, val at: Long)
     class Usage(val photos: Int, val bytes: Long)
     class Full(val crc: Long, val w: Int, val h: Int, val encode: String, val focus: Pair<Int, Int>?, val copy: Boolean)
+    private class Listing(val entries: List<Entry>, val folds: List<String>, val byMbid: Map<String, List<Int>>)
 
     private val names = File(dir, "names.properties")
     private var nameMap: Properties? = null
     private val bares = File(dir, "bare.properties")
     private var bareMap: Properties? = null
-    private var listed: List<Entry>? = null
+    private var listed: Listing? = null
 
     @Synchronized
     fun mbid(name: String): Looked? {
@@ -296,9 +297,32 @@ class ArtCache(private val dir: File) {
     }
 
     @Synchronized
-    fun entries(): List<Entry> = listed ?: (dir.listFiles { f -> f.name.endsWith(".meta") } ?: emptyArray())
+    fun entries(): List<Entry> = listing().entries
+
+    @Synchronized
+    internal fun named(fold: String, mbid: String?): List<Entry> {
+        val l = listing()
+        var lo = 0
+        var hi = l.folds.size
+        while (lo < hi) {
+            val mid = (lo + hi) ushr 1
+            if (l.folds[mid] < fold) lo = mid + 1 else hi = mid
+        }
+        var end = lo
+        while (end < l.folds.size && l.folds[end] == fold) end++
+        val at = (lo until end) + mbid?.let { l.byMbid[it] }.orEmpty()
+        return at.toSortedSet().map { l.entries[it] }
+    }
+
+    private fun listing(): Listing = listed ?: (dir.listFiles { f -> f.name.endsWith(".meta") } ?: emptyArray())
         .mapNotNull { f -> load(f).getProperty("key")?.let { hit(it) } }
-        .sortedBy { Names.fold(it.name) }
+        .map { it to Names.fold(it.name) }
+        .sortedBy { it.second }
+        .let { s ->
+            val byMbid = HashMap<String, MutableList<Int>>()
+            s.forEachIndexed { i, (e, _) -> e.mbid?.let { byMbid.getOrPut(it) { ArrayList() } += i } }
+            Listing(s.map { it.first }, s.map { it.second }, byMbid)
+        }
         .also { listed = it }
 
     @Synchronized

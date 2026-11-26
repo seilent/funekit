@@ -498,9 +498,7 @@ class ArtistArt(
     }
 
     fun candidates(name: String, mbid: String?): List<ArtCache.Entry> {
-        val f = Names.fold(name)
-        val m = Names.mbid(mbid)
-        val all = cache.entries().filter { Names.fold(it.name) == f || (m != null && it.mbid == m) } +
+        val all = cache.named(Names.fold(name), Names.mbid(mbid)) +
             listOfNotNull(cache.hit(keyOf(name, mbid)), picks.of(mbid, name)?.let { cache.hit(it.cacheKey) })
         return all.distinctBy { it.key }
     }
