@@ -134,6 +134,7 @@ class TestApp(page: Scale, np: Scale, src: MusicSource?, private val level: Volu
     var artHold: (() -> Boolean)? = null
     var artAsks = 0
     var songArts = 0
+    var cancels = 0
 
     override fun music(s: TestScreen): MusicEntry? = (s as? TestScreen.Music)?.music
 
@@ -160,6 +161,7 @@ class TestApp(page: Scale, np: Scale, src: MusicSource?, private val level: Volu
     override fun homeFront(): Boolean = homeHost?.state?.front == true
 
     override fun cancel(top: TestScreen?) {
+        cancels++
         if (top == null) homeHost?.state?.cancel()
     }
 

@@ -146,6 +146,11 @@ class AlbumColModel(entry: Long, val letter: Int) : PageModel(entry, MusicPage.A
     override var lists: List<ListTouch> = emptyList()
     val wake = Channel<Unit>(Channel.CONFLATED)
 
+    internal fun resetPresses() {
+        press.reset()
+        poke()
+    }
+
     fun poke() {
         wake.trySend(Unit)
     }

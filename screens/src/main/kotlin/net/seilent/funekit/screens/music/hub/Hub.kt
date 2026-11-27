@@ -600,6 +600,14 @@ class HubModel(entry: Long, page: MusicPage = MusicPage.Hub, private val st: Hub
         aimCut++
     }
 
+    internal fun resetPresses() {
+        for (p in panes) {
+            p.press.reset()
+            p.glow.off()
+        }
+        poke()
+    }
+
     fun onLabel(p: Int, row: Int): Boolean = role(p) == HUB_FOLDERS && panes[p].cell(row, 0) == LABEL_CELL
 
     fun jumpTo(section: Int, now: Long): Int? {

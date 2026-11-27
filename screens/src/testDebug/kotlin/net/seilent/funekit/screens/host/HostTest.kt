@@ -75,6 +75,7 @@ import net.seilent.funekit.fake.FakeSet
 import net.seilent.funekit.screens.music.HUB_ALBUMS
 import net.seilent.funekit.screens.music.MusicPage
 import net.seilent.funekit.screens.music.MusicSource
+import net.seilent.funekit.screens.music.albcol.AlbumColGeo
 import net.seilent.funekit.screens.music.albcol.AlbumColModel
 import net.seilent.funekit.screens.music.album.AlbumModel
 import net.seilent.funekit.screens.music.hub.HubModel
@@ -91,6 +92,7 @@ import net.seilent.funekit.screens.music.nowplaying.PhoneRepeat
 import net.seilent.funekit.screens.music.nowplaying.PhoneTrack
 import net.seilent.funekit.screens.music.queue.QueueModel
 import net.seilent.funekit.screens.music.testFake
+import net.seilent.funekit.screens.settings.SettingSheet
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -458,6 +460,26 @@ class HostTest {
         val col = rule.runOnIdle { app.models[app.stack.pages.last().entry] as AlbumColModel }
         until("premise: the column opens") { col.opened }
         assertEquals("the column shows its letter's tile first", letter, rule.runOnIdle { col.letterAt(col.track.first) })
+    }
+
+    @Test
+    fun anAlbumColumnLetterTapThatOpensTheJumpGridLeavesNoPressUnderIt() {
+        val (app, _) = cardApp(root = true) { listOf(music(it, MusicPage.Hub), music(it, MusicPage.AlbumCol(0))) }
+        val col = rule.runOnIdle { app.models[app.stack.pages.last().entry] as AlbumColModel }
+        until("premise: the column opens") { col.opened && col.count > 0 }
+        val r = rule.runOnIdle { (0 until col.count).first { col.letterAt(it) >= 0 } }
+        val g = AlbumColGeo(page)
+        val y = rule.runOnIdle { (g.rowTop(col.track, r) + g.rowTop(col.track, r + 1)) / 2f }
+        assertTrue("premise: the letter row shows, at $y", y >= g.boxTop && y < page.heightPx)
+        tap(page.widthPx / 2f, y)
+        var n = 0
+        while (rule.runOnIdle { app.stack.overlay?.kind } != OverKind.Jump) {
+            frames(1)
+            assertTrue("premise: the letter opens the jump grid", ++n < OPEN_FRAMES)
+        }
+        val (scale, lit) = rule.runOnIdle { col.press.scale(r, rule.mainClock.currentTime) to col.press.lit(r, rule.mainClock.currentTime) }
+        assertEquals("the open snaps the letter's press", 1f, scale, 0f)
+        assertEquals(0f, lit, 0f)
     }
 
     @Test
@@ -2503,6 +2525,46 @@ class HostTest {
         rule.onRoot().performTouchInput { up() }
         frames(OPEN_FRAMES)
         assertTrue("the up seeks nothing, $seeks", seeks.isEmpty())
+    }
+
+    @Test
+    fun aSeekHeldWithinTheSlopAcrossASheetOpenSeeksNothing() {
+        val seeks = mutableListOf<Long>()
+        val app = seekApp(seeks)
+        rule.onRoot().performTouchInput { down(seekPx) }
+        frames(CUT_FRAMES)
+        assertTrue("premise: the seek band down seeks", app.music.np.seeking)
+        rule.runOnIdle { app.host.openSheet(SettingSheet(MenuForm.Sheet, "sheet", listOf("one", "two"))) { true } }
+        frames(CUT_FRAMES)
+        rule.onRoot().performTouchInput { up() }
+        frames(OPEN_FRAMES)
+        assertTrue("a seek held across a sheet open seeks nothing, $seeks", seeks.isEmpty())
+    }
+
+    @Test
+    fun aSheetOpenOverAnAppPageAsksTheAppToCancelItsTouch() {
+        val app = app(Level(START, null))
+        assertNull("premise: the app's home is the top", rule.runOnIdle { app.stack.top })
+        rule.runOnIdle { app.host.openSheet(SettingSheet(MenuForm.Sheet, "sheet", listOf("one", "two"))) { true } }
+        until("premise: the sheet is up") { app.stack.overlay?.kind == OverKind.Sheet }
+        assertEquals("the open asks the app to cancel its page's touch", 1, app.cancels)
+    }
+
+    private fun toastLit(app: TestApp): Float = rule.runOnIdle { app.toast.look(page, rule.mainClock.currentTime)?.lit ?: 0f }
+
+    @Test
+    fun aToastPressHeldAcrossAVolumeOpenSnaps() {
+        val app = app(Level(START, null))
+        rule.runOnIdle { app.toast.show(rule.mainClock.currentTime, "line", "title", track = true) }
+        frames(OPEN_FRAMES)
+        val r = requireNotNull(rule.runOnIdle { app.toast.hitRect(page, rule.mainClock.currentTime) }) { "premise: the toast takes a tap" }
+        rule.onRoot().performTouchInput { down(Offset((r.x0 + r.x1) / 2f, (r.y0 + r.y1) / 2f)) }
+        frames(CUT_FRAMES)
+        assertTrue("premise: the toast press is lit", toastLit(app) > 0f)
+        rule.runOnIdle { app.host.openVolume(rule.mainClock.currentTime) }
+        until("premise: the plate is up") { app.stack.overlay?.kind == OverKind.Volume }
+        assertEquals("the volume open snaps the toast press", 0f, toastLit(app), 0f)
+        rule.onRoot().performTouchInput { up() }
     }
 
     private fun sheetY(app: TestApp, i: Int): Float {

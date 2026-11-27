@@ -818,6 +818,23 @@ class DeleteHostTest {
     }
 
     @Test
+    fun aJumpOpenTheStackDropsLeavesTheTouchOnTheSheet() {
+        launch()
+        on(screen(MusicPage.Hub))
+        sheet(songTarget(song()))
+        val i = rule.runOnIdle { app.menu.items.indexOf(DELETE) }
+        rule.onRoot().performTouchInput { down(Offset(page.widthPx / 2f, sheetY(i))) }
+        frames(CUT_FRAMES)
+        assertEquals("premise: the down presses $DELETE", i, rule.runOnIdle { app.menu.pressed })
+        rule.runOnIdle { app.host.openJump(stack.top!!) }
+        frames(CUT_FRAMES)
+        assertEquals("premise: the stack drops the open under the live sheet", OverKind.Sheet, rule.runOnIdle { stack.overlay?.kind })
+        rule.onRoot().performTouchInput { up() }
+        frames(OPEN_FRAMES)
+        assertTrue("the row's act runs, its confirm opens", rule.runOnIdle { DELETE_SONG in app.menu.items })
+    }
+
+    @Test
     fun aPressAfterTheLibraryCloseOnTheSheetItCutsPicksNothing() {
         launch()
         on(screen(MusicPage.Hub))

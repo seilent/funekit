@@ -186,6 +186,41 @@ class FieldSheetTest {
         assertEquals("drop $GAIN", f.calls.last())
     }
 
+    private fun sheetY(app: TestApp, i: Int): Float {
+        val m = app.menu
+        val ppu = if (m.kept) page.stdPpu else page.ppu
+        val pitch = px(Tok.settingsPitch, ppu)
+        return m.bottomPx - px(Tok.edge, ppu) - (m.items.size - i) * pitch + pitch / 2f
+    }
+
+    @Test
+    fun aDownThatLandsAFieldSheetsRiseIsCancelledWhenItsAdjustShows() {
+        val (app, _) = app(root = true)
+        val f = BandFields()
+        open(app, f, 2)
+        pick(app, GAIN, 1)
+        val last = f.items.lastIndex
+        assertTrue("premise: another field row", last != GAIN)
+        val o = checkNotNull(app.stack.overlay)
+        val at = Offset(page.widthPx / 2f, sheetY(app, last))
+        var n = 0
+        while (app.menu.backTarget(at.x, at.y, o, rule.mainClock.currentTime, page.heightPx)) {
+            frames(1)
+            assertTrue("premise: the rising top passes the row", ++n < OPEN_FRAMES)
+        }
+        assertTrue("premise: the sheet still rises", o.moving(rule.mainClock.currentTime))
+        assertFalse("premise: the hud waits for the sheet to settle", f.hud.shown)
+        rule.onRoot().performTouchInput { down(at) }
+        assertNull("premise: the down is not held", app.stack.held)
+        frames(1)
+        assertTrue("premise: the hud shows", f.hud.shown)
+        val calls = f.calls.toList()
+        assertEquals("premise: the picked field stays live under the hud, so a row pick there takes it, $calls", GAIN, f.live)
+        rule.onRoot().performTouchInput { up() }
+        frames(OPEN_FRAMES)
+        assertEquals("the up picks nothing on the sheet under the hud", calls, f.calls)
+    }
+
     @Test
     fun aBandDownDuringTheReturnFromTheHudIsHeld() {
         val (app, _) = app()

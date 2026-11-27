@@ -46,6 +46,7 @@ import net.seilent.funekit.kit.RowKind
 import net.seilent.funekit.kit.art.Art
 import net.seilent.funekit.kit.groundBands
 import net.seilent.funekit.kit.motion.MoveKind
+import net.seilent.funekit.kit.motion.OverKind
 import net.seilent.funekit.kit.pxSize
 import net.seilent.funekit.kit.rememberChrome
 import net.seilent.funekit.kit.rememberCovers
@@ -53,6 +54,7 @@ import net.seilent.funekit.kit.stack.Phase
 import net.seilent.funekit.kit.touch.Arbiter
 import net.seilent.funekit.kit.touch.Swipes
 import net.seilent.funekit.kit.touch.arbiter
+import net.seilent.funekit.kept
 import net.seilent.funekit.scale
 import net.seilent.funekit.screens.music.HUB_ALBUMS
 import net.seilent.funekit.screens.music.MusicPage
@@ -65,6 +67,7 @@ import net.seilent.funekit.screens.music.hub.HubGeo
 import net.seilent.funekit.screens.music.hub.HubGrid
 import net.seilent.funekit.screens.music.hub.HubLayer
 import net.seilent.funekit.screens.music.hub.HubModel
+import net.seilent.funekit.screens.music.hub.cellAt
 import net.seilent.funekit.screens.music.hub.hubDraw
 import net.seilent.funekit.screens.music.hub.hubPickAtDrop
 import net.seilent.funekit.screens.music.hub.hubPicked
@@ -73,6 +76,7 @@ import net.seilent.funekit.screens.music.hub.look
 import net.seilent.funekit.screens.music.hub.rowModel
 import net.seilent.funekit.screens.music.pivots
 import net.seilent.funekit.screens.music.testFake
+import net.seilent.funekit.screens.settings.SettingSheet
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -425,6 +429,103 @@ class HubTouchTest {
         assertNull(pn.glow.back.key)
         assertFalse(pn.press.stale(clock()))
         up()
+    }
+
+    private fun hubApp(pivot: Int, np: Boolean = false): Triple<TestApp, TestScreen, HubModel> {
+        val app = TestApp(s, s, music, StillLevel) { rule.mainClock.currentTime }
+        app.compose(rule, root = true)
+        rule.waitForIdle()
+        val stack = app.stack
+        val screen = TestScreen.Music(MusicEntry(stack.entry(), MusicPage.Hub))
+        val under = if (np) listOf(TestScreen.Music(MusicEntry(stack.entry(), MusicPage.NowPlaying))) else emptyList()
+        rule.runOnUiThread { stack.reset(under + screen) }
+        rule.mainClock.advanceTimeBy(SETTLE)
+        rule.waitForIdle()
+        val m = app.models[screen.entry] as HubModel
+        rule.runOnUiThread { m.select(pivot) }
+        rule.mainClock.advanceTimeBy(SETTLE)
+        rule.waitForIdle()
+        assertTrue("premise: the pane holds rows", (m.pane.map?.count ?: 0) > 0)
+        rule.mainClock.autoAdvance = false
+        return Triple(app, screen, m)
+    }
+
+    private fun heldSong(m: HubModel): Long {
+        val id = songRow(m)
+        down(TAP_X, SONG_Y)
+        rule.mainClock.advanceTimeBy(HELD_MS, ignoreFrameDuration = true)
+        assertEquals("premise: the row glows", SONG_ROW, m.pane.glow.glow.key)
+        return id
+    }
+
+    private fun assertCut(m: HubModel, open: () -> Unit) {
+        val id = heldSong(m)
+        rule.runOnIdle(open)
+        frames()
+        assertNull("the open clears the row's glow", m.pane.glow.glow.key)
+        assertFalse("and its press", m.pane.press.held)
+        up()
+        settle()
+        assertNotEquals("a row held across the open plays nothing", id, fake.player.state.value.track)
+    }
+
+    @Test
+    fun aSongRowHeldAcrossASheetOpenPlaysNothing() {
+        val (app, _, m) = hubApp(HUB_SONGS)
+        assertCut(m) { app.host.openSheet(SettingSheet(MenuForm.Sheet, "sheet", listOf("one", "two"))) { true } }
+    }
+
+    @Test
+    fun aSongRowHeldAcrossAJumpGridOpenPlaysNothing() {
+        val (app, screen, m) = hubApp(HUB_SONGS)
+        assertCut(m) {
+            m.jump.open(m.avail(), 0, s.kept().stdContentBottom)
+            app.host.openJump(screen)
+        }
+    }
+
+    @Test
+    fun aDividerTapThatOpensTheJumpGridLeavesNoPressUnderIt() {
+        val (app, _, m) = hubApp(HUB_ALBUMS)
+        val pn = m.pane
+        val hg = HubGeo(s)
+        val c = (0 until hg.grid.cols).firstOrNull { (m.cellAt(0, it)?.letter ?: -1) >= 0 }
+        assertNotNull("premise: the first ALBUMS row holds a letter cell", c)
+        val item = pn.item(0, c!!)
+        rule.onRoot().performTouchInput {
+            down(Offset(hg.grid.x(c) + hg.grid.tile / 2f, hg.top + hg.grid.tile / 2f))
+            up()
+        }
+        apply()
+        var n = 0
+        while (app.stack.overlay?.kind != OverKind.Jump) {
+            apply()
+            rule.mainClock.advanceTimeByFrame()
+            assertTrue("premise: the letter opens the jump grid", ++n < MAX_FRAMES)
+        }
+        assertEquals("the open snaps the letter's press", 1f, pn.press.scale(item, clock()), 0f)
+        assertEquals(0f, pn.press.lit(item, clock()), 0f)
+    }
+
+    @Test
+    fun aVolumeOpenLeavesASongRowsReleasingPressToFinish() {
+        val (app, _, m) = hubApp(HUB_SONGS, np = true)
+        val id = songRow(m)
+        rule.onRoot().performTouchInput {
+            down(Offset(TAP_X, SONG_Y))
+            up()
+        }
+        apply()
+        rule.runOnIdle { app.host.openVolume(rule.mainClock.currentTime) }
+        var n = 0
+        while (app.stack.overlay?.kind != OverKind.Volume) {
+            apply()
+            rule.mainClock.advanceTimeByFrame()
+            assertTrue("premise: the plate is up", ++n < MAX_FRAMES)
+        }
+        assertTrue("the press still releases", m.pane.press.scale(m.pane.item(SONG_ROW, 0), clock()) < 1f)
+        settle()
+        assertEquals("premise: the tap plays its row with no turn", id, fake.player.state.value.track)
     }
 
     @Test

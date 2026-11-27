@@ -747,7 +747,7 @@ class MusicHost<S : Any> internal constructor(
         menuOvers.retainAll { it === stack.overlay }
         menuOvers += o
         menuOpens++
-        stack.open(o)
+        stack.open(o, onOpen = { opened(true) })
         return o
     }
 
@@ -826,7 +826,7 @@ class MusicHost<S : Any> internal constructor(
         if (stack.taken) return false
         if (!src.open(now())) return false
         val o = Overlay(OverKind.Adjust, src.hud)
-        stack.open(o)
+        stack.open(o, onOpen = { opened(true) })
         m.edit(src.key, false)
         edit = o to m
         range = o to src
@@ -869,7 +869,7 @@ class MusicHost<S : Any> internal constructor(
     fun openJump(owner: S) {
         jumpOwner = owner
         jump.lead = displayLead(view.display?.refreshRate)
-        stack.open(jump)
+        stack.open(jump, onOpen = { opened(true) })
     }
 
     fun openPage(page: MusicPage) {
@@ -916,15 +916,23 @@ class MusicHost<S : Any> internal constructor(
             hud.show(at, volume.percent(), playOf(feed) == Play.Playing, artist, np.shown.title)
         }
         if (o == null) {
-            val top = stack.top
-            val e = pageEntry(top)
-            if (e != null) models[e]?.lists?.forEach { it.cancel() } else app.cancel(top)
-            toast.cancel(t)
-            if (top?.let(::isNp) == true) np.cancelTouch()
-            stack.open(volumeOverlay, hides = false, covers = false, onOpen = ::show)
+            stack.open(volumeOverlay, hides = false, covers = false) { at ->
+                opened(false)
+                show(at)
+            }
             return
         }
         show(t)
+    }
+
+    private fun opened(presses: Boolean) {
+        env.a.cancel()
+        val top = stack.top
+        if (top?.let(::isNp) == true) np.cancelTouch()
+        if (pageEntry(top) == null) app.cancel(top)
+        if (!presses) return
+        hubOf(top)?.resetPresses()
+        colOf(top)?.resetPresses()
     }
 
     fun volPress(d: Int) {
@@ -1875,6 +1883,7 @@ class MusicHost<S : Any> internal constructor(
                 while (!over.closing && over.moving(now())) withFrameMillis { }
                 if (over.closing || fieldRun !== f) return@LaunchedEffect
                 f.want = false
+                opened(true)
                 f.sheet.adjust(now())
             }
             BackHandler(f.live && f.choice == null) { fieldDrop(f) }

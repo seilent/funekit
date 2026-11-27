@@ -1198,14 +1198,84 @@ class SettingsHostTest {
         assertEquals(OverKind.Sheet, app.stack.overlay?.kind)
     }
 
+    private fun scrolling(vararg first: SettingRow): Pair<TestApp, SettingsModel> {
+        val rows = Rows(pivot(*first, *(0 until SCROLL_ROWS).map { choice("s$it") }.toTypedArray()))
+        rows.adjusts = { _, l -> SettingAdjust(listOf(AdjustCol(l.toString(), LEFT), AdjustCol(l.toString(), RIGHT)), BAL, l.toString()) }
+        val app = app(SettingsPage(ID, rows, HeaderLook.Settings), root = true)
+        val (_, m) = open(app)
+        assertTrue("premise: the rows scroll", m.content(m.pivot) > m.view)
+        return app to m
+    }
+
+    private fun untilOver(app: TestApp, kind: OverKind) {
+        var n = 0
+        while (app.stack.overlay?.kind != kind) {
+            frames(1)
+            assertTrue("premise: the $kind overlay is up", ++n < OPEN_FRAMES)
+        }
+    }
+
+    private fun dragList(m: SettingsModel): ListTouch {
+        rule.onRoot().performTouchInput { down(Offset(page.widthPx / 2f, DRAG_FROM)) }
+        frames(1)
+        repeat(FLING_MOVES) {
+            rule.onRoot().performTouchInput { moveBy(Offset(0f, -DRAG_STEP)) }
+            frames(1)
+        }
+        val list = m.lists.first()
+        assertTrue("premise: the list drags", list.scroll.dragging)
+        return list
+    }
+
     @Test
     fun aVolumeOpenOverSettingsCancelsItsListDrag() {
-        val app = app(SettingsPage(ID, Rows(pivot(choice("a"))), HeaderLook.Settings))
-        val (_, m) = open(app)
-        val list = dragging()
-        m.lists = listOf(list)
+        val (app, m) = scrolling()
+        val list = dragList(m)
         rule.runOnIdle { app.host.openVolume(rule.mainClock.currentTime) }
+        untilOver(app, OverKind.Volume)
+        assertFalse("the volume open ends the drag", list.scroll.dragging)
+        val px = m.pane.px
+        rule.onRoot().performTouchInput { moveBy(Offset(0f, -DRAG_STEP)) }
+        frames(1)
+        assertEquals("a move after the open scrolls nothing", px, m.pane.px)
+        rule.onRoot().performTouchInput { up() }
+    }
+
+    @Test
+    fun aSettingsFlingRunsOnUnderTheVolumePlate() {
+        val (app, m) = scrolling()
+        val list = dragList(m)
+        rule.onRoot().performTouchInput { up() }
+        frames(1)
+        assertTrue("premise: the list flings", list.moving)
+        rule.runOnIdle { app.host.openVolume(rule.mainClock.currentTime) }
+        untilOver(app, OverKind.Volume)
+        val px = m.pane.px
+        frames(2)
+        assertTrue("the fling runs on under the plate, ${m.pane.px} after $px", m.pane.px != px)
+    }
+
+    @Test
+    fun aSettingsDragHeldAcrossARangeAdjustOpenScrollsNothingAfter() {
+        val (app, m) = scrolling(balance())
+        val list = dragList(m)
+        rule.runOnIdle { app.host.settingsTap(m, m.rows(m.pivot)[0]) }
+        untilOver(app, OverKind.Adjust)
+        val px = m.pane.px
+        rule.onRoot().performTouchInput { moveBy(Offset(0f, -DRAG_STEP)) }
+        frames(1)
+        assertEquals("a drag held across the adjust's open scrolls nothing", px, m.pane.px)
         assertFalse(list.scroll.dragging)
+        rule.onRoot().performTouchInput { up() }
+    }
+
+    @Test
+    fun aVolumeOpenOverSettingsAsksTheAppNoCancel() {
+        val app = app(SettingsPage(ID, Rows(pivot(choice("a"))), HeaderLook.Settings))
+        open(app)
+        rule.runOnIdle { app.host.openVolume(rule.mainClock.currentTime) }
+        untilOver(app, OverKind.Volume)
+        assertEquals("a volume open over an app's settings page asks the app no cancel", 0, app.cancels)
     }
 
     @Test
@@ -1660,6 +1730,8 @@ class SettingsHostTest {
         private const val SLACK_ROWS = 7
         private const val ONE_OVER_H = 1262
         private const val SLACK_FROM = 400
+        private const val SCROLL_ROWS = 24
+        private const val FLING_MOVES = 4
         private const val NAV = 48
         private const val HELD_AT = 4f
         private val ID = SettingsId(SETTINGS)
