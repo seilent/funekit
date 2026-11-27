@@ -247,4 +247,27 @@ class SaverMotionTest {
         }
         assertTrue("read $read", read > 10)
     }
+
+    @Test
+    fun aTimeLaneLaidBeforeTenMinutesKeepsItsPeriodAndCountAcrossThem() {
+        for ((scene, i) in listOf(SaverScene.H to 7, SaverScene.L to 0)) {
+            var p = 599500L
+            val e = a105().kit("愛 think so,", "DECO*27 FEAT. とぴ", "相愛性理論")
+            e.setPosition { p }
+            e.show(0, 1)
+            e.shotScene(scene, 0)
+            val l = e.lanes[i]
+            val t = l.t0 + 100
+            e.step(t)
+            val per = l.period
+            val n = l.count
+            val before = l.t.s
+            assertTrue("${scene.name}${i + 1} grows", l.grow > 0)
+            p = 600500
+            e.step(t + 1000)
+            assertTrue("${scene.name}${i + 1} period $per to ${l.period}", per > 0 && l.period >= per)
+            assertEquals(n, l.count)
+            assertTrue(l.t.s != before)
+        }
+    }
 }

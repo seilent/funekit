@@ -2,11 +2,13 @@ package net.seilent.funekit.kit.saver
 
 import net.seilent.funekit.Weight
 
+private const val STYLE_PX = 12
+
 internal class G(val face: Int, val gid: Int, val ox: Int, val oy: Int, val box: SaverRect, val byte: Int)
 
 internal class Text {
     var s = ""
-    var st = SaverStyle(Weight.Regular, 0, 0, false)
+    var st = SaverStyle(Weight.Regular, STYLE_PX, 0, false)
     var g: List<G> = emptyList()
     var ink0 = 0
     var ink1 = 0
@@ -58,6 +60,10 @@ internal class Span(var b0: Int = 0, var b1: Int = Int.MAX_VALUE) {
 
 internal class Blocker(var lane: Int = -1, var keep: Int = 0, var len64: Long = 0) {
     fun copy() = Blocker(lane, keep, len64)
+}
+
+internal class Verse(var shaped: Boolean = false, var laid: Boolean = false) {
+    fun copy() = Verse(shaped, laid)
 }
 
 internal class Break(val copy: Int = 0, val keep: Int = 0, val add: Int = 0)
@@ -139,6 +145,7 @@ internal class Lane(val spec: Spec) {
     var capped = false
     var unfit = false
     val span = arrayOf(Span(), Span())
+    val w = arrayOf(Verse(), Verse())
     var block = Blocker()
     var pieced = false
     var gave = false
@@ -188,6 +195,8 @@ internal class Lane(val spec: Spec) {
         it.unfit = unfit
         it.span[0] = span[0].copy()
         it.span[1] = span[1].copy()
+        it.w[0] = w[0].copy()
+        it.w[1] = w[1].copy()
         it.block = block.copy()
         it.pieced = pieced
         it.gave = gave

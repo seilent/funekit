@@ -236,6 +236,7 @@ class SaverScenes(
                 l.skip = l.skip || (l.spec.src != Src.Art && l.t.g.isEmpty())
             }
         }
+        if (shown && lanes.isNotEmpty() && cutDue < 0 && startAt < 0) arrange(stepAt)
     }
 
     fun setPosition(f: () -> Long) {
@@ -581,6 +582,8 @@ class SaverScenes(
             l.skip = l.spec.src != Src.Art && l.t.g.isEmpty()
             if (!l.skip) place(l)
         }
+        arrange(-NEVER)
+        fit()
     }
 
     internal fun draw(other: Boolean): Int {
