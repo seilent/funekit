@@ -107,6 +107,8 @@ class Overlay(val kind: OverKind, val hud: OverHud? = null, private val commit: 
     val closing: Boolean get() = hud?.hiding ?: closed
     var risen = -1L
         private set
+    internal var riseEnd = -1L
+        private set
     private var backMs = -1
     private var backFrom = 1f
     private var backO = 1f
@@ -114,6 +116,7 @@ class Overlay(val kind: OverKind, val hud: OverHud? = null, private val commit: 
     private var jumpFrom = JumpLook(0f, 1f, 0f)
     var lead = 0L
     var back: (() -> Boolean)? = null
+    var landed: (() -> Unit)? = null
     internal var stop: (() -> Unit)? = null
     var revision by mutableIntStateOf(0)
         private set
@@ -129,6 +132,7 @@ class Overlay(val kind: OverKind, val hud: OverHud? = null, private val commit: 
         closed = false
         backMs = -1
         risen = -1L
+        riseEnd = -1L
         revision++
         moved()
     }
@@ -211,6 +215,7 @@ class Overlay(val kind: OverKind, val hud: OverHud? = null, private val commit: 
     fun land(now: Long): Boolean {
         if (hud != null) return false
         if (closing) return true
+        if (riseEnd < 0) riseEnd = start + dur()
         start = now - dur()
         revision++
         return false
@@ -544,7 +549,7 @@ class OverlayGate {
         return !shut
     }
 
-    fun passes(o: Overlay, confirm: Boolean): Boolean = !shut && live(o) && !(confirm && (o.risen < 0 || at <= o.risen))
+    fun passes(o: Overlay, confirm: Boolean): Boolean = !shut && live(o) && !(confirm && (o.risen < 0 || at <= o.risen || at <= o.riseEnd))
 
     internal fun live(o: Overlay): Boolean = o.movedSeq <= seq
 }

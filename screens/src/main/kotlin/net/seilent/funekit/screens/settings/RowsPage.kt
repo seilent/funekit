@@ -401,7 +401,12 @@ abstract class RowsPage<R : Any>(entry: Long, page: PageId) : PivotPage(entry, p
             return
         }
         pn.dropping = true
-        aimTo(min(target(), base), AimKind.Drop, ms, Curves.decel)
+        if (aimKind == AimKind.Drop && ms < aimMs) {
+            aimMs = ms
+            aimAt++
+        } else {
+            aimTo(min(target(), base), AimKind.Drop, ms, Curves.decel)
+        }
         if (aimKind == AimKind.None) settle()
     }
 

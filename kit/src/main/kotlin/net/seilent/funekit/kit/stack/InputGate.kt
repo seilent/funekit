@@ -8,6 +8,7 @@ internal interface GateHost {
     val asked: Int
     val armed: Boolean
     val turning: Boolean get() = false
+    val closing: Boolean get() = false
     val motion: Boolean get() = false
     fun cut()
     fun back()
@@ -101,7 +102,7 @@ class InputGate {
                 }
             }
             if (ev.actionMasked == MotionEvent.ACTION_DOWN && carries(ev)) {
-                carried = carry?.invoke(ev.x, ev.y)
+                carried = if (host?.turning == true) carry?.invoke(ev.x, ev.y) else null
                 queue.addLast(Touch(MotionEvent.obtain(ev), pass, carried))
                 host?.land()
                 return true
@@ -144,7 +145,8 @@ class InputGate {
 
     private fun carries(ev: MotionEvent): Boolean {
         val h = holds ?: return false
-        return carry != null && host?.turning == true && !h(ev)
+        val g = host ?: return false
+        return carry != null && (g.turning || g.closing) && !h(ev)
     }
 
     private fun ends(ev: MotionEvent) {

@@ -28,6 +28,7 @@ import net.seilent.funekit.kit.MenuForm
 import net.seilent.funekit.kit.motion.MoveKind
 import net.seilent.funekit.kit.motion.OverKind
 import net.seilent.funekit.kit.motion.Overlay
+import net.seilent.funekit.kit.navBand
 import net.seilent.funekit.kit.stack.PageKind
 import net.seilent.funekit.kit.stack.Phase
 import net.seilent.funekit.kit.stack.Turn
@@ -1269,6 +1270,169 @@ class SettingsHostTest {
         assertEquals(AimKind.None, m.aimKind)
     }
 
+    private val navPage = scale(Window(W, H, SDK, none, Insets(0, 0, 0, NAV), none, none, none), Nav.Buttons, Surface.Page, false)
+
+    private fun liftRows(): Rows = Rows(pivot(*(0 until LIFT_ROWS).map { choice("r$it", FOUR) }.toTypedArray()))
+
+    private fun liftApp(s: Scale = page, rows: Rows = liftRows()): Pair<TestApp, SettingsModel> {
+        val app = app(SettingsPage(ID, rows, HeaderLook.Settings), root = true, s = s)
+        val (_, m) = open(app)
+        rule.runOnIdle {
+            app.host.types.settings.drawOf(m)
+            m.down(LIFT_ROW, rule.mainClock.currentTime)
+            m.cancel(rule.mainClock.currentTime)
+        }
+        return app to m
+    }
+
+    private fun lifting(app: TestApp, m: SettingsModel): Overlay {
+        val before = m.pane.px
+        rule.runOnIdle { app.host.settingsTap(m, m.rows(m.pivot)[LIFT_ROW]) }
+        var n = 0
+        while (m.aimKind != AimKind.Lift || m.pane.px == before) {
+            frames(1)
+            assertTrue("premise: the sheet's lift moves the pane", ++n < OPEN_FRAMES)
+        }
+        val o = checkNotNull(app.stack.overlay)
+        assertTrue("premise: the sheet has not risen", o.moving(rule.mainClock.currentTime))
+        return o
+    }
+
+    private fun lifted(app: TestApp, m: SettingsModel): Int {
+        val before = m.pane.px
+        tap(app, m, LIFT_ROW)
+        assertTrue("premise: the lift moved the pane, ${m.pane.px} against $before", m.pane.px > before)
+        assertEquals("premise: the lift has landed", AimKind.None, m.aimKind)
+        rule.runOnIdle { app.stack.close() }
+        var n = 0
+        while (app.stack.overlay?.closing != true) {
+            frames(1)
+            assertTrue("premise: the sheet closes", ++n < OPEN_FRAMES)
+        }
+        assertTrue("premise: the close drops the lift over the scroll time, ${m.aimKind} ${m.aimMs}", m.aimKind == AimKind.Drop && m.aimMs == Tok.motion_scroll)
+        return before
+    }
+
+    private fun bandAt(s: Scale): Offset = Offset(s.widthPx / 2f, (navBand(s).y0 + s.heightPx) / 2f)
+
+    @Test
+    fun aDownHeldDuringALiftLetsItRunAndItsSlopExitStopsItWhereItIs() {
+        val (app, m) = liftApp()
+        val o = lifting(app, m)
+        rule.onRoot().performTouchInput { down(Offset(page.widthPx / 2f, page.heightPx / HELD_AT)) }
+        assertTrue("premise: the down is held, a back target above the rising top", app.stack.held != null)
+        val at = m.pane.px
+        frames(2)
+        assertTrue("a held down lets the lift run, ${m.pane.px} after $at", m.pane.px != at)
+        rule.onRoot().performTouchInput { moveBy(Offset(0f, 2 * app.arbiter.slop.slop)) }
+        frames(1)
+        assertEquals("the slop exit lands the stack and stops the lift", AimKind.None, m.aimKind)
+        assertFalse("the sheet rests", o.moving(rule.mainClock.currentTime))
+        val stop = m.pane.px
+        frames(CLOSE_FRAMES)
+        assertEquals("the lift stays where the land stopped it", stop, m.pane.px)
+        rule.onRoot().performTouchInput { up() }
+    }
+
+    @Test
+    fun aKeyBackDuringALiftedSheetsCloseDropsThePageAtOnce() {
+        val (app, m) = liftApp()
+        val before = lifted(app, m)
+        rule.runOnIdle { app.stack.back(true, app.host.popKind) }
+        frames(SNAP_FRAMES)
+        assertNull("the back lands the close", app.stack.overlay)
+        assertEquals("the land re-arms the close's drop at 0 ms", 0f, m.aimMs, 0f)
+        assertEquals("and drops the page at once", before, m.pane.px)
+    }
+
+    @Test
+    fun aDownDuringALiftedSheetsCloseWithNoGateLetsItsDropFinish() {
+        val (app, m) = liftApp()
+        val before = lifted(app, m)
+        val high = m.pane.px
+        var n = 0
+        while (m.pane.px == high) {
+            frames(1)
+            assertTrue("premise: the close's drop moves the pane", ++n < OPEN_FRAMES)
+        }
+        val atDown = m.pane.px
+        rule.onRoot().performTouchInput { down(Offset(page.widthPx / 2f, page.heightPx / HELD_AT)) }
+        frames(2)
+        assertTrue("the close's drop runs on past the down, ${m.pane.px} after $atDown", m.pane.px in (before + 1) until atDown)
+        while (app.stack.overlay != null) {
+            frames(1)
+            assertTrue("premise: the close ends", ++n < OPEN_FRAMES)
+        }
+        assertEquals("the drop finishes by the close's end", before, m.pane.px)
+        assertEquals(AimKind.None, m.aimKind)
+        rule.onRoot().performTouchInput { up() }
+    }
+
+    @Test
+    fun aBandDownBeforeALiftedSheetIsLiftedLandsItWithNoLift() {
+        val (app, m) = liftApp(navPage)
+        val before = m.pane.px
+        var landed: Overlay? = null
+        var aimAt: AimKind? = null
+        app.beforeApplied = {
+            val o = app.stack.overlay
+            if (landed == null && o != null && o.moving(rule.mainClock.currentTime)) {
+                landed = o
+                aimAt = m.aimKind
+                app.stack.touchDown()
+            }
+        }
+        rule.runOnIdle { app.host.settingsTap(m, m.rows(m.pivot)[LIFT_ROW]) }
+        var n = 0
+        while (landed == null) {
+            frames(1)
+            assertTrue("premise: the sheet opens", ++n < OPEN_FRAMES)
+        }
+        app.beforeApplied = {}
+        val o = checkNotNull(landed)
+        assertTrue("premise: the down comes before the sheet's lift, $aimAt", aimAt != AimKind.Lift)
+        repeat(OPEN_FRAMES) {
+            frames(1)
+            assertTrue("no lift runs", m.aimKind != AimKind.Lift)
+        }
+        assertFalse("the band down lands the sheet and it stays at rest", o.moving(rule.mainClock.currentTime))
+        assertEquals("the page stays", before, m.pane.px)
+    }
+
+    @Test
+    fun aBandDownDuringALiftStopsItWhereItIs() {
+        val (app, m) = liftApp(navPage)
+        val o = lifting(app, m)
+        rule.onRoot().performTouchInput { down(bandAt(navPage)) }
+        assertEquals("the band down lands the sheet and stops the lift", AimKind.None, m.aimKind)
+        val stop = m.pane.px
+        frames(CLOSE_FRAMES)
+        assertEquals("the lift stays where the land stopped it", stop, m.pane.px)
+        assertFalse("the sheet rests", o.moving(rule.mainClock.currentTime))
+        rule.onRoot().performTouchInput { up() }
+    }
+
+    @Test
+    fun aCardChangeDuringALiftedSheetsCloseDropsThePageAtOnce() {
+        val (app, m) = liftApp()
+        val before = lifted(app, m)
+        rule.runOnIdle { app.host.closeLibrarySheets(newCard = true) }
+        frames(SNAP_FRAMES)
+        assertEquals("the card change drops the page at once", before, m.pane.px)
+    }
+
+    @Test
+    fun anInstantDropThenALongerOneDuringAClosesDropLeavesThePageAtItsBase() {
+        val (app, m) = liftApp()
+        val before = lifted(app, m)
+        rule.runOnIdle {
+            m.drop(0f)
+            m.drop(Tok.motion_scroll)
+        }
+        frames(SNAP_FRAMES)
+        assertEquals("the instant drop holds over the longer one", before, m.pane.px)
+    }
+
     @Test
     fun aCardChangeCutsTheValueSheetAndKeepsTheRangeAdjust() {
         val rows = hudRows().also { it.pivots.value = pivot(*(0 until LIFT_ROWS).map { r -> choice("r$r", FOUR) }.toTypedArray(), balance()) }
@@ -1496,6 +1660,8 @@ class SettingsHostTest {
         private const val SLACK_ROWS = 7
         private const val ONE_OVER_H = 1262
         private const val SLACK_FROM = 400
+        private const val NAV = 48
+        private const val HELD_AT = 4f
         private val ID = SettingsId(SETTINGS)
         private val WORDS = listOf("off", "low", "high")
         private val LATER = listOf("x", "y", "z")

@@ -358,20 +358,84 @@ class MenuOverlayTest {
         return m
     }
 
+    private fun rising(kind: OverKind, form: MenuForm, confirm: Boolean = false): Pair<Menu, Overlay> {
+        val m = opened(kind, form, confirm)
+        val o = checkNotNull(stack.overlay)
+        rule.mainClock.advanceTimeBy(RISE_IN)
+        assertTrue("premise: the overlay rises", o.moving(clock()))
+        return m to o
+    }
+
     @Test
     @Config(qualifiers = A105_SCREEN)
-    fun aTapDuringTheRiseDoesNothingAndLandsNothing() {
-        val m = opened(OverKind.Sheet, MenuForm.Sheet)
-        val o = checkNotNull(stack.overlay)
-        rule.mainClock.advanceTimeBy(100)
-        assertTrue(o.moving(clock()))
+    fun aTapDuringTheRiseLandsItAndPicks() {
+        val (m, _) = rising(OverKind.Sheet, MenuForm.Sheet)
         press(360f, item(m, 2))
-        assertTrue(picks.isEmpty())
-        assertTrue(o.moving(clock()))
-        rule.mainClock.advanceTimeBy(1000)
-        assertFalse(o.moving(clock()))
+        assertEquals("a tap during the rise picks its row", listOf(2), picks)
+    }
+
+    @Test
+    @Config(qualifiers = A105_SCREEN)
+    fun aHoldBegunDuringTheRiseLandsItPressesAndHolds() {
+        val (m, o) = rising(OverKind.Sheet, MenuForm.Sheet)
+        downAt(360f, item(m, 2))
+        assertEquals("the down presses its row", 2, m.pressed)
+        assertFalse("the down lands the rise", o.moving(clock()))
+        rule.mainClock.advanceTimeBy(Tok.input_keyHoldMs.toLong() + HOLD_STEP, ignoreFrameDuration = true)
+        assertEquals("the hold fires on the landed sheet", listOf(2), holds)
+        lift()
+    }
+
+    @Test
+    @Config(qualifiers = A105_SCREEN)
+    fun aSwipeDownBegunDuringTheRiseLandsItAndCloses() {
+        val (m, _) = rising(OverKind.Sheet, MenuForm.Sheet)
+        rule.onRoot().performTouchInput {
+            down(Offset(360f, item(m, 0)))
+            moveBy(Offset(0f, 100f))
+            moveBy(Offset(0f, 100f))
+            up()
+        }
+        rule.mainClock.advanceTimeBy(16)
+        assertEquals("a swipe down begun during the rise closes the landed sheet", 1, closes)
+    }
+
+    @Test
+    @Config(qualifiers = A105_SCREEN)
+    fun aConfirmDialogTakesNoPickFromTheDownThatLandsItsRise() {
+        val (m, o) = rising(OverKind.Dlg, MenuForm.Dlg, confirm = true)
         press(360f, item(m, 2))
-        assertEquals(listOf(2), picks)
+        assertTrue("the down that lands the rise picks nothing, $picks", picks.isEmpty())
+        assertFalse("the down lands the rise", o.moving(clock()))
+    }
+
+    @Test
+    @Config(qualifiers = A105_SCREEN)
+    fun aLandedConfirmDialogRefusesADownBeforeItsRiseWouldHaveEnded() {
+        val (m, o) = rising(OverKind.Dlg, MenuForm.Dlg, confirm = true)
+        val end = o.start + o.dur()
+        press(360f, item(m, 2))
+        assertFalse("the down lands the rise", o.moving(clock()))
+        rule.mainClock.advanceTimeBy(FRAME)
+        assertTrue("premise: the second down comes after the landed rise ends and before the rise's own end, ${o.risen} < ${clock()} < $end", o.risen >= 0 && o.risen < clock() && clock() < end)
+        press(360f, item(m, 2))
+        assertTrue("a down before the rise would have ended picks nothing, $picks", picks.isEmpty())
+        rule.mainClock.advanceTimeBy(end - clock() + FRAME)
+        press(360f, item(m, 2))
+        assertEquals("a down past that end picks", listOf(2), picks)
+    }
+
+    @Test
+    @Config(qualifiers = A105_SCREEN)
+    fun aDownAfterAnOpensCallLeavesTheSheetItOpensRising() {
+        stacked(three(MenuForm.Sheet))
+        val o = Overlay(OverKind.Sheet)
+        stack.open(o)
+        downAt(360f, 640f)
+        framesUntil("premise: the open lands") { stack.overlay === o }
+        assertTrue("a down asked before the open's ask lands nothing of it", o.moving(clock()))
+        lift()
+        assertEquals("the down's tap acts on the page", 1, under)
     }
 
     @Test
@@ -391,17 +455,17 @@ class MenuOverlayTest {
 
     @Test
     @Config(qualifiers = A105_SCREEN)
-    fun aTapOnALetterDuringTheJumpGridOpenDoesNothing() {
+    fun aTapOnALetterDuringTheJumpGridOpenLandsItAndJumps() {
         val g = JumpGrid().also { it.open(BooleanArray(Section.count) { true }, 0, 1280f / a105.stdPpu) }
         stacked(null, g)
         stack.open(Overlay(OverKind.Jump))
         Snapshot.sendApplyNotifications()
-        rule.mainClock.advanceTimeBy(100)
+        rule.mainClock.advanceTimeBy(RISE_IN)
         val o = checkNotNull(stack.overlay)
-        assertTrue(o.moving(clock()))
+        assertTrue("premise: the grid rises", o.moving(clock()))
         press(px(Tok.jumpLeft + Tok.jumpPitch + Tok.jumpPitch / 2, a105.stdPpu).toFloat(), px(Tok.jumpTop + Tok.jumpPitch / 2, a105.stdPpu).toFloat())
-        assertTrue(jumped.isEmpty())
-        assertTrue(o.moving(clock()))
+        assertEquals("a tap during the grid's open jumps to its letter", listOf(Jump.itemOf(1)), jumped)
+        assertFalse("the down lands the open", o.moving(clock()))
     }
 
     @Test
@@ -1507,6 +1571,7 @@ class MenuOverlayTest {
         private const val OPEN_FRAMES = 10
         private const val LAG = 16L
         private const val FRAME = 16L
+        private const val RISE_IN = 100L
         private const val WAKE = 2 * FRAME
         private const val PARK_FRAMES = 30
         private const val REST_FRAMES = 2

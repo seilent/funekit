@@ -6,6 +6,7 @@ import android.os.SystemClock
 import android.view.InputDevice
 import android.view.MotionEvent
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.text.TextMeasurer
@@ -21,11 +22,14 @@ import net.seilent.funekit.Window
 import net.seilent.funekit.api.Listing
 import net.seilent.funekit.fake.FakeSet
 import net.seilent.funekit.gen.Tok
+import net.seilent.funekit.kept
+import net.seilent.funekit.kit.Jump
 import net.seilent.funekit.kit.chromeOf
 import net.seilent.funekit.kit.motion.MoveKind
 import net.seilent.funekit.kit.motion.OverKind
 import net.seilent.funekit.kit.np.NpLayout
 import net.seilent.funekit.kit.stack.Phase
+import net.seilent.funekit.px
 import net.seilent.funekit.scale
 import net.seilent.funekit.screens.music.HUB_ALBUMS
 import net.seilent.funekit.screens.music.MusicPage
@@ -34,11 +38,22 @@ import net.seilent.funekit.screens.music.albcol.AlbumColGeo
 import net.seilent.funekit.screens.music.albcol.AlbumColModel
 import net.seilent.funekit.screens.music.album.AlbumGeo
 import net.seilent.funekit.screens.music.headerWord
+import net.seilent.funekit.screens.music.hub.HUB_SONGS
 import net.seilent.funekit.screens.music.hub.HubGeo
 import net.seilent.funekit.screens.music.hub.HubModel
 import net.seilent.funekit.screens.music.hub.cellAt
 import net.seilent.funekit.screens.music.pivots
 import net.seilent.funekit.screens.music.testFake
+import net.seilent.funekit.screens.settings.AimKind
+import net.seilent.funekit.screens.settings.HeaderLook
+import net.seilent.funekit.screens.settings.SETTINGS
+import net.seilent.funekit.screens.settings.SettingKind
+import net.seilent.funekit.screens.settings.SettingPivot
+import net.seilent.funekit.screens.settings.SettingRow
+import net.seilent.funekit.screens.settings.SettingsId
+import net.seilent.funekit.screens.settings.SettingsModel
+import net.seilent.funekit.screens.settings.SettingsPage
+import net.seilent.funekit.screens.settings.SettingsRows
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -73,8 +88,9 @@ class CarryTest {
     private val fake = testFake(FakeSet.Demo)
     private val music = MusicSource(fake.library, fake.player, fake.quickplay, fake.favorites, fake.playlists, fake.lyrics)
 
-    private fun launcher() {
+    private fun launcher(vararg pages: SettingsPage) {
         app = TestApp(page, page, music, StillLevel) { SystemClock.uptimeMillis() }
+        app.settingsList = pages.toList()
         app.compose(rule, root = true)
         rule.waitForIdle()
         rule.mainClock.autoAdvance = false
@@ -275,6 +291,105 @@ class CarryTest {
         until("the tap on the landed album asks the play open") { stack.turn?.kind == MoveKind.T7 }
     }
 
+    private class Rows(start: List<SettingPivot>) : SettingsRows {
+        override val pivots = mutableStateOf(start)
+        val opens = mutableListOf<String>()
+
+        override fun open(row: SettingRow): Boolean {
+            opens += row.key
+            return false
+        }
+
+        override suspend fun set(key: String, value: String): Boolean = true
+    }
+
+    @Test
+    fun aTapCarriedDuringALiftedSheetsCloseDropsItAtOnceAndActsOnTheRowAtItsBase() {
+        val rows = Rows(listOf(SettingPivot(OUT, (0 until LIFT_ROWS).map { SettingRow("r$it", "r$it", FOUR[0], SettingKind.Choice, values = FOUR, words = FOUR, at = 0) })))
+        launcher(SettingsPage(SET_ID, rows, HeaderLook.Settings))
+        val sc = TestScreen.Settings(stack.entry(), SET_ID)
+        rule.runOnUiThread { stack.reset(listOf(sc)) }
+        settle()
+        val m = app.models[sc.entry] as SettingsModel
+        rule.runOnUiThread {
+            app.host.types.settings.drawOf(m)
+            m.down(LIFT_ROW, SystemClock.uptimeMillis())
+            m.cancel(SystemClock.uptimeMillis())
+        }
+        val before = m.pane.px
+        val y = (px(page.board.page_contentTop, page.ppu) + m.tops(m.pivot)[0] + m.heights(m.pivot)[0] / 2 - before).toFloat()
+        rule.runOnUiThread { app.host.settingsTap(m, m.rows(m.pivot)[LIFT_ROW]) }
+        settle()
+        assertTrue("premise: the lift moved the pane and landed", m.pane.px > before && m.aimKind == AimKind.None)
+        rule.runOnUiThread { stack.close() }
+        until("premise: the sheet closes") { stack.overlay?.closing == true }
+        assertTrue("premise: the close drops the lift over the scroll time", m.aimKind == AimKind.Drop && m.aimMs == Tok.motion_scroll)
+        sync()
+        send(MotionEvent.ACTION_DOWN, TAP_X, y)
+        step(TAP_MS)
+        assertNull("the carry lands the close", stack.overlay)
+        send(MotionEvent.ACTION_UP, TAP_X, y)
+        frame()
+        frame()
+        assertEquals("the land drops the page at once", before, m.pane.px)
+        assertEquals("the replayed tap acts on the row under the finger at the base", "r0", rows.opens.last())
+    }
+
+    private fun songsHub(): HubModel {
+        val (_, h) = hubAtRest()
+        rule.runOnUiThread { h.select(HUB_SONGS) }
+        until("premise: the songs pane loads") { (h.pane.map?.count ?: 0) > 0 }
+        return h
+    }
+
+    private fun pickFar(h: HubModel): Int {
+        val letter = rule.runOnUiThread { (0 until LETTERS).last { h.pane.map?.has(it) == true } }
+        val grid = page.kept()
+        rule.runOnUiThread {
+            h.jumpPick = -1
+            h.colPick = -1
+            h.jump.open(h.avail(), letter, grid.stdContentBottom)
+            app.host.openJump(stack.top!!)
+        }
+        settle()
+        assertEquals("premise: the jump grid is up", OverKind.Jump, stack.overlay?.kind)
+        val slot = Jump.slotOf(letter)
+        val x = (Jump.cellX(slot) + Jump.tile / 2) * grid.stdPpu
+        val y = (Jump.rowTop(slot) - h.jump.offset + Jump.tile / 2) * grid.stdPpu
+        sync()
+        send(MotionEvent.ACTION_DOWN, x, y)
+        step(TAP_MS)
+        send(MotionEvent.ACTION_UP, x, y)
+        assertEquals("premise: the letter is picked", letter, h.jumpPick)
+        return letter
+    }
+
+    private fun jumpRows(h: HubModel, y: Float): Pair<Int, Int> {
+        val j = checkNotNull(h.aimJump) { "premise: the drop starts the pick's jump" }
+        val v = (y - HubGeo(page).top).toInt()
+        val start = h.pane.track.rowAt(v + Math.round(j.from * h.aimU))
+        val end = h.pane.track.rowAt(v + Math.round(j.to * h.aimU))
+        assertTrue("premise: the rows at the jump's start and end differ, $start and $end", start != end)
+        return start to end
+    }
+
+    @Test
+    fun aTapCarriedDuringAGridPicksCloseActsOnTheRowAtTheJumpsStart() {
+        val h = songsHub()
+        pickFar(h)
+        until("premise: the pick closes the grid") { stack.overlay?.closing == true }
+        val y = HubGeo(page).let { it.top + it.view / 2f }
+        sync()
+        send(MotionEvent.ACTION_DOWN, TAP_X, y)
+        step(TAP_MS)
+        assertNull("the carry lands the close", stack.overlay)
+        val (start, _) = jumpRows(h, y)
+        send(MotionEvent.ACTION_UP, TAP_X, y)
+        frame()
+        frame()
+        assertEquals("the replayed tap acts on the row under the finger at the jump's start", start, h.pane.focus.row)
+    }
+
     companion object {
         private const val SETTLE = 1000L
         private const val MAX_FRAMES = 200
@@ -284,5 +399,10 @@ class CarryTest {
         private const val TAP_X = 360f
         private const val HOLD_PAST = 100L
         private const val NP_RINGS = 3
+        private const val LIFT_ROWS = 4
+        private const val LIFT_ROW = 2
+        private const val OUT = "output"
+        private val FOUR = listOf("off", "low", "mid", "high")
+        private val SET_ID = SettingsId(SETTINGS)
     }
 }

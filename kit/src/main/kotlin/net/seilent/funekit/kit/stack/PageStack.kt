@@ -109,6 +109,9 @@ class PageStack<P : Any>(
             override val turning: Boolean
                 get() = phase != Phase.Rest && opened == null && pending == 0 && overlay.let { it == null || !(it.closing || it.moving(clock)) }
 
+            override val closing: Boolean
+                get() = phase == Phase.Rest && opened == null && pending == 0 && overlay.let { it != null && it.hud == null && it.closing }
+
             override val motion: Boolean
                 get() = phase != Phase.Rest || overlay.let { it != null && (it.closing || it.moving(clock)) }
 
@@ -343,7 +346,7 @@ class PageStack<P : Any>(
     }
 
     private fun landBack(now: Long, popKind: (Turn<P>) -> MoveKind) {
-        landOverlay(now)
+        landOverlay(now, step = true)
         if (phase != Phase.Rest) land(now)
         val open = overlay
         val page = top
@@ -430,7 +433,9 @@ class PageStack<P : Any>(
     }
 
     fun touchDown() {
+        onMain("PageStack.touchDown")
         held = null
+        if (overlay.let { it != null && it.hud == null && !it.closing && it.moving(clock) }) landOverlay(clock, step = true)
         ask { now ->
             val o = overlay
             if (o == null || !(o.closing || o.moving(now))) touch(now)
@@ -439,9 +444,10 @@ class PageStack<P : Any>(
 
     private fun carryLand() {
         held = null
+        val c = overlay?.takeIf { it.closing }
         ask { now ->
             val o = overlay
-            if (o == null || !(o.closing || o.moving(now))) touch(now)
+            if (o == null || !(o.closing || o.moving(now)) || (o === c && o.closing)) touch(now)
             replayDue = true
         }
     }
@@ -460,13 +466,15 @@ class PageStack<P : Any>(
     private fun touch(now: Long) {
         armedLand(now)
         val o = overlay
-        if (o != null && (o.closing || o.moving(now))) landOverlay(now)
+        if (o != null && (o.closing || o.moving(now))) landOverlay(now, step = true)
         if (phase != Phase.Rest) land(now)
     }
 
-    private fun landOverlay(now: Long, show: Boolean = true) {
+    private fun landOverlay(now: Long, show: Boolean = true, step: Boolean = false) {
         val o = overlay ?: return
+        val moved = step && o.hud == null && (o.closing || o.moving(now))
         if (o.land(now)) dropOverlay(show)
+        if (moved) o.landed?.invoke()
     }
 
     private fun reversible(): Boolean {

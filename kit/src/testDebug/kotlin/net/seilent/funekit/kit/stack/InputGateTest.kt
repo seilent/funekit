@@ -39,12 +39,15 @@ import net.seilent.funekit.kit.motion.OverlayGate
 import net.seilent.funekit.kit.motion.PageMove
 import net.seilent.funekit.kit.motion.Part
 import net.seilent.funekit.kit.motion.Prop
+import net.seilent.funekit.kit.overlay.VolumeHud
 import net.seilent.funekit.kit.touch.Gesture
 import net.seilent.funekit.kit.touch.Slop
 import net.seilent.funekit.scale
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -335,6 +338,83 @@ class InputGateTest {
         assertTrue(o.moving(t0 + TURN_AT + TAP_IN + STEP))
         assertFalse(o.closing)
         assertEquals(o, stack.overlay)
+    }
+
+    private fun closingOver(o: Overlay) {
+        stack.open(o)
+        frame(TURN_AT)
+        frame(TURN_AT + SCAN)
+        assertFalse("premise: the overlay rests", o.closing || o.moving(t0 + TURN_AT + SCAN))
+        stack.close()
+        frame(CLOSE_AT)
+        assertTrue("premise: the overlay closes", stack.overlay === o && o.closing)
+    }
+
+    @Test
+    fun aTapDuringASheetsCloseLandsItAndTheLandedPageTakesItAtItsOwnPoint() {
+        val rest = restTap()
+        wire { Matrix().also { it.setTranslate(-CARRY_DX, 0f) } }
+        closingOver(Overlay(OverKind.Sheet))
+        tap(CLOSE_AT + STEP, CLOSE_AT + STEP + TAP_UP)
+        assertTrue("a down during the close is carried", seen.isEmpty())
+        frame(CLOSE_AT + 2 * STEP)
+        assertNull("the carry lands the close", stack.overlay)
+        assertTrue(seen.isEmpty())
+        settle()
+        frame(CLOSE_AT + 3 * STEP)
+        assertEquals(listOf(PAGE to DOWN, PAGE to UP), names())
+        val p = at.single()
+        assertEquals("hub", p.first)
+        assertEquals("the landed page takes the down at its own point", rest.second, p.second, NEAR)
+        assertEquals(rest.third, p.third, NEAR)
+    }
+
+    @Test
+    fun aDragDuringASheetsCloseIsCarriedWholeToTheLandedPage() {
+        wire { Matrix() }
+        closingOver(Overlay(OverKind.Sheet))
+        val down = CLOSE_AT + STEP
+        raw(MotionEvent.ACTION_DOWN, down, down, DRAG_Y0)
+        raw(MotionEvent.ACTION_MOVE, down + DRAG_STEP, down, DRAG_Y0 - DRAG_D1)
+        assertTrue("the drag is carried", got.isEmpty())
+        frame(down + STEP)
+        assertNull("the carry lands the close", stack.overlay)
+        frame(down + 2 * STEP)
+        assertEquals(2, got.size)
+        raw(MotionEvent.ACTION_MOVE, down + 2 * DRAG_STEP, down, DRAG_Y0 - DRAG_D2)
+        raw(MotionEvent.ACTION_MOVE, down + 3 * DRAG_STEP, down, DRAG_Y0 - DRAG_D3)
+        raw(MotionEvent.ACTION_UP, down + 4 * DRAG_STEP, down, DRAG_Y0 - DRAG_D3)
+        assertEquals(listOf(0L, 1L, 2L, 3L, 4L).map { t0 + down + 2 * STEP + it * DRAG_STEP }, got.map { it.second })
+        assertEquals(List(got.size) { t0 + down + 2 * STEP }, got.map { it.third })
+    }
+
+    @Test
+    fun aTapDuringTheJumpGridsCloseLandsItAndTheLandedPageTakesIt() {
+        restTap()
+        wire { Matrix() }
+        closingOver(Overlay(OverKind.Jump))
+        tap(CLOSE_AT + STEP, CLOSE_AT + STEP + TAP_UP)
+        assertTrue("a down during the grid's close is carried", seen.isEmpty())
+        frame(CLOSE_AT + 2 * STEP)
+        assertNull("the carry lands the close", stack.overlay)
+        settle()
+        frame(CLOSE_AT + 3 * STEP)
+        assertEquals(listOf(PAGE to DOWN, PAGE to UP), names())
+    }
+
+    @Test
+    fun aDownWhileTheVolumeHudHidesIsNotCarried() {
+        restTap()
+        wire { Matrix() }
+        val hud = VolumeHud().also { it.show(t0 + TURN_AT, PCT, true, "artist", "title") }
+        val o = Overlay(OverKind.Volume, hud)
+        closingOver(o)
+        tap(CLOSE_AT + STEP, CLOSE_AT + STEP + TAP_UP)
+        settle()
+        assertEquals("a down while the hud hides passes at once", listOf(PAGE to DOWN, PAGE to UP), names())
+        frame(CLOSE_AT + 2 * STEP)
+        assertSame("the hud stays", o, stack.overlay)
+        assertTrue("the hud still hides", hud.hiding && hud.visible(t0 + CLOSE_AT + 2 * STEP))
     }
 
     @Test
@@ -909,6 +989,23 @@ class InputGateTest {
         assertEquals(listOf(DOWN to 128L, MOVE to 198L), sheetSeen)
     }
 
+    @Test
+    fun aDownCarriedOverAClosingSheetLandsASheetOpenedBeforeItsAskOnlyAtItsReplay() {
+        val b = Overlay(OverKind.Sheet)
+        held(Modifier.sheetBox(b))
+        closingOver(Overlay(OverKind.Sheet))
+        stack.open(b)
+        hsend(MotionEvent.ACTION_DOWN, CLOSE_AT + STEP, CLOSE_AT + STEP, HOLD_X, BODY_Y)
+        assertTrue("premise: the down is carried", log.isEmpty())
+        frame(CLOSE_AT + 2 * STEP)
+        assertTrue("the carry's ask leaves the sheet opened before it rising", stack.overlay === b && b.moving(t0 + CLOSE_AT + 2 * STEP))
+        assertTrue("the down waits for the replay", log.isEmpty() && sheetSeen.isEmpty())
+        frame(CLOSE_AT + 3 * STEP)
+        assertFalse("the replayed down lands the open's rise", b.moving(t0 + CLOSE_AT + 3 * STEP))
+        assertEquals("and the landed sheet takes it", listOf(DOWN to CLOSE_AT + 3 * STEP), sheetSeen)
+        hsend(MotionEvent.ACTION_UP, CLOSE_AT + 3 * STEP, CLOSE_AT + STEP, HOLD_X, BODY_Y)
+    }
+
     private companion object {
         const val BOUND = 500L
         const val CARRY_DX = 12f
@@ -943,5 +1040,7 @@ class InputGateTest {
         const val BODY_Y = 200f
         const val HEADER = "header"
         const val ROW = "row"
+        const val CLOSE_AT = TURN_AT + SCAN + STEP
+        const val PCT = 50
     }
 }

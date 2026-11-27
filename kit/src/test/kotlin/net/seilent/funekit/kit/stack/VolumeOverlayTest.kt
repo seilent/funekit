@@ -16,29 +16,29 @@ import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+internal class Vol {
+    val hud = VolumeHud()
+    var commits = 0
+    val closings = mutableListOf<Overlay>()
+    val dropped = mutableListOf<String>()
+    val stack = PageStack<String>(
+        MoveForms(),
+        { PageKind.Hub },
+        closing = { o, _ -> closings += o },
+        dropped = { p, _ -> dropped += p },
+    ) { MoveEnds() }.also { it.pages.add("hub") }
+    val o = Overlay(OverKind.Volume, hud) { commits++ }
+
+    init {
+        hud.show(0, 50, true, "artist", "title")
+        stack.open(o)
+        stack.frame(0)
+    }
+}
+
 class VolumeOverlayTest {
     private val gone = 282L + 2027L + 650L + 267L
     private val pop: (Turn<String>) -> MoveKind = { MoveKind.T4 }
-
-    private class Vol {
-        val hud = VolumeHud()
-        var commits = 0
-        val closings = mutableListOf<Overlay>()
-        val dropped = mutableListOf<String>()
-        val stack = PageStack<String>(
-            MoveForms(),
-            { PageKind.Hub },
-            closing = { o, _ -> closings += o },
-            dropped = { p, _ -> dropped += p },
-        ) { MoveEnds() }.also { it.pages.add("hub") }
-        val o = Overlay(OverKind.Volume, hud) { commits++ }
-
-        init {
-            hud.show(0, 50, true, "artist", "title")
-            stack.open(o)
-            stack.frame(0)
-        }
-    }
 
     @Test
     fun theHudOpensWithNoFocusHideAndNoCover() {
@@ -165,15 +165,5 @@ class VolumeOverlayTest {
         assertTrue("no close", v.closings.isEmpty())
         assertTrue("no dropped", v.dropped.isEmpty())
         assertNull(v.stack.turn)
-    }
-
-    @Test
-    fun aDownLandsNothingWhileTheHudRests() {
-        val v = Vol()
-        v.stack.touchDown()
-        v.stack.frame(500)
-        assertSame(v.o, v.stack.overlay)
-        assertTrue(v.hud.visible(500))
-        assertFalse(v.hud.hiding)
     }
 }

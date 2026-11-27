@@ -193,6 +193,7 @@ import net.seilent.funekit.screens.music.overlay.sheetItems
 import net.seilent.funekit.screens.music.overlay.sheetWords
 import net.seilent.funekit.screens.music.pivotBy
 import net.seilent.funekit.screens.music.queue.QueueModel
+import net.seilent.funekit.screens.settings.AimKind
 import net.seilent.funekit.screens.settings.FieldPress
 import net.seilent.funekit.screens.settings.FieldSheet
 import net.seilent.funekit.screens.settings.HeaderLook
@@ -656,7 +657,7 @@ class MusicHost<S : Any> internal constructor(
 
     fun down() {
         hubOf(stack.top)?.stopAim()
-        rowsOf(stack.top)?.stopAim()
+        rowsOf(stack.top)?.takeIf { it.aimKind != AimKind.Lift && it.aimKind != AimKind.Drop }?.stopAim()
     }
 
     private fun npSeekLive(): Boolean = stack.phase == Phase.Rest && stack.top?.let(::isNp) == true
@@ -769,6 +770,13 @@ class MusicHost<S : Any> internal constructor(
         if (o !== liftOver) return
         liftModel?.drop(minOf(o.dur().toFloat(), Tok.motion_scroll))
         liftModel?.poke()
+    }
+
+    private fun liftLanded(o: Overlay) {
+        val m = liftModel ?: return
+        if (o !== liftOver) return
+        if (o.closing) m.drop(0f) else if (m.aimKind == AimKind.Lift) m.stopAim()
+        m.poke()
     }
 
     internal fun settingsTap(m: SettingsModel, row: SettingRow) {
@@ -1653,9 +1661,10 @@ class MusicHost<S : Any> internal constructor(
                     }
                     liftOver = null
                     liftModel = null
-                } else if (sm != null && o !== liftOver && panel >= 0) {
+                } else if (sm != null && o !== liftOver && panel >= 0 && o.moving(now())) {
                     liftOver = o
                     liftModel = sm
+                    o.landed = { liftLanded(o) }
                     val pg = env.page
                     if (sm.lift(px(pg.board.page_contentTop, pg.ppu), panel - px(Tok.gutter, pg.ppu), menuHost.menu.kept) && !o.closing) o.open(now() + Tok.motion_scroll.toLong())
                     sm.poke()
