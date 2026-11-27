@@ -22,10 +22,10 @@ interface Player {
     suspend fun seek(ms: Long)
     suspend fun stop()
 
-    suspend fun enqueue(ids: List<Long>)
-    suspend fun enqueue(listing: Listing, generation: Long)
-    suspend fun playNext(ids: List<Long>)
-    suspend fun playNext(listing: Listing, generation: Long)
+    suspend fun enqueue(ids: List<Long>): Int
+    suspend fun enqueue(listing: Listing, generation: Long): Int
+    suspend fun playNext(ids: List<Long>): Int
+    suspend fun playNext(listing: Listing, generation: Long): Int
     suspend fun move(from: Int, to: Int, revision: Long)
     suspend fun remove(index: Int, revision: Long)
     suspend fun playAt(index: Int, revision: Long)

@@ -316,8 +316,8 @@ class FakePlayer internal constructor(
         schedule()
     }
 
-    private fun add(ids: List<Long>, edit: () -> Unit) {
-        if (ids.isEmpty()) return
+    private fun add(ids: List<Long>, edit: () -> Unit): Int {
+        if (ids.isEmpty()) return 0
         val empty = queue.size == 0
         edit()
         if (empty) {
@@ -326,6 +326,7 @@ class FakePlayer internal constructor(
         } else {
             edited()
         }
+        return ids.size
     }
 
     private fun edited() {

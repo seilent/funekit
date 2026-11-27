@@ -1541,9 +1541,12 @@ abstract class SeamContract {
         val second = view.allRows(Listing.AlbumTracks(other.id)).map { it.id }
         val song = songs(s, 1).single()
         edit(s) { s.player.play(listOf(song), 0, 0) }
-        edit(s) { s.player.enqueue(Listing.AlbumTracks(album.id), view.generation) }
+        var n = 0
+        edit(s) { n = s.player.enqueue(Listing.AlbumTracks(album.id), view.generation) }
+        assertEquals(first.size, n)
         assertEquals(listOf(song) + first, queue(s))
-        edit(s) { s.player.playNext(Listing.AlbumTracks(other.id), view.generation) }
+        edit(s) { n = s.player.playNext(Listing.AlbumTracks(other.id), view.generation) }
+        assertEquals(second.size, n)
         assertEquals(listOf(song) + second + first, queue(s))
         val g = view.generation
         s.change()
