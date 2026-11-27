@@ -5,6 +5,7 @@ import net.seilent.funekit.screens.music.overlay.SheetFrom
 import net.seilent.funekit.screens.music.overlay.SheetKind
 import net.seilent.funekit.screens.music.overlay.sheetItems
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.TestCoroutineScheduler
 import net.seilent.funekit.Insets
 import net.seilent.funekit.Nav
 import net.seilent.funekit.Surface
@@ -104,6 +105,23 @@ class ArtistTest {
         val m = model(f, id)
         assertEquals(SONG_ADDED, artistAdd(f.player, m))
         assertEquals(1, f.player.state.value.queueSize)
+    }
+
+    @Test
+    fun anArtistAddAtTheQueueEndToastsTheSongsItAdded() = runBlocking {
+        val scheduler = TestCoroutineScheduler()
+        val f = testFake(FakeSet.Demo, scheduler)
+        val m = model(f, artist(f.library.view()) { it > 0 })
+        val v = f.library.view()
+        val songs = v.page(Listing.ArtistTracks(m.id), 0, 0).total
+        assertTrue("premise: the artist has more than one song", songs > 1)
+        val last = v.page(Listing.ArtistTracks(m.id), songs - 1, 1).rows.single()
+        f.player.play(Listing.ArtistTracks(m.id), v.generation, songs - 1, checkNotNull(last.durationMs) - 500)
+        scheduler.advanceTimeBy(1_000)
+        scheduler.runCurrent()
+        assertFalse("premise: the queue ended", f.player.state.value.playing)
+        assertEquals(SONGS_ADDED, artistAdd(f.player, m))
+        assertEquals(songs, f.player.state.value.queueSize)
     }
 
     @Test

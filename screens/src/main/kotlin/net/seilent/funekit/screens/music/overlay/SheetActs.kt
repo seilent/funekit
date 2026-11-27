@@ -154,15 +154,13 @@ suspend fun runSheet(word: String, t: SheetTarget, src: MusicSource): SheetDone 
         }
         SHUFFLE -> if (listing != null) p.play(listing, t.generation, -1, 0L, shuffle = true)
         PLAY_NEXT, ADD -> {
-            val before = p.state.value.queueSize
             val one = t.kind == SheetKind.Song || t.kind == SheetKind.Tile && t.pin == Kind.Song
             val next = word == PLAY_NEXT
-            when {
+            val n = when {
                 one && t.track != null -> if (next) p.playNext(listOf(t.track)) else p.enqueue(listOf(t.track))
                 listing != null -> if (next) p.playNext(listing, t.generation) else p.enqueue(listing, t.generation)
                 else -> return SheetDone.Close
             }
-            val n = p.state.value.queueSize - before
             if (n <= 0) return SheetDone.Close
             return SheetDone.Toast(if (n == 1) SONG_ADDED else SONGS_ADDED, t.title)
         }

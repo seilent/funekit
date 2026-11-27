@@ -60,9 +60,7 @@ const val RING_ADD = 1
 const val RING_SHUFFLE = 2
 
 suspend fun artistAdd(p: Player, am: ArtistModel): String? {
-    val before = p.state.value.queueSize
-    p.enqueue(Listing.ArtistTracks(am.id), am.gen)
-    val added = p.state.value.queueSize - before
+    val added = p.enqueue(Listing.ArtistTracks(am.id), am.gen)
     return if (added <= 0) null else if (added == 1) SONG_ADDED else SONGS_ADDED
 }
 

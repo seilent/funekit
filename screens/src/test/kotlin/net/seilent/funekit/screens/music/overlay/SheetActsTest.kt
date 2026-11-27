@@ -121,6 +121,21 @@ class SheetActsTest {
     }
 
     @Test
+    fun anAddAtTheQueueEndToastsTheSongItAdded() {
+        val a = song(0)
+        val b = song(1)
+        runBlocking { f.player.play(listOf(a.id, b.id), 1, checkNotNull(b.durationMs) - 500) }
+        scheduler.advanceTimeBy(1_000)
+        scheduler.runCurrent()
+        assertFalse("premise: the queue ended", f.player.state.value.playing)
+        val s = song(40)
+        val t = SheetTarget(SheetKind.Song, s.title, Listing.Songs, gen(), 40, s.id, Kind.Song, s.id)
+        assertEquals(SheetDone.Toast(SONG_ADDED, s.title), runBlocking { runSheet(ADD, t, src) })
+        val q = runBlocking { f.library.view().page(Listing.Queue, 0, 10).rows.map { it.id } }
+        assertEquals(listOf(s.id), q)
+    }
+
+    @Test
     fun addingAnEmptyPlaylistToastsNothing() {
         val id = runBlocking {
             val made = checkNotNull(f.playlists.create(TrackSet.Ids(listOf(f.library.view().page(Listing.Songs, 0, 1).rows.single().id))))
