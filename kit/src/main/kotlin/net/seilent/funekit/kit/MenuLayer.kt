@@ -28,6 +28,7 @@ import net.seilent.funekit.Scale
 import net.seilent.funekit.kit.motion.OverKind
 import net.seilent.funekit.kit.motion.Overlay
 import net.seilent.funekit.kit.motion.OverlayGate
+import net.seilent.funekit.kit.motion.motionSeq
 import net.seilent.funekit.kit.motion.rememberOverlayFrame
 import net.seilent.funekit.kit.touch.Arbiter
 import net.seilent.funekit.kit.touch.BlockBelow
@@ -123,7 +124,15 @@ internal fun MenuOverlay(
     val pitch by rememberUpdatedState(plan.pitch)
     val close by rememberUpdatedState(onClose)
     val slop by rememberUpdatedState(a.slop)
-    val frame = rememberOverlayFrame(overlay, now, menu::animating, menu::wakeAt, { menu.version }) { t -> menu.tick(t, ink, plan, s) }
+    val moves = remember(overlay) { intArrayOf(0) }
+    val frame = rememberOverlayFrame(overlay, now, menu::animating, menu::wakeAt, { menu.version }) { t ->
+        menu.tick(t, ink, plan, s)
+        if (overlay.movedSeq != moves[0]) {
+            moves[0] = overlay.movedSeq
+            a.cancel(layer, moves[0])
+            menu.lift(t)
+        }
+    }
     val draw: DrawScope.() -> Unit = {
         menuLayer(menu, ink, plan, overlay, s, frame.value, accent, accentOff, paint, tick = false)
         if (band != null) navBand(s, band)
@@ -148,7 +157,7 @@ internal fun MenuOverlay(
                     onPress = { if (gate.down(overlay, now(), a.downAt)) menu.press(i, now()) },
                     onCancel = { menu.press(-1, now()) },
                     onTap = { if (!gate.passes(overlay, menu.confirm) || !onPick(i)) menu.press(-1, now()) },
-                    onLong = onHold?.let { h -> { !overlay.closing && !overlay.moving(now()) && h(i) } },
+                    onLong = onHold?.let { h -> { gate.live(overlay) && !overlay.closing && !overlay.moving(now()) && h(i) } },
                 )
                 Box(Modifier.pxAt(e).tapTarget(a, tap, layer))
             }
@@ -196,6 +205,7 @@ internal suspend fun PointerInputScope.swipeDownClose(
         val x0 = d.position.x
         val y0 = d.position.y
         if (overlay.closing || overlay.moving(now())) return@awaitEachGesture
+        val seq = motionSeq
         down()
         val atTop = top()
         var low = y0
@@ -206,11 +216,11 @@ internal suspend fun PointerInputScope.swipeDownClose(
                 val ys = c.historical.map { it.position.y } + c.position.y
                 for (y in ys) {
                     low = minOf(low, y)
-                    if (onY(y0, y)) moved = true
+                    if (overlay.movedSeq <= seq && onY(y0, y)) moved = true
                 }
                 if (!c.pressed) {
                     val swiped = slop().swipeDownOf(c.position.x - x0, c.position.y - y0) == Swipe.Down
-                    if (atTop && !moved && !scrolled() && y0 - low <= slop().slop && swiped) close()
+                    if (overlay.movedSeq <= seq && atTop && !moved && !scrolled() && y0 - low <= slop().slop && swiped) close()
                     break
                 }
             }

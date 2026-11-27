@@ -31,6 +31,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import net.seilent.funekit.Scale
 import net.seilent.funekit.gen.Tok
+import net.seilent.funekit.kit.motion.motionSeq
 import net.seilent.funekit.kit.stack.onMain
 import net.seilent.funekit.px
 
@@ -273,6 +274,8 @@ class Arbiter(val scale: Scale) {
         var list: ListTouch? = null
         var pan: Pan? = null
         var inside = false
+        var modal = 0
+        var seq = 0
     }
 
     internal var live: Live? = null
@@ -282,6 +285,11 @@ class Arbiter(val scale: Scale) {
     fun cancel() {
         onMain("Arbiter.cancel")
         live?.let { end(it) }
+    }
+
+    internal fun cancel(layer: Int, seq: Int) {
+        val g = live ?: return
+        if (g.seq < seq && g.modal >= layer) end(g)
     }
 
     private fun end(g: Live) {
@@ -446,6 +454,8 @@ fun Modifier.arbiter(a: Arbiter, swipes: Swipes): Modifier {
             val g = Arbiter.Live()
             g.tap = tap
             g.list = list
+            g.modal = a.modal
+            g.seq = motionSeq
             a.live = g
             val n = a.cancels
             var long = tap?.onLong != null
@@ -495,7 +505,7 @@ fun Modifier.arbiter(a: Arbiter, swipes: Swipes): Modifier {
 
             fun begin(x: Float, origin: Float): Boolean {
                 val p = page.pan ?: return false
-                if (panned != null || a.modal != 0 || !p.begin(x, origin, down.position)) return false
+                if (panned != null || !open || a.modal != 0 || !p.begin(x, origin, down.position)) return false
                 panned = p
                 g.pan = p
                 return true

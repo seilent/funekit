@@ -298,6 +298,7 @@ class PageStack<P : Any>(
 
     private fun dropOverlay(show: Boolean = true) {
         val was = overlay
+        was?.moved()
         overlay = null
         hideFocus = false
         covered = false

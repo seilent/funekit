@@ -43,6 +43,8 @@ import net.seilent.funekit.kit.stack.PageStackClock
 import net.seilent.funekit.kit.stack.watchHeld
 import net.seilent.funekit.kit.touch.Arbiter
 import net.seilent.funekit.kit.touch.Gesture
+import net.seilent.funekit.kit.touch.Pan
+import net.seilent.funekit.kit.touch.Swipe
 import net.seilent.funekit.kit.touch.Swipes
 import net.seilent.funekit.kit.touch.Tap
 import net.seilent.funekit.kit.touch.arbiter
@@ -196,6 +198,19 @@ class MenuOverlayTest {
     private val a105 = scale(Window(720, 1280, 35, none, none, none, none, none), Nav.None, Surface.Page, false)
     private lateinit var stack: PageStack<String>
     private val jumped = mutableListOf<Int>()
+    private val toast = Toast()
+    private var toastTaps = 0
+    private val panBegins = mutableListOf<Offset>()
+    private val pan = object : Pan {
+        override fun begin(x: Float, origin: Float, down: Offset): Boolean {
+            panBegins += down
+            return true
+        }
+
+        override fun drag(x: Float) {}
+
+        override fun end(s: Swipe) {}
+    }
 
     private fun clock() = rule.mainClock.currentTime
 
@@ -211,15 +226,16 @@ class MenuOverlayTest {
                     if (stack.moving) watchHeld(stack, d, a.slop, false, Gesture.Edge.None) { MoveKind.T4 }
                 }
             }
-            Box(root.arbiter(a, Swipes(false, false, false, { false }, { _, _ -> }))) {
+            Box(root.arbiter(a, Swipes(false, false, false, { false }, { _, _ -> }, pan))) {
                 Box(Modifier.fillMaxSize().tapTarget(a, Tap({}, {}, { under++ })))
                 val o = stack.overlay
                 if (o != null && m != null) {
-                    MenuOverlay(m, o, a105, a, { clock() + lag }, onPick = { picks += it; stack.accept(); true }, onClose = { closes++; stack.close() }, layer = 1)
+                    MenuOverlay(m, o, a105, a, { clock() + lag }, onPick = { picks += it; stack.accept(); true }, onClose = { closes++; stack.close() }, layer = 1, onHold = { holds += it; true })
                 }
                 if (o != null && g != null) {
                     JumpGridOverlay(g, o, a105, a, ::clock, onPick = { jumped += it }, onExit = { stack.close() }, onSearch = {}, layer = 1)
                 }
+                ToastStrip(toast, a105, ::clock, { ToastPlace.Top }, a105.heightPx, a = a, layer = 1, onTap = { toastTaps++ })
             }
         }
         rule.mainClock.advanceTimeBy(32)
@@ -415,6 +431,275 @@ class MenuOverlayTest {
         assertTrue(picks.isEmpty())
         press(360f, item(m, 2))
         assertEquals(listOf(2), picks)
+    }
+
+    private fun oneFrame() {
+        Snapshot.sendApplyNotifications()
+        rule.mainClock.advanceTimeByFrame()
+    }
+
+    private fun framesUntil(what: String, ok: () -> Boolean) {
+        var n = 0
+        while (!ok()) {
+            oneFrame()
+            assertTrue(what, ++n < MAX_FRAMES)
+        }
+    }
+
+    private fun atRest(): Pair<Menu, Overlay> {
+        val m = opened(OverKind.Sheet, MenuForm.Sheet)
+        rule.mainClock.advanceTimeBy(1000)
+        val o = checkNotNull(stack.overlay)
+        assertFalse("premise: the sheet rests", o.closing || o.moving(clock()))
+        return m to o
+    }
+
+    private fun downAt(x: Float, y: Float) {
+        rule.onRoot().performTouchInput { down(Offset(x, y)) }
+    }
+
+    private fun lift() {
+        rule.onRoot().performTouchInput { up() }
+        rule.mainClock.advanceTimeBy(16)
+    }
+
+    private fun slideRight() {
+        val d = Arbiter(a105).slop.swipe + 10f
+        rule.onRoot().performTouchInput {
+            moveBy(Offset(d / 2, 0f))
+            moveBy(Offset(d / 2, 0f))
+            up()
+        }
+        rule.mainClock.advanceTimeBy(16)
+    }
+
+    private fun toastAt(): Offset {
+        toast.show(clock(), "artist", "title", track = true)
+        Snapshot.sendApplyNotifications()
+        rule.mainClock.advanceTimeBy(500)
+        val r = checkNotNull(toast.hitRect(a105, clock())) { "premise: the toast takes a tap" }
+        return Offset((r.x0 + r.x1) / 2f, (r.y0 + r.y1) / 2f)
+    }
+
+    @Test
+    @Config(qualifiers = A105_SCREEN)
+    fun anUpInTheFrameASwapRestartsTheRisePicksNothing() {
+        val (m, o) = atRest()
+        downAt(360f, item(m, 2))
+        rule.mainClock.advanceTimeBy(Tok.motion_pressGlow.toLong() + WAKE)
+        stack.swapMenu(o) {}
+        framesUntil("premise: the swap restarts the rise") { o.moving(clock()) }
+        assertEquals("premise: the menu's step has not cut the press yet", 2, m.pressed)
+        lift()
+        assertTrue("an up in the frame of a swap picks nothing, $picks", picks.isEmpty())
+    }
+
+    @Test
+    @Config(qualifiers = A105_SCREEN)
+    fun aPressHeldAcrossASwapDropsAtItsStepAndItsUpPicksNothing() {
+        val (m, o) = atRest()
+        downAt(360f, item(m, 2))
+        assertEquals("premise: the down presses the row", 2, m.pressed)
+        stack.swapMenu(o) {}
+        framesUntil("premise: the swap restarts the rise") { o.moving(clock()) }
+        repeat(2) { oneFrame() }
+        assertEquals("the press drops", -1, m.pressed)
+        lift()
+        assertTrue(picks.isEmpty())
+    }
+
+    @Test
+    @Config(qualifiers = A105_SCREEN)
+    fun anUpInTheFrameItsSheetStartsToClosePicksNothing() {
+        val (m, o) = atRest()
+        downAt(360f, item(m, 2))
+        rule.mainClock.advanceTimeBy(Tok.motion_pressGlow.toLong() + WAKE)
+        stack.close()
+        framesUntil("premise: the sheet closes") { o.closing }
+        assertEquals("premise: the menu's step has not cut the press yet", 2, m.pressed)
+        lift()
+        assertTrue("an up in the frame its sheet starts to close picks nothing, $picks", picks.isEmpty())
+    }
+
+    @Test
+    @Config(qualifiers = A105_SCREEN)
+    fun aHoldOnASheetCutUnderTheFingerFiresNothing() {
+        val (m, _) = atRest()
+        downAt(360f, item(m, 2))
+        stack.cut()
+        oneFrame()
+        rule.mainClock.advanceTimeBy(Tok.input_keyHoldMs.toLong() + HOLD_STEP, ignoreFrameDuration = true)
+        assertTrue("premise: the sheet is cut", stack.overlay == null)
+        assertTrue("a hold on a cut sheet fires nothing, $holds", holds.isEmpty())
+        lift()
+    }
+
+    @Test
+    @Config(qualifiers = A105_SCREEN)
+    fun aSwipeDownBegunAtRestClosesNothingAfterASwap() {
+        val (m, o) = atRest()
+        downAt(360f, item(m, 0))
+        stack.swapMenu(o) {}
+        framesUntil("premise: the swap restarts the rise") { o.moving(clock()) }
+        rule.mainClock.advanceTimeBy(1000)
+        rule.onRoot().performTouchInput {
+            moveBy(Offset(0f, 100f))
+            moveBy(Offset(0f, 100f))
+            up()
+        }
+        rule.mainClock.advanceTimeBy(16)
+        assertEquals("a swipe down begun before a swap closes nothing", 0, closes)
+    }
+
+    @Test
+    @Config(qualifiers = A105_SCREEN)
+    fun aDragScrollBegunAtRestStopsAtASwap() {
+        val m = lines(12)
+        stacked(m)
+        stack.open(Overlay(OverKind.Sheet))
+        Snapshot.sendApplyNotifications()
+        repeat(OPEN_FRAMES) { if (stack.overlay == null) rule.mainClock.advanceTimeByFrame() }
+        rule.mainClock.advanceTimeBy(1000)
+        val o = checkNotNull(stack.overlay)
+        downAt(360f, 1100f)
+        stack.swapMenu(o) {}
+        framesUntil("premise: the swap restarts the rise") { o.moving(clock()) }
+        rule.mainClock.advanceTimeBy(1000)
+        rule.onRoot().performTouchInput {
+            moveBy(Offset(0f, -161f))
+            moveBy(Offset(0f, -161f))
+        }
+        rule.mainClock.advanceTimeBy(16)
+        assertEquals("a drag begun before a swap scrolls nothing", 0, m.first)
+        lift()
+    }
+
+    @Test
+    @Config(qualifiers = A105_SCREEN)
+    fun aDragScrollHeldAsItsSheetStartsToCloseReleasesItsThumbThere() {
+        val m = lines(12)
+        stacked(m)
+        stack.open(Overlay(OverKind.Sheet))
+        Snapshot.sendApplyNotifications()
+        repeat(OPEN_FRAMES) { if (stack.overlay == null) rule.mainClock.advanceTimeByFrame() }
+        rule.mainClock.advanceTimeBy(1000)
+        val o = checkNotNull(stack.overlay)
+        downAt(360f, 1100f)
+        rule.onRoot().performTouchInput {
+            moveBy(Offset(0f, -161f))
+            moveBy(Offset(0f, -161f))
+        }
+        repeat(2) { oneFrame() }
+        assertTrue("premise: the drag scrolls and holds the thumb", m.first > 0 && m.held && m.fade.wakeAt(clock()) < 0)
+        stack.close()
+        framesUntil("premise: the sheet closes") { o.closing }
+        repeat(2) { oneFrame() }
+        assertFalse("the close lifts the drag's hold with the finger still down", m.held)
+        assertTrue("the thumb fade is released at the close's frame", m.fade.wakeAt(clock()) >= 0)
+        rule.onRoot().performTouchInput { moveBy(Offset(0f, -161f)) }
+        oneFrame()
+        assertFalse("a move after the close holds nothing again", m.held)
+        lift()
+    }
+
+    @Test
+    @Config(qualifiers = A105_SCREEN)
+    fun aCellPressHeldAsTheJumpGridStartsToCloseDropsAndPicksNothing() {
+        val g = JumpGrid().also { it.open(BooleanArray(Section.count) { true }, 0, 1280f / a105.stdPpu) }
+        stacked(null, g)
+        stack.open(Overlay(OverKind.Jump))
+        Snapshot.sendApplyNotifications()
+        rule.mainClock.advanceTimeBy(1000)
+        val o = checkNotNull(stack.overlay)
+        assertFalse("premise: the grid rests", o.closing || o.moving(clock()))
+        val i = Jump.itemOf(1)
+        downAt(px(Tok.jumpLeft + Tok.jumpPitch + Tok.jumpPitch / 2, a105.stdPpu).toFloat(), px(Tok.jumpTop + Tok.jumpPitch / 2, a105.stdPpu).toFloat())
+        oneFrame()
+        assertTrue("premise: the down lights the letter", g.press.lit(i, clock()) > 0f)
+        stack.close()
+        framesUntil("premise: the grid closes") { o.closing }
+        repeat(2) { oneFrame() }
+        assertEquals("the cell press drops", 0f, g.press.lit(i, clock()), 0f)
+        lift()
+        assertTrue("its up picks nothing, $jumped", jumped.isEmpty())
+    }
+
+    @Test
+    @Config(qualifiers = A105_SCREEN)
+    fun aSlideBegunOnASheetCutUnderTheFingerBeginsNoPan() {
+        val (m, _) = atRest()
+        downAt(360f, item(m, 2))
+        stack.cut()
+        repeat(PRESS_FRAMES) { oneFrame() }
+        assertTrue("premise: the sheet is cut", stack.overlay == null)
+        slideRight()
+        assertTrue("a slide begun on a cut sheet begins no pan, $panBegins", panBegins.isEmpty())
+    }
+
+    @Test
+    @Config(qualifiers = A105_SCREEN)
+    fun aSlideBegunDuringASheetsCloseBeginsNoPan() {
+        val (m, o) = atRest()
+        stack.close()
+        framesUntil("premise: the sheet closes") { o.closing }
+        downAt(360f, item(m, 2))
+        framesUntil("premise: the sheet is gone") { stack.overlay == null }
+        repeat(PRESS_FRAMES) { oneFrame() }
+        slideRight()
+        assertTrue("a slide begun during a close begins no pan, $panBegins", panBegins.isEmpty())
+    }
+
+    @Test
+    @Config(qualifiers = A105_SCREEN)
+    fun aDroppedOpenLeavesTheTouchOnTheSheetUnderIt() {
+        val (m, o) = atRest()
+        downAt(360f, item(m, 2))
+        stack.open(Overlay(OverKind.Sheet))
+        repeat(PRESS_FRAMES) { oneFrame() }
+        assertTrue("premise: the open is dropped and the sheet stays", stack.overlay === o)
+        lift()
+        assertEquals(listOf(2), picks)
+    }
+
+    @Test
+    @Config(qualifiers = A105_SCREEN)
+    fun aToastPressHeldAcrossTheSheetsCloseTapsNothing() {
+        val (_, o) = atRest()
+        val at = toastAt()
+        downAt(at.x, at.y)
+        assertTrue("premise: the toast takes the down", toast.press.held)
+        stack.close()
+        framesUntil("premise: the sheet closes") { o.closing }
+        repeat(2) { oneFrame() }
+        lift()
+        assertEquals("a toast press held across the close taps nothing", 0, toastTaps)
+    }
+
+    @Test
+    @Config(qualifiers = A105_SCREEN)
+    fun aToastPressBegunAfterASwapStillTaps() {
+        val (_, o) = atRest()
+        val at = toastAt()
+        stack.swapMenu(o) {}
+        framesUntil("premise: the swap restarts the rise") { o.moving(clock()) }
+        downAt(at.x, at.y)
+        assertTrue("premise: the toast takes the down", toast.press.held)
+        repeat(PRESS_FRAMES) { oneFrame() }
+        lift()
+        assertEquals("a toast press begun after the swap taps", 1, toastTaps)
+    }
+
+    @Test
+    @Config(qualifiers = A105_SCREEN)
+    fun aPageTapHeldAcrossASheetOpenStillTaps() {
+        stacked(three(MenuForm.Sheet))
+        downAt(360f, 640f)
+        stack.open(Overlay(OverKind.Sheet))
+        Snapshot.sendApplyNotifications()
+        repeat(OPEN_FRAMES) { oneFrame() }
+        assertTrue("premise: the sheet is up", stack.overlay != null)
+        lift()
+        assertEquals("a page tap held across the open taps", 1, under)
     }
 
     @Test
@@ -1205,5 +1490,6 @@ class MenuOverlayTest {
         private const val TAIL_LEFT = 4f
         private const val TAIL_MOVES = 5
         private const val TAIL_FRAMES = 2
+        private const val MAX_FRAMES = 100
     }
 }

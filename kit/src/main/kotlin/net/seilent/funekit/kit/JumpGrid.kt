@@ -342,6 +342,7 @@ internal fun JumpGridOverlay(
         )
     }
     val cells = remember(s) { JumpCells(s) }
+    val moves = remember(overlay) { intArrayOf(0) }
     val touch = rememberListTouch(Kind.Grid, s)
     val tops = remember(sp) { (0..Jump.rows).map { px(Tok.jumpTop + it * Tok.jumpPitch, sp) } }
     val end = px(Jump.content(), sp)
@@ -378,6 +379,10 @@ internal fun JumpGridOverlay(
         }
         g.moved = touch.moving || touch.dragging
         g.fade.track(g.thumbOn(s), touch.moving || touch.dragging, t)
+        if (overlay.movedSeq != moves[0]) {
+            moves[0] = overlay.movedSeq
+            a.cancel(layer, moves[0])
+        }
     }
     val paint = remember { Paint() }
     val draw: DrawScope.() -> Unit = {
@@ -428,6 +433,7 @@ internal fun JumpGridOverlay(
                             val tap = Tap(
                                 onPress = { if (gate.down(overlay, now())) g.down(i, now()) },
                                 onCancel = { g.press.cancel(now()) },
+                                onCut = { g.press.drop() },
                                 onTap = {
                                     if (gate.passes(overlay, false)) {
                                         g.press.tap(now())

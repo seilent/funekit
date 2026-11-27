@@ -13,6 +13,8 @@ private const val PRESS_STEPS = 16f
 private const val LOG_STEPS = 10f
 private const val MS_PER_S = 1000f
 
+internal var motionSeq = 0
+
 fun lerp(a: Float, b: Float, t: Float): Float = a + (b - a) * t
 
 class Leg(
@@ -114,6 +116,12 @@ class Overlay(val kind: OverKind, val hud: OverHud? = null, private val commit: 
     var back: (() -> Boolean)? = null
     var revision by mutableIntStateOf(0)
         private set
+    internal var movedSeq = 0
+        private set
+
+    internal fun moved() {
+        movedSeq = ++motionSeq
+    }
 
     fun open(now: Long) {
         start = now
@@ -121,6 +129,7 @@ class Overlay(val kind: OverKind, val hud: OverHud? = null, private val commit: 
         backMs = -1
         risen = -1L
         revision++
+        moved()
     }
 
     fun rise(now: Long) {
@@ -157,6 +166,7 @@ class Overlay(val kind: OverKind, val hud: OverHud? = null, private val commit: 
             closed = true
             start = now
             revision++
+            moved()
             return
         }
         if (e <= 0) {
@@ -183,6 +193,7 @@ class Overlay(val kind: OverKind, val hud: OverHud? = null, private val commit: 
         closed = true
         start = now
         revision++
+        moved()
     }
 
     fun wakeAt(now: Long): Long? = hud?.wakeAt(now)
@@ -522,12 +533,16 @@ class Press {
 class OverlayGate {
     private var at = -1L
     private var shut = false
+    private var seq = 0
 
     fun down(o: Overlay, now: Long, at: Long = now): Boolean {
         this.at = at
+        seq = motionSeq
         shut = o.closing || o.moving(now)
         return !shut
     }
 
-    fun passes(o: Overlay, confirm: Boolean): Boolean = !shut && !(confirm && (o.risen < 0 || at <= o.risen))
+    fun passes(o: Overlay, confirm: Boolean): Boolean = !shut && live(o) && !(confirm && (o.risen < 0 || at <= o.risen))
+
+    internal fun live(o: Overlay): Boolean = o.movedSeq <= seq
 }
