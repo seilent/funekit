@@ -260,6 +260,16 @@ class LyricsModelTest {
     }
 
     @Test
+    fun theLineWakeOutsideTheViewKeepsTheLineTimeWithLyricsModeOff() {
+        val m = loaded()
+        assertFalse("premise: lyrics mode is off", m.mode)
+        assertEquals(10_600L, m.lineDue(at(1400), 10_000, 10_000))
+        assertEquals(-1L, m.lineDue(at(1400, running = false), 10_000, 10_000))
+        assertEquals(-1L, m.lineDue(LyricAt(1, 2, 1400, false, true), 10_000, 10_000))
+        assertEquals(-1L, m.lineDue(at(3100), 10_000, 10_000))
+    }
+
+    @Test
     fun noLineWakeWhileTheLyricsAreHiddenOrHaveNoLine() {
         val m = loaded()
         assertEquals(-1L, m.due(at(1400), 10_000, 10_000))

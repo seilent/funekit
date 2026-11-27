@@ -253,8 +253,10 @@ class LyricsModel {
         return lo - 1
     }
 
-    fun due(at: LyricAt, seenAt: Long, now: Long): Long {
-        if (!shown(at.variant) || !at.running || index(at) == LYRIC_NONE) return -1
+    fun due(at: LyricAt, seenAt: Long, now: Long): Long = if (shown(at.variant)) lineDue(at, seenAt, now) else -1
+
+    fun lineDue(at: LyricAt, seenAt: Long, now: Long): Long {
+        if (!at.running || index(at) == LYRIC_NONE) return -1
         val i = lineAt(at.pos)
         if (i + 1 >= lines.size) return -1
         val due = seenAt + maxOf(1L, (lines[i + 1].ms - at.pos) * SPEED_PCT / at.speedPct)

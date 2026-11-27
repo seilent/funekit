@@ -27,7 +27,6 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -46,7 +45,6 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import net.seilent.funekit.Case
 import net.seilent.funekit.Role
@@ -142,7 +140,6 @@ import net.seilent.funekit.screens.music.nowplaying.AdjustHit
 import net.seilent.funekit.screens.music.nowplaying.AdjustHud
 import net.seilent.funekit.screens.music.nowplaying.AdjustLayer
 import net.seilent.funekit.screens.music.nowplaying.AdjustSource
-import net.seilent.funekit.screens.music.nowplaying.CoverBlur
 import net.seilent.funekit.screens.music.nowplaying.NowPlayingLayer
 import net.seilent.funekit.screens.music.nowplaying.NowPlayingModel
 import net.seilent.funekit.screens.music.nowplaying.NpAct
@@ -153,7 +150,6 @@ import net.seilent.funekit.screens.music.nowplaying.NpInks
 import net.seilent.funekit.screens.music.nowplaying.NpMeasure
 import net.seilent.funekit.screens.music.nowplaying.NpPaint
 import net.seilent.funekit.screens.music.nowplaying.NpPart
-import net.seilent.funekit.screens.music.nowplaying.NpPicture
 import net.seilent.funekit.screens.music.nowplaying.NpSplit
 import net.seilent.funekit.screens.music.nowplaying.OffsetSheet
 import net.seilent.funekit.screens.music.nowplaying.holding
@@ -2028,28 +2024,8 @@ class MusicHost<S : Any> internal constructor(
 
     @Composable
     private fun NpBackdropFeed() {
-        val pic by app.backdrop.collectAsState()
         val shown = np.lyricsView && np.lyrics.shown(np.variant)
-        val art = np.art?.takeIf { !np.artPhone }
-        val gs = npGeo.s
-        var cover by remember { mutableStateOf<Blurred?>(null) }
-        var showing by remember { mutableStateOf<Any?>(null) }
-        LaunchedEffect(art, shown, gs) {
-            if (!shown || art == null || cover?.of(art, gs) == true) return@LaunchedEffect
-            val id = np.artId
-            val img = withContext(np.workContext) { CoverBlur.image(art, gs.widthPx, gs.heightPx, gs) }
-            cover = Blurred(art, gs, img?.let { NpPicture(it, whole = true) }, id)
-        }
-        val done = cover?.takeIf { it.of(art, gs) }
-        val wait = shown && art != null && done == null
-        val want = (if (shown) done?.picture else null) ?: pic
-        LaunchedEffect(want, wait) {
-            if (wait) return@LaunchedEffect
-            val id = done?.takeIf { want != null && it.picture === want }?.artId
-            val t = now()
-            val same = id != null && id === showing
-            if (same && backdrop.fading(t)) backdrop.swap(want) else backdrop.set(want, t, cut = same)
-            showing = id
+        NpGround(backdrop, shown, np.art?.takeIf { !np.artPhone }, np.artId, app.backdrop, npGeo.s, np.workContext, ::now, { it }) { id, same ->
             npSongArt = id != null
             if (id != null && !same) app.npSongArtShown()
         }
@@ -2592,10 +2568,6 @@ fun <S : Any> rememberMusicHost(
     }
     host.update(app, env, src, volume, types, phone, feed, npGeo, npHalves, npHalfInks, navGround, split, view, settings.mapValues { it.value.first }, eq.mapValues { it.value.first })
     return host
-}
-
-private class Blurred(val art: ImageBitmap, val scale: Scale, val picture: NpPicture?, val artId: Any?) {
-    fun of(a: ImageBitmap?, s: Scale): Boolean = art === a && scale == s
 }
 
 private class FieldRun(val sheet: FieldSheet, val owner: Any?, val reopens: () -> Boolean, val track: Long? = null, val ends: () -> Boolean) {
