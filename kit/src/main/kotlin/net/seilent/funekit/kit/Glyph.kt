@@ -7,6 +7,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.DrawStyle
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.translate
@@ -109,34 +110,59 @@ fun outline(d: String): Outline {
     return Outline(subs, closed)
 }
 
-private val outlines = HashMap<String, Path>()
+internal object GlyphCache {
+    class Sized(val path: Path, val style: DrawStyle)
 
-private fun path(g: Glyph): Path = outlines.getOrPut(g.name) {
-    val o = outline(g.path)
-    Path().also { p ->
-        o.subs.forEachIndexed { k, s ->
-            p.moveTo(s.first().x, s.first().y)
-            for (q in s.drop(1)) p.lineTo(q.x, q.y)
-            if (o.closed[k]) p.close()
+    private class Sizes(val outline: Outline) {
+        var slots = floatArrayOf()
+        var sized = emptyArray<Sized>()
+    }
+
+    private val map = HashMap<Glyph, Sizes>()
+    var builds = 0
+        private set
+
+    fun glyph(g: Glyph, slotPx: Float): Sized {
+        val s = map.getOrPut(g) { Sizes(outline(g.path)) }
+        for (i in s.slots.indices) if (s.slots[i] == slotPx) return s.sized[i]
+        val k = slotPx / Glyphs.box
+        val style = if (g.fill) Fill else Stroke(Glyphs.stroke * k, MITER, StrokeCap.Butt, StrokeJoin.Miter)
+        val made = Sized(path(s.outline, slotPx.toInt(), k), style)
+        s.slots += slotPx
+        s.sized += made
+        builds++
+        return made
+    }
+
+    private fun path(o: Outline, px: Int, k: Float): Path {
+        val mid = middle(px)
+        val half = Glyphs.box / HALF.toFloat()
+        fun at(q: Float) = mid + (q - half) * k
+        return Path().also { p ->
+            o.subs.forEachIndexed { i, s ->
+                p.moveTo(at(s.first().x), at(s.first().y))
+                for (q in s.drop(1)) p.lineTo(at(q.x), at(q.y))
+                if (o.closed[i]) p.close()
+            }
         }
     }
 }
 
-private fun boxCenter(c: Float, px: Int): Float = ((floor(c).toInt() - (px shr 1)) + px / HALF).toFloat()
+private fun corner(c: Float, px: Int): Int = floor(c).toInt() - (px shr 1)
+
+private fun middle(px: Int): Float = (px / HALF).toFloat()
+
+private fun boxCenter(c: Float, px: Int): Float = (corner(c, px) + px / HALF).toFloat()
 
 fun boxCenter(c: Offset, px: Float): Offset = Offset(boxCenter(c.x, px.toInt()), boxCenter(c.y, px.toInt()))
 
 fun DrawScope.glyph(g: Glyph, center: Offset, slotPx: Float, color: Color, alpha: Float, scale: Float = 1f) {
-    val k = slotPx * scale / Glyphs.box
-    val half = Glyphs.box / HALF.toFloat()
-    val at = boxCenter(center, slotPx)
-    translate(at.x, at.y) {
-        withTransform({ scale(k, k, Offset.Zero) }) {
-            translate(-half, -half) {
-                val style = if (g.fill) Fill else Stroke(Glyphs.stroke, MITER, StrokeCap.Butt, StrokeJoin.Miter)
-                drawPath(path(g), color, alpha, style)
-            }
-        }
+    val px = slotPx.toInt()
+    val mid = middle(px)
+    val s = GlyphCache.glyph(g, slotPx)
+    translate(corner(center.x, px).toFloat(), corner(center.y, px).toFloat()) {
+        if (scale == 1f) drawPath(s.path, color, alpha, s.style)
+        else withTransform({ scale(scale, scale, Offset(mid, mid)) }) { drawPath(s.path, color, alpha, s.style) }
     }
 }
 
