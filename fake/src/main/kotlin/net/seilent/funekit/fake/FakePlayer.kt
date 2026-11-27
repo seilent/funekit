@@ -100,24 +100,24 @@ class FakePlayer internal constructor(
 
     override suspend fun enqueue(ids: List<Long>) = lock.withLock {
         library.present()
-        add(ids) { queue.enqueue(ids) }
+        add(ids, null) { queue.enqueue(ids) }
     }
 
     override suspend fun enqueue(listing: Listing, generation: Long) = lock.withLock {
         library.present()
         val ids = library.ids(listing, generation)
-        add(ids) { queue.enqueue(ids) }
+        add(ids, listing) { queue.enqueue(ids) }
     }
 
     override suspend fun playNext(ids: List<Long>) = lock.withLock {
         library.present()
-        add(ids) { queue.playNext(ids) }
+        add(ids, null) { queue.playNext(ids) }
     }
 
     override suspend fun playNext(listing: Listing, generation: Long) = lock.withLock {
         library.present()
         val ids = library.ids(listing, generation)
-        add(ids) { queue.playNext(ids) }
+        add(ids, listing) { queue.playNext(ids) }
     }
 
     override suspend fun move(from: Int, to: Int, revision: Long) = lock.withLock {
@@ -283,12 +283,12 @@ class FakePlayer internal constructor(
         if (revision != queue.revision) throw Stale(revision)
     }
 
-    private fun start(ids: List<Long>, index: Int, posMs: Long, from: Listing?, shuffle: Boolean, service: Long? = null) {
+    private fun start(ids: List<Long>, index: Int, posMs: Long, from: Listing?, shuffle: Boolean, service: Long? = null, play: Boolean = true) {
         origin = from
         streamed = service
         sleepEnd = false
         queue.set(ids, index, shuffle)
-        load(posMs, true)
+        load(posMs, play)
         emit(EngineEvent.QueueChanged)
     }
 
@@ -316,14 +316,12 @@ class FakePlayer internal constructor(
         schedule()
     }
 
-    private fun add(ids: List<Long>, edit: () -> Unit): Int {
+    private fun add(ids: List<Long>, from: Listing?, edit: () -> Unit): Int {
         if (ids.isEmpty()) return 0
-        val empty = queue.size == 0
-        edit()
-        if (empty) {
-            load(0, false)
-            emit(EngineEvent.QueueChanged)
+        if (stopped) {
+            start(ids, 0, 0, from, false, play = false)
         } else {
+            edit()
             edited()
         }
         return ids.size

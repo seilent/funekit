@@ -605,6 +605,37 @@ abstract class SeamContract {
     }
 
     @Test
+    fun anAddAfterTheQueueEndStartsANewQueuePausedAtItsFirstTrack() = runTest {
+        val s = open(Edge.Main)
+        val (a, b, c, d) = songs(s, 4)
+        s.player.play(listOf(a, b), 1, 0)
+        val st = playing(s, b)
+        s.player.seek(st.durationMs - 500)
+        s.until(s.player.state) { it.anchor.ms(s.elapsedNanos()) >= st.durationMs - 500 }
+        advanceTimeBy(1_000L)
+        val end = s.until(s.player.state) { !it.playing }
+        assertEquals(1, end.index)
+        assertEquals(b, end.track)
+        assertEquals(0L, end.anchor.frame)
+        var n = 0
+        edit(s) { n = s.player.playNext(listOf(c, d)) }
+        assertEquals(2, n)
+        assertEquals(listOf(c, d), queue(s))
+        val added = s.player.state.value
+        assertEquals(0, added.index)
+        assertEquals(c, added.track)
+        assertFalse(added.playing)
+        assertEquals(0L, ms(s))
+        edit(s) { n = s.player.enqueue(listOf(a)) }
+        assertEquals(1, n)
+        assertEquals(listOf(c, d, a), queue(s))
+        s.player.resume()
+        playing(s, c)
+        assertEquals(0, s.player.state.value.index)
+        assertTrue(ms(s) < 1_000)
+    }
+
+    @Test
     fun stopPausesAtTheStartAndKeepsTheQueue() = runTest {
         val s = open(Edge.Main)
         val ids = songs(s, 2)

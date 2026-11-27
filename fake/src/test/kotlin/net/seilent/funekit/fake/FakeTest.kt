@@ -40,6 +40,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.random.Random
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class FakeTest {
@@ -273,6 +274,30 @@ class FakeTest {
         assertTrue(ids[5] in queue.drop(1))
         f.player.shuffle(false)
         assertEquals(ids, f.library.view().allRows(Listing.Queue).map { it.id })
+    }
+
+    @Test
+    fun anAddToAnEmptyShuffledQueueStartsAtItsFirstTrackWithItsListing() = runTest {
+        val f = fake()
+        val view = f.library.view()
+        var listing: Listing? = null
+        var r = emptyList<Long>()
+        for (a in view.allRows(Listing.Albums)) {
+            val rows = view.allRows(Listing.AlbumTracks(a.id)).map { it.id }
+            if (rows.size >= 3 && rows.indices.shuffled(Random(7)).first() != 0) {
+                listing = Listing.AlbumTracks(a.id)
+                r = rows
+                break
+            }
+        }
+        val albumTracks = checkNotNull(listing)
+        f.player.shuffle(true)
+        assertEquals(r.size, f.player.enqueue(albumTracks, view.generation))
+        val st = f.player.state.value
+        assertEquals(r[0], st.track)
+        assertEquals(0, st.index)
+        assertEquals(albumTracks, st.origin)
+        assertFalse(st.playing)
     }
 
     @Test
