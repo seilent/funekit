@@ -43,6 +43,17 @@ class ArtCacheTest {
     }
 
     @Test
+    fun anAppsPictureIsCentreCroppedToItsSideAndKeptWhole() {
+        val src = Bitmap.createBitmap(60, 20, Bitmap.Config.ARGB_8888)
+        for (y in 0 until 20) for (x in 0 until 60) src.setPixel(x, y, if (x in 20 until 40) Color.BLUE else Color.RED)
+        val b = squareArt(src, 10)
+        assertEquals(10, b.width)
+        assertEquals(10, b.height)
+        for ((x, y) in listOf(0 to 0, 9 to 0, 0 to 9, 9 to 9, 5 to 5)) assertEquals(Color.BLUE, b.getPixel(x, y))
+        assertTrue("the app's own picture stays usable", !src.isRecycled && src.width == 60)
+    }
+
+    @Test
     fun everyPictureIsPowerOfTwoSampledToItsTileByItsBounds() {
         assertEquals(8, sampleOf(1000, 1000, 77))
         assertEquals(2, sampleOf(300, 160, 77))

@@ -196,3 +196,4 @@ kit/src/main/kotlin/net/seilent/funekit/kit/overlay/Volume.kt HOUR_S 3600 fos pl
 kit/src/main/kotlin/net/seilent/funekit/kit/overlay/Volume.kt HOUR_MS 3600000L fos player/ui/hud.cpp:29 a track of an hour or more reads h:mm:ss in the seek readout (seek_text)
 kit/src/main/kotlin/net/seilent/funekit/kit/lock/LockDrag.kt HALF 2f fos player/ui/lock.cpp:259 the commit at half the panel height: off * 2 >= H (funeOS ui/lock.cpp LockPage::up)
 kit/src/main/kotlin/net/seilent/funekit/kit/lock/LockLine.kt DIP_LEGS 2 fos player/ui/lock.cpp:88-92 the line change dips over one valueChange and rises over another (funeOS ui/lock.cpp LockPage::lyric_alpha)
+kit/src/main/kotlin/net/seilent/funekit/kit/lock/LockPaint.kt HALF 2f fos player/ui/lock.cpp:158 the Bluetooth glyph centred in the art square at ax + side / 2 (funeOS ui/lock.cpp LockPage::render)

@@ -56,10 +56,15 @@ fun decodeArt(bytes: ByteArray, px: Int): Bitmap? {
     if (min(bounds.outWidth, bounds.outHeight) <= 0 || px <= 0) return null
     val opts = BitmapFactory.Options().apply { inSampleSize = sampleOf(bounds.outWidth, bounds.outHeight, px) }
     val src = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts) ?: return null
+    val out = squareArt(src, px)
+    if (src !== out) src.recycle()
+    return out
+}
+
+fun squareArt(src: Bitmap, px: Int): Bitmap {
     val c = min(src.width, src.height)
     val crop = Bitmap.createBitmap(src, (src.width - c) shr 1, (src.height - c) shr 1, c, c)
     val out = Bitmap.createScaledBitmap(crop, px, px, true)
     if (crop !== src && crop !== out) crop.recycle()
-    if (src !== out) src.recycle()
     return out
 }
