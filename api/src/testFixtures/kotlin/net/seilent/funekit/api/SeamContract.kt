@@ -792,6 +792,19 @@ abstract class SeamContract {
     }
 
     @Test
+    fun trackInfoHoldsItsPathOnceSlashJoined() = runTest {
+        val s = open(Edge.Main)
+        val view = s.library.view()
+        val infos = songs(s, INFO_SONGS).map { checkNotNull(view.trackInfo(it)) }
+        assertTrue(infos.any { '/' in it.path })
+        for (info in infos) {
+            assertFalse(info.path, " / " in info.path)
+            val shown = info.path.split('/').joinToString(" / ")
+            assertTrue("${info.lines}", info.lines.none { it == info.path || it == shown })
+        }
+    }
+
+    @Test
     fun rowsCarryNumbersDurationsYearsAndCounts() = runTest {
         val s = open(Edge.Main)
         val view = s.library.view()
@@ -2065,5 +2078,6 @@ abstract class SeamContract {
         const val HUGE = 50_000
         const val SIDE = 4096
         const val SMALL = 4
+        const val INFO_SONGS = 10
     }
 }
