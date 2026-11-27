@@ -773,6 +773,31 @@ class MusicHost<S : Any> internal constructor(
         return o
     }
 
+    fun reopenSheet(o: Overlay, sheet: SettingSheet, pick: (Int) -> Boolean): Boolean {
+        if (stack.overlay !== o || o.closing || menuOvers.none { it === o }) return false
+        val menu = menuHost.menu
+        val lead = menu.lead
+        val focus = menu.focus.row
+        val mark = menu.mark
+        val value = menu.valueSheet
+        val t = now()
+        env.a.cancel()
+        menu.open(sheet.form, sheet.title, sheet.items, t, sheet.readOnly, sheet.mixedRow, lead = sheet.lead, confirm = sheet.confirm)
+        val f = if (sheet.focus >= 0) sheet.focus else menu.lead + focus - lead
+        val k = if (sheet.mark >= 0) sheet.mark else if (mark >= 0) menu.lead + mark - lead else -1
+        if (value || sheet.focus >= 0) {
+            menu.value(f, k, sheet.wrap, t)
+        } else {
+            menu.focus.set(f.coerceIn(menu.lead, maxOf(menu.lead, sheet.items.lastIndex)), sheet.items.size, t, false)
+            if (k in sheet.items.indices) menu.mark(k)
+        }
+        if (sheet.values.isNotEmpty() || sheet.mixed.isNotEmpty()) menu.cells(sheet.values, sheet.mixed, -1)
+        if (sheet.swatches.isNotEmpty()) menu.swatches(sheet.swatches)
+        frameMenu(menu, env.page, menuHost.lift) { liftRow(stack.top) }
+        menuHost.act = pick
+        return true
+    }
+
     private fun holding(): Boolean = stack.overlay == null && stack.taken
 
     fun closing(o: Overlay) {
