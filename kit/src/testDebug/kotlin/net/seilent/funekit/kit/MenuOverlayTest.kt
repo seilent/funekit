@@ -1330,6 +1330,48 @@ class MenuOverlayTest {
 
     @Test
     @Config(qualifiers = A105_SCREEN)
+    fun aFlingOnTheJumpGridStopsWhereItIsWhenTheGridCloses() {
+        val g = dragGrid()
+        val o = Overlay(OverKind.Jump)
+        watchJump(g, o)
+        raise(o)
+        while (o.moving(stack.clock)) tick()
+        dragPremises(g)
+        val at = cellAt(g, EMPTY)
+        rule.onRoot().performTouchInput { down(at) }
+        rule.onRoot().performTouchInput { moveBy(Offset(0f, -(arb.slop.slop + MOVE_PX))) }
+        tick()
+        repeat(MOVES) {
+            rule.onRoot().performTouchInput { moveBy(Offset(0f, -MOVE_PX)) }
+            tick()
+        }
+        rule.onRoot().performTouchInput { up() }
+        val list = checkNotNull(arb.listAt(at))
+        fun scrolled() = list.state.firstVisibleItemIndex to list.state.firstVisibleItemScrollOffset
+        tick()
+        val flung = scrolled()
+        tick()
+        assertTrue("premise: the fling moves the grid", list.moving && scrolled() != flung)
+        rule.runOnUiThread {
+            stack.close()
+            Snapshot.sendApplyNotifications()
+        }
+        var n = 0
+        while (!o.closing) {
+            tick()
+            assertTrue("premise: the grid closes", ++n < MAX_FRAMES)
+        }
+        tick()
+        val stop = scrolled()
+        while (stack.overlay === o) {
+            assertEquals("the grid stands where its close stopped it", stop, scrolled())
+            assertFalse("the fling stopped at the close", list.moving)
+            tick()
+        }
+    }
+
+    @Test
+    @Config(qualifiers = A105_SCREEN)
     fun aDragBringsTheJumpGridsFadedThumbBack() {
         val g = dragGrid()
         faded(g)

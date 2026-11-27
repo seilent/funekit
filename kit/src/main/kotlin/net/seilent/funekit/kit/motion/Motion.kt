@@ -114,6 +114,7 @@ class Overlay(val kind: OverKind, val hud: OverHud? = null, private val commit: 
     private var jumpFrom = JumpLook(0f, 1f, 0f)
     var lead = 0L
     var back: (() -> Boolean)? = null
+    internal var stop: (() -> Unit)? = null
     var revision by mutableIntStateOf(0)
         private set
     internal var movedSeq = 0
@@ -157,6 +158,7 @@ class Overlay(val kind: OverKind, val hud: OverHud? = null, private val commit: 
             return
         }
         if (closing) return
+        stop?.invoke()
         backMs = -1
         val e = now - start
         val d = dur()

@@ -3,6 +3,7 @@ package net.seilent.funekit.kit
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.State
@@ -344,6 +345,10 @@ internal fun JumpGridOverlay(
     val cells = remember(s) { JumpCells(s) }
     val moves = remember(overlay) { intArrayOf(0) }
     val touch = rememberListTouch(Kind.Grid, s)
+    DisposableEffect(overlay, touch) {
+        overlay.stop = touch::cancel
+        onDispose { overlay.stop = null }
+    }
     val tops = remember(sp) { (0..Jump.rows).map { px(Tok.jumpTop + it * Tok.jumpPitch, sp) } }
     val end = px(Jump.content(), sp)
     fun offset(): Float {
