@@ -14,6 +14,7 @@ import net.seilent.funekit.Insets
 import net.seilent.funekit.Nav
 import net.seilent.funekit.Surface
 import net.seilent.funekit.Window
+import net.seilent.funekit.gen.Tok
 import net.seilent.funekit.kit.motion.OverKind
 import net.seilent.funekit.kit.motion.Overlay
 import net.seilent.funekit.kit.touch.Arbiter
@@ -155,14 +156,14 @@ class OverlayHitTest {
         assertEquals(0, exits)
     }
 
-    private fun toast(place: ToastPlace): Toast {
+    private fun toast(place: ToastPlace, lag: Long = 0L): Toast {
         val t = Toast()
         rule.setContent {
             val a = remember { Arbiter(v1) }
             arb = a
             Box(Modifier.fillMaxSize().arbiter(a, Swipes(false, false, false, { false }, { _, _ -> }))) {
                 Box(Modifier.fillMaxSize().tapTarget(a, Tap({}, {}, { under++ })))
-                ToastStrip(t, v1, ::now, { place }, 320, a = a, onTap = { toastTaps++ })
+                ToastStrip(t, v1, { now() + lag }, { place }, 320, a = a, onTap = { toastTaps++ })
             }
         }
         rule.mainClock.autoAdvance = false
@@ -224,5 +225,65 @@ class OverlayHitTest {
         tapNow(120f, 30f)
         assertEquals(0, toastTaps)
         assertEquals(1, under)
+    }
+
+    private fun held(ms: Long) {
+        rule.onRoot().performTouchInput { down(Offset(120f, 300f)) }
+        rule.mainClock.advanceTimeBy(ms, ignoreFrameDuration = true)
+        rule.onRoot().performTouchInput { up() }
+    }
+
+    private fun upAfter(ms: Long) {
+        rule.onRoot().performTouchInput {
+            down(Offset(120f, 300f))
+            advanceEventTime(ms)
+            up()
+        }
+        rule.mainClock.advanceTimeBy(FRAME)
+    }
+
+    @Test
+    fun aToastHeldPastTheHoldTimeTapsNothingAtItsUp() {
+        val t = toast(ToastPlace.Bottom)
+        rule.mainClock.advanceTimeBy(RISEN)
+        held(Tok.input_keyHoldMs.toLong() + HOLD_STEP)
+        val lit = t.look(v1, now())?.lit ?: 0f
+        rule.mainClock.advanceTimeByFrame()
+        assertEquals("a toast held past the hold time taps nothing", 0, toastTaps)
+        val next = t.look(v1, now())?.lit ?: 0f
+        assertTrue("the press fades from the up, $lit then $next", lit > 0f && next < lit)
+        assertEquals(0, under)
+    }
+
+    @Test
+    fun aToastUpAtExactlyTheHoldTimeTapsNothing() {
+        toast(ToastPlace.Bottom)
+        rule.mainClock.advanceTimeBy(RISEN)
+        upAfter(Tok.input_keyHoldMs.toLong())
+        assertEquals("an up at the hold time taps nothing", 0, toastTaps)
+    }
+
+    @Test
+    fun aToastUpJustUnderTheHoldTimeTaps() {
+        toast(ToastPlace.Bottom)
+        rule.mainClock.advanceTimeBy(RISEN)
+        upAfter(Tok.input_keyHoldMs.toLong() - FRAME)
+        assertEquals("an up a frame under the hold time taps", 1, toastTaps)
+    }
+
+    @Test
+    fun aToastJudgesItsHoldByTheEventTimesNotTheTimeItIsHandled() {
+        toast(ToastPlace.Bottom, lag = LAG)
+        rule.mainClock.advanceTimeBy(RISEN)
+        held(Tok.input_keyHoldMs.toLong() - FRAME / 2)
+        rule.mainClock.advanceTimeBy(FRAME)
+        assertEquals("the up's event time is under the hold time, so it taps", 1, toastTaps)
+    }
+
+    companion object {
+        private const val RISEN = 150L
+        private const val HOLD_STEP = 50L
+        private const val LAG = 16L
+        private const val FRAME = 16L
     }
 }

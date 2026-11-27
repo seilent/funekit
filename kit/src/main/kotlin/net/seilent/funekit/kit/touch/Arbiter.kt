@@ -267,6 +267,7 @@ class Arbiter(val scale: Scale) {
 
     var downAt = 0L
         internal set
+    internal var upAt = 0L
 
     internal class Live {
         var tap: Tap? = null
@@ -616,6 +617,7 @@ fun Modifier.arbiter(a: Arbiter, swipes: Swipes): Modifier {
                     }
                     for (h in c.historical) step(h.position.x, h.position.y, h.uptimeMillis)
                     if (!c.pressed) {
+                        a.upAt = t
                         cutOff()
                         val bare = !c.positionChanged()
                         if (bare && !took) {

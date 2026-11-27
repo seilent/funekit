@@ -358,7 +358,11 @@ fun ToastStrip(
                 },
                 onTap = {
                     pokes++
-                    if (t.tap(now())) onTap()
+                    if (a.upAt - a.downAt < Tok.input_keyHoldMs.toLong()) {
+                        if (t.tap(now())) onTap()
+                    } else {
+                        t.cancel(now())
+                    }
                 },
                 onCut = {
                     t.reset()
