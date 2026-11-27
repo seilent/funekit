@@ -23,9 +23,12 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
+import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.input.pointer.util.addPointerInputChange
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalViewConfiguration
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -58,6 +61,7 @@ class ListTouch(
     internal val pitch: Int = rows?.pitch ?: 0,
     coast: FloatDecayAnimationSpec? = null,
     edge: Edge = Edge.Follow,
+    val fling: Fling = Fling.Board,
 ) {
     private val track: Track = rows?.let { r ->
         object : Track {
@@ -79,7 +83,7 @@ class ListTouch(
 
         override fun atEnd(forward: Boolean): Boolean = if (forward) !state.canScrollForward else !state.canScrollBackward
     }
-    val scroll = Scroll(kind, scale.touchPpu, scale.stdPpu, scale.ppu, track, coast, edge)
+    val scroll = Scroll(kind, scale.touchPpu, scale.stdPpu, scale.ppu, track, coast, edge, fling)
     var over by mutableFloatStateOf(0f)
         private set
     var moving by mutableStateOf(false)
@@ -204,8 +208,15 @@ fun rememberCoast(kind: Kind, scale: Scale): FloatDecayAnimationSpec? {
 }
 
 @Composable
-fun rememberListTouch(kind: Kind, scale: Scale, onRescale: () -> Unit = {}, rows: RowSpec? = null, edge: Edge = Edge.Follow): ListTouch {
-    if (rows != null) return rememberRowTouch(kind, scale, onRescale, rows, edge)
+fun rememberPlatformFling(): Fling.Platform {
+    val density = LocalDensity.current
+    val cap = LocalViewConfiguration.current.maximumFlingVelocity
+    return remember(density, cap) { Fling.Platform(SplineBasedFloatDecayAnimationSpec(density), cap) }
+}
+
+@Composable
+fun rememberListTouch(kind: Kind, scale: Scale, onRescale: () -> Unit = {}, rows: RowSpec? = null, edge: Edge = Edge.Follow, fling: Fling = Fling.Board): ListTouch {
+    if (rows != null) return rememberRowTouch(kind, scale, onRescale, rows, edge, fling)
     val ppu by rememberUpdatedState(scale.ppu)
     val state = rememberSaveable(saver = listSaver(
         save = { listOf(it.firstVisibleItemIndex.toFloat(), it.firstVisibleItemScrollOffset / ppu) },
@@ -221,13 +232,13 @@ fun rememberListTouch(kind: Kind, scale: Scale, onRescale: () -> Unit = {}, rows
     }
     val scope = rememberCoroutineScope()
     val coast = rememberCoast(kind, scale)
-    val touch = remember(kind, state, scale.touchPpu, scale.stdPpu, scale.ppu, coast, edge) { ListTouch(kind, state, scale, scope, coast = coast, edge = edge) }
+    val touch = remember(kind, state, scale.touchPpu, scale.stdPpu, scale.ppu, coast, edge, fling) { ListTouch(kind, state, scale, scope, coast = coast, edge = edge, fling = fling) }
     DisposableEffect(touch) { onDispose { touch.stop() } }
     return touch
 }
 
 @Composable
-private fun rememberRowTouch(kind: Kind, scale: Scale, onRescale: () -> Unit, rows: RowSpec, edge: Edge): ListTouch {
+private fun rememberRowTouch(kind: Kind, scale: Scale, onRescale: () -> Unit, rows: RowSpec, edge: Edge, fling: Fling): ListTouch {
     val ppu by rememberUpdatedState(scale.ppu)
     val spec by rememberUpdatedState(rows)
     val track = rememberSaveable(saver = listSaver(
@@ -248,7 +259,7 @@ private fun rememberRowTouch(kind: Kind, scale: Scale, onRescale: () -> Unit, ro
     }
     val scope = rememberCoroutineScope()
     val coast = rememberCoast(kind, scale)
-    val touch = remember(kind, state, scale.touchPpu, scale.stdPpu, scale.ppu, coast, edge) { ListTouch(kind, state, scale, scope, track, rows.pitch, coast, edge) }
+    val touch = remember(kind, state, scale.touchPpu, scale.stdPpu, scale.ppu, coast, edge, fling) { ListTouch(kind, state, scale, scope, track, rows.pitch, coast, edge, fling) }
     DisposableEffect(touch) { onDispose { touch.stop() } }
     return touch
 }
@@ -444,6 +455,8 @@ fun Modifier.arbiter(a: Arbiter, swipes: Swipes): Modifier {
             vel.add(t0, y0)
             val hit = a.tapAt(down.position)
             var list = if (hit?.solo == true) null else a.listAt(down.position)
+            val tracker = if (list?.fling is Fling.Platform) VelocityTracker() else null
+            tracker?.addPointerInputChange(down)
             val under = a.listAt(down.position)
             under?.pressed = true
             val cut = list?.cuts ?: 0
@@ -615,6 +628,7 @@ fun Modifier.arbiter(a: Arbiter, swipes: Swipes): Modifier {
                         if (!c.pressed) break
                         continue
                     }
+                    if (list != null) tracker?.addPointerInputChange(c)
                     for (h in c.historical) step(h.position.x, h.position.y, h.uptimeMillis)
                     if (!c.pressed) {
                         a.upAt = t
@@ -634,7 +648,7 @@ fun Modifier.arbiter(a: Arbiter, swipes: Swipes): Modifier {
                         if (list != null) vel.add(t, y)
                         g.tap = null
                         if (dragging) {
-                            list?.release(vel.perS())
+                            list?.release(tracker?.calculateVelocity()?.y ?: vel.perS())
                             dragging = false
                         } else if (tap != null && !held && a.slop.tap(x0, y0, x, y)) {
                             tap?.onTap?.invoke()

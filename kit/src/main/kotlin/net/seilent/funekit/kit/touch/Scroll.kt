@@ -21,6 +21,12 @@ enum class Kind { List, Quickplay, Grid }
 
 enum class Edge { Follow, Lead }
 
+sealed interface Fling {
+    data object Board : Fling
+
+    class Platform internal constructor(val decay: FloatDecayAnimationSpec, val cap: Float) : Fling
+}
+
 interface Track {
     val canMove: Boolean
 
@@ -71,9 +77,12 @@ class Scroll(
     stdPpu: Float,
     ppu: Float,
     private val track: Track,
-    private val coast: FloatDecayAnimationSpec? = null,
+    coast: FloatDecayAnimationSpec? = null,
     private val edge: Edge = Edge.Follow,
+    fling: Fling = Fling.Board,
 ) {
+    private val form = fling as? Fling.Platform
+    private val curve = form?.decay ?: coast
     private val retention = when (kind) {
         Kind.List -> Tok.motion_listFlingRetention
         Kind.Quickplay -> Tok.motion_qpFlingRetention
@@ -87,7 +96,7 @@ class Scroll(
     private val k = MS_PER_S / Tok.motion_flingTick * -ln(retention)
     private val stop = px(if (kind == Kind.Quickplay) Tok.motion_qpFlingStop else Tok.flingStop, touchPpu).toFloat()
     private val min = px(Tok.flingMin, touchPpu).toFloat()
-    private val cap = px(Tok.flingCap, touchPpu).toFloat()
+    private val cap = form?.cap ?: px(Tok.flingCap, touchPpu).toFloat()
     private val room = px(Tok.motion_overscrollCap, stdPpu).toFloat()
     private val land = Tok.motion_overscrollLand * ppu
     private val maxStep = Tok.motion_flingMaxStep.toLong()
@@ -122,19 +131,20 @@ class Scroll(
 
     fun travel(dt: Float): Float = (1 - keep(dt)) / k
 
-    fun travelOf(v0: Float): Float = coast?.getTargetValue(0f, v0) ?: (v0 / k)
+    fun travelOf(v0: Float): Float = curve?.getTargetValue(0f, v0) ?: (v0 / k)
 
     private fun nanos(ms: Long): Long = TimeUnit.MILLISECONDS.toNanos(ms)
 
     private fun ends() = kind != Kind.Grid && track.canMove
 
     fun flingVelocity(fingerV: Float): Float {
-        if (abs(fingerV) < min) return 0f
+        if (form == null && abs(fingerV) < min) return 0f
+        if (form != null && abs(fingerV) <= 1f) return 0f
         return -fingerV.coerceIn(-cap, cap)
     }
 
     fun grab(at: Long): Boolean {
-        val c = coast
+        val c = curve
         val fast = flinging && when {
             c != null -> abs(c.getVelocityFromNanos(nanos(max(0L, clock + at - last)), 0f, v0)) >= min
             at < last -> abs(v) >= min * keep((last - at).toFloat())
@@ -216,11 +226,12 @@ class Scroll(
             return
         }
         val pv = flingVelocity(fingerV)
-        if (abs(pv) < stop) return
+        if (form == null && abs(pv) < stop) return
+        if (form != null && pv == 0f) return
         v = pv
         last = now
         flinging = true
-        val c = coast ?: return
+        val c = curve ?: return
         v0 = pv
         clock = 0L
         pos = 0f
@@ -262,10 +273,10 @@ class Scroll(
             return true
         }
         if (!flinging) return false
-        val dt = (now - last).coerceIn(0L, maxStep)
+        val dt = if (form == null) (now - last).coerceIn(0L, maxStep) else max(0L, now - last)
         last = now
         if (dt == 0L) return true
-        val c = coast
+        val c = curve
         if (c != null) {
             clock += dt
             val p = c.getValueFromNanos(nanos(clock), 0f, v0)

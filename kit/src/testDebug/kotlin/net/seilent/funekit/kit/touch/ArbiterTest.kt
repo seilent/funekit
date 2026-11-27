@@ -1,14 +1,18 @@
 package net.seilent.funekit.kit.touch
 
+import android.view.ViewConfiguration as AndroidViewConfiguration
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -19,19 +23,25 @@ import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalViewConfiguration
+import androidx.compose.ui.platform.ViewConfiguration
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import net.seilent.funekit.Dpi
 import net.seilent.funekit.FuneTheme
 import net.seilent.funekit.Insets
 import net.seilent.funekit.Nav
+import net.seilent.funekit.Scale
 import net.seilent.funekit.Surface
 import net.seilent.funekit.Window
 import net.seilent.funekit.kept
@@ -40,6 +50,7 @@ import net.seilent.funekit.kit.scrub.edgeScrub
 import net.seilent.funekit.scale
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -47,8 +58,10 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import kotlin.math.ln
+import kotlin.math.pow
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
@@ -1424,6 +1437,25 @@ class ArbiterTest {
         const val ALBUM_VIEW = 524
         const val ALBUM_ABOVE = 345
         const val ALBUM_ROWS = 20
+        const val LEFT = 0.25f
+        const val RIGHT = 0.75f
+        const val R5_UP = 157L
+        const val R19_UP = 130L
+        const val DRAG_UP = 150L
+        const val ROW_PITCH = 165
+        const val ROW_VIEW = 2000
+        const val ROW_WIDTH = 1100
+        const val ROW_COUNT = 100
+        val R5 = listOf(
+            0L to 1647f, 24L to 1647f, 32L to 1647f, 41L to 1642f, 49L to 1627f, 58L to 1601f, 66L to 1569f, 74L to 1534f,
+            83L to 1497f, 91L to 1460f, 99L to 1420f, 108L to 1378f, 116L to 1329f, 124L to 1277f, 133L to 1224f,
+            141L to 1173f, 149L to 1122f,
+        )
+        val R19 = listOf(
+            0L to 1163f, 16L to 1163f, 24L to 1163f, 32L to 1163f, 40L to 1162f, 49L to 1158f, 57L to 1150f, 67L to 1136f,
+            76L to 1118f, 86L to 1098f, 94L to 1087f, 104L to 1047f, 112L to 1037f, 122L to 981f,
+        )
+        val DRAG = (0..10).map { it * 10L to 1600f - it * 50f }
     }
 
     private fun decay(retention: Float) = 3369f / (62.5f * -ln(retention))
@@ -1479,5 +1511,286 @@ class ArbiterTest {
         assertEquals(289.29f, pageList.scroll.travelOf(3369f), 0.01f)
         assertEquals(decay(0.83f), pageList.scroll.travelOf(3369f), 0.01f)
         assertEquals(decay(0.83f), pageRows.scroll.travelOf(3369f), 0.01f)
+    }
+
+    private val phone = scale(
+        Window(1080, 2160, 34, Insets(0, 66, 0, 0), Insets(0, 0, 0, 66), Insets(82, 0, 82, 0), none, none, Dpi(403.411f, 403.411f, 440, 1080, 2160, 1, 1080, 2160)),
+        Nav.Gesture,
+        Surface.Page,
+        false,
+    )
+    private lateinit var board: ListTouch
+    private val history = mutableListOf<Int>()
+
+    private fun twoLists(s: Scale) {
+        rule.setContent {
+            FuneTheme(s) {
+                val a = remember { Arbiter(s) }
+                arb = a
+                touch = rememberListTouch(Kind.List, s, fling = rememberPlatformFling())
+                board = rememberListTouch(Kind.List, s)
+                Row(Modifier.fillMaxSize().pointerInput(Unit) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val e = awaitPointerEvent(PointerEventPass.Initial)
+                            if (e.type == PointerEventType.Move) history += e.changes.first().historical.size
+                        }
+                    }
+                }.arbiter(a, page(turn = false))) {
+                    FuneList(a, touch, Modifier.weight(1f).fillMaxHeight()) { items(200) { Box(Modifier.fillMaxWidth().height(40.dp)) } }
+                    FuneList(a, board, Modifier.weight(1f).fillMaxHeight()) { items(200) { Box(Modifier.fillMaxWidth().height(40.dp)) } }
+                }
+            }
+        }
+        rule.waitForIdle()
+        rule.mainClock.autoAdvance = false
+    }
+
+    private fun phoneLists() {
+        twoLists(phone)
+        assertEquals(113f, arb.slop.slop)
+        assertTrue(rule.onRoot().fetchSemanticsNode().size.height > R5.first().second)
+    }
+
+    private fun flick(at: Float, samples: List<Pair<Long, Float>>, upAt: Long) {
+        rule.onRoot().performTouchInput {
+            val x = width * at
+            down(Offset(x, samples[0].second))
+            for (i in 1 until samples.size) moveTo(Offset(x, samples[i].second), delayMillis = samples[i].first - samples[i - 1].first)
+            advanceEventTime(upAt - samples.last().first)
+            up()
+        }
+    }
+
+    @OptIn(ExperimentalTestApi::class)
+    private fun batched(at: Float) {
+        rule.onRoot().performTouchInput {
+            val x = width * at
+            down(Offset(x, R5[0].second))
+            var t = R5[0].first
+            for (i in 1 until R5.size step 2) {
+                val (ht, hy) = R5[i]
+                val (ct, cy) = R5[i + 1]
+                updatePointerTo(0, Offset(x, cy))
+                moveWithHistory(listOf(ht - ct), listOf(Offset(x, hy)), delayMillis = ct - t)
+                t = ct
+            }
+            advanceEventTime(R5_UP - t)
+            up()
+        }
+    }
+
+    private fun released(t: ListTouch): Float {
+        var frames = 0
+        while (!t.scroll.flinging) {
+            rule.mainClock.advanceTimeByFrame()
+            assertTrue(++frames < 10)
+        }
+        return t.scroll.v
+    }
+
+    private fun scrolled(t: ListTouch): Float =
+        (t.state.firstVisibleItemIndex * t.state.layoutInfo.visibleItemsInfo.first().size + t.state.firstVisibleItemScrollOffset).toFloat()
+
+    @Test
+    @Config(qualifiers = "w400dp-h800dp-440dpi")
+    fun aPlatformFormTakesTheDisplaysMaximumFlingVelocity() {
+        lateinit var form: Fling.Platform
+        rule.setContent { FuneTheme(phone) { form = rememberPlatformFling() } }
+        rule.waitForIdle()
+        val cap = AndroidViewConfiguration.get(RuntimeEnvironment.getApplication()).scaledMaximumFlingVelocity.toFloat()
+        assertEquals(22000f, cap)
+        assertEquals(cap, form.cap)
+    }
+
+    @Test
+    @Config(qualifiers = "w400dp-h800dp-440dpi")
+    fun aPlatformTouchReleasesAtTheTrackersVelocityOverEverySampleFromTheDownAndABoardTouchAtTheTwoPointEstimate() {
+        phoneLists()
+        flick(LEFT, R5, R5_UP)
+        assertEquals(6943.076f, released(touch), 1f)
+        flick(RIGHT, R5, R5_UP)
+        assertEquals(4818.89f, released(board), 1f)
+    }
+
+    @Test
+    @Config(qualifiers = "w400dp-h800dp-440dpi")
+    fun aPlatformTouchReadsAFlickWhoseSlopExitComesLateFromItsDown() {
+        phoneLists()
+        flick(LEFT, R19, R19_UP)
+        assertEquals(3932.773f, released(touch), 1f)
+        flick(RIGHT, R19, R19_UP)
+        assertEquals(1812.5f, released(board), 1f)
+    }
+
+    @Test
+    @Config(qualifiers = "w400dp-h800dp-440dpi")
+    fun aPlatformTouchTakesTheHistoricalSamplesOfEachEvent() {
+        phoneLists()
+        batched(LEFT)
+        assertEquals(7, history.size)
+        assertEquals(setOf(1), history.toSet())
+        assertEquals(6943.076f, released(touch), 1f)
+        batched(RIGHT)
+        assertEquals(4818.89f, released(board), 1f)
+    }
+
+    @Test
+    @Config(qualifiers = "w400dp-h800dp-440dpi")
+    fun aFingerHeldStillPastTheTrackersStopBeforeTheUpFlingsNoPlatformTouch() {
+        phoneLists()
+        flick(LEFT, DRAG, DRAG_UP)
+        repeat(3) { rule.mainClock.advanceTimeByFrame() }
+        assertTrue(scrolled(touch) > 0f)
+        assertFalse(touch.scroll.flinging)
+        assertFalse(touch.moving)
+        flick(RIGHT, DRAG, DRAG_UP)
+        assertEquals(2500f, released(board), 1f)
+    }
+
+    @Test
+    fun aPlatformTouchStepsAndJudgesADownOnTheSplineOnAScaleWithNoCoast() {
+        assertFalse(v1.coast)
+        assertEquals(1f, v1.touchPpu)
+        twoLists(v1)
+        assertEquals(8000f, (touch.fling as Fling.Platform).cap)
+        rule.runOnUiThread {
+            touch.release(-2000f)
+            board.release(-2000f)
+        }
+        released(touch)
+        assertTrue(board.scroll.flinging)
+        repeat(3) { rule.mainClock.advanceTimeByFrame() }
+        assertEquals(94.94f, scrolled(touch), 1f)
+        assertEquals(73.54f, scrolled(board), 1f)
+        var steps = 0
+        var stepAt = 0L
+        rule.runOnUiThread {
+            touch.halt()
+            board.halt()
+            touch.onScroll = {
+                steps++
+                stepAt = it
+            }
+            touch.release(-6150f)
+        }
+        released(touch)
+        repeat(128) { rule.mainClock.advanceTimeByFrame() }
+        assertEquals(128, steps)
+        assertTrue(touch.scroll.flinging)
+        assertEquals(61.36f, touch.scroll.v, 1f)
+        assertTrue(touch.scroll.v * 0.83f.pow(6f / 16f) >= 50f)
+        assertFalse(rule.runOnUiThread { touch.scroll.grab(stepAt + 6) })
+    }
+
+    @Test
+    fun aPlatformTouchTravelsTheSplineOnAScaleWithNoCoast() {
+        assertFalse(v1.coast)
+        twoLists(v1)
+        assertEquals(647.40f, touch.scroll.travelOf(2000f), 0.01f)
+        assertEquals(171.74f, board.scroll.travelOf(2000f), 0.01f)
+    }
+
+    @Test
+    @Config(qualifiers = "w400dp-h800dp-440dpi")
+    fun aPlatformTouchKeepsItsFlingThroughARecompositionAndANewFlingCapOrDensityRebuildsItOnItsState() {
+        var bump by mutableIntStateOf(0)
+        var slow by mutableStateOf(false)
+        var dense by mutableStateOf(false)
+        var seen = -1
+        rule.setContent {
+            val base = LocalViewConfiguration.current
+            val outer = LocalDensity.current
+            val capped = remember(base) { slowed(base) }
+            CompositionLocalProvider(LocalViewConfiguration provides if (slow) capped else base, LocalDensity provides if (dense) Density(2f) else outer) {
+                FuneTheme(phone) {
+                    val a = remember { Arbiter(phone) }
+                    touch = rememberListTouch(Kind.List, phone, fling = rememberPlatformFling())
+                    val b = bump
+                    SideEffect { seen = b }
+                    Box(Modifier.fillMaxSize().arbiter(a, page(turn = false))) {
+                        FuneList(a, touch, Modifier.fillMaxSize()) { items(200) { Box(Modifier.fillMaxWidth().height(40.dp)) } }
+                    }
+                }
+            }
+        }
+        rule.waitForIdle()
+        rule.mainClock.autoAdvance = false
+        val first = touch
+        rule.runOnUiThread { first.release(-6943.076f) }
+        released(first)
+        rule.runOnUiThread {
+            bump++
+            Snapshot.sendApplyNotifications()
+        }
+        rule.mainClock.advanceTimeByFrame()
+        assertEquals(1, seen)
+        assertSame(first, touch)
+        val p = scrolled(first)
+        rule.mainClock.advanceTimeByFrame()
+        assertTrue(first.scroll.flinging)
+        assertTrue(scrolled(first) > p)
+        rule.runOnUiThread {
+            slow = true
+            Snapshot.sendApplyNotifications()
+        }
+        rule.mainClock.advanceTimeByFrame()
+        assertEquals(12000f, (touch.fling as Fling.Platform).cap)
+        assertNotSame(first, touch)
+        assertSame(first.state, touch.state)
+        val q = scrolled(touch)
+        rule.mainClock.advanceTimeByFrame()
+        assertEquals(q, scrolled(touch), 0f)
+        val slowTouch = touch
+        rule.runOnUiThread {
+            dense = true
+            Snapshot.sendApplyNotifications()
+        }
+        rule.mainClock.advanceTimeByFrame()
+        assertNotSame(slowTouch, touch)
+        assertEquals(961.05f, touch.scroll.travelOf(3369f), 0.01f)
+    }
+
+    private fun slowed(base: ViewConfiguration): ViewConfiguration = object : ViewConfiguration by base {
+        override val maximumFlingVelocity: Float get() = 12000f
+    }
+
+    @Test
+    @Config(qualifiers = "w400dp-h800dp-440dpi")
+    fun aPlatformRowTouchReleasesAtTheTrackersVelocityAndANewFlingCapRebuildsIt() {
+        var slow by mutableStateOf(false)
+        rule.setContent {
+            val base = LocalViewConfiguration.current
+            val capped = remember(base) { slowed(base) }
+            CompositionLocalProvider(LocalViewConfiguration provides if (slow) capped else base) {
+                FuneTheme(phone) {
+                    val a = remember { Arbiter(phone) }
+                    touch = rememberListTouch(Kind.List, phone, rows = RowSpec(ROW_PITCH, ROW_VIEW), fling = rememberPlatformFling())
+                    val counted = remember { booleanArrayOf(false) }
+                    SideEffect {
+                        if (!counted[0]) {
+                            touch.count(ROW_COUNT, touch.first)
+                            counted[0] = true
+                        }
+                    }
+                    Box(Modifier.fillMaxSize().arbiter(a, page(turn = false))) {
+                        FuneList(a, touch, Modifier.pxSize(ROW_WIDTH, ROW_VIEW)) { items(ROW_COUNT) { Box(Modifier.pxSize(ROW_WIDTH, ROW_PITCH)) } }
+                    }
+                }
+            }
+        }
+        rule.waitForIdle()
+        rule.mainClock.autoAdvance = false
+        val first = touch
+        assertEquals(ROW_COUNT * ROW_PITCH - ROW_VIEW, requireNotNull(first.rows).max)
+        flick(LEFT, R5, R5_UP)
+        assertEquals(6943.076f, released(first), 1f)
+        rule.runOnUiThread {
+            slow = true
+            Snapshot.sendApplyNotifications()
+        }
+        rule.mainClock.advanceTimeByFrame()
+        assertEquals(12000f, (touch.fling as Fling.Platform).cap)
+        assertNotSame(first, touch)
     }
 }

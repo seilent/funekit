@@ -3,6 +3,8 @@ package net.seilent.funekit.kit.touch
 import android.view.ViewConfiguration
 import androidx.compose.animation.SplineBasedFloatDecayAnimationSpec
 import androidx.compose.ui.unit.Density
+import net.seilent.funekit.gen.Tok
+import net.seilent.funekit.px
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -35,6 +37,17 @@ class ScrollCoastTest {
     private fun at(ms: Long, v0: Float) = spline.getValueFromNanos(TimeUnit.MILLISECONDS.toNanos(ms), 0f, v0)
 
     private fun coast(line: Line, kind: Kind = Kind.List, page: Float = 1f) = Scroll(kind, TOUCH, page, page, line, spline)
+
+    private fun flung(line: Line) = Scroll(Kind.List, TOUCH, 1f, 1f, line, fling = Fling.Platform(spline, CAP))
+
+    private fun haltAt(s: Scroll): Long {
+        var t = 0L
+        while (s.moving) {
+            t += 16
+            s.step(t)
+        }
+        return t
+    }
 
     @Before
     fun theFrictionIsAndroids() {
@@ -181,9 +194,73 @@ class ScrollCoastTest {
         assertEquals(o * exp(-16f / 100f), s.over, 0.001f)
     }
 
+    @Test
+    fun aPlatformFlingTravelsTheSplineAtItsReleaseVelocityAndHaltsOnTheFirstStepAtOrPastItsEnd() {
+        val line = Line(0f, 100000f)
+        val s = flung(line)
+        s.release(0, -6943.076f)
+        assertTrue(s.flinging)
+        assertEquals(6943.076f, s.v, 0f)
+        assertEquals(1104L, haltAt(s))
+        assertEquals(2668.06f, line.pos, 1f)
+        assertEquals(0f, s.over, 0f)
+    }
+
+    @Test
+    fun aPlatformFlingIsCappedAtItsFormsCapAndABoardFlingAtTheTokenCap() {
+        val platform = flung(Line(0f, 100000f))
+        platform.release(0, -30000f)
+        assertEquals(22000f, platform.v, 0f)
+        val board = coast(Line(0f, 100000f))
+        board.release(0, -30000f)
+        assertEquals(9000f, board.v, 0f)
+    }
+
+    @Test
+    fun aPlatformFlingStartsAboveOnePxPerSecondAndABoardFlingAtItsMinimumAndStop() {
+        assertEquals(225, px(Tok.flingMin, TOUCH))
+        assertEquals(5, px(Tok.flingStop, TOUCH))
+        val slow = Line(0f, 100000f)
+        val s = flung(slow)
+        s.release(0, -200f)
+        assertTrue(s.flinging)
+        assertEquals(80L, haltAt(s))
+        assertEquals(5.64f, slow.pos, 0.01f)
+        val crawl = flung(Line(0f, 100000f))
+        crawl.release(0, -3f)
+        assertTrue(crawl.flinging)
+        assertEquals(16L, haltAt(crawl))
+        val still = flung(Line(0f, 100000f))
+        still.release(0, -1f)
+        assertFalse(still.flinging)
+        for (v in listOf(-200f, -3f)) {
+            val board = coast(Line(0f, 100000f))
+            board.release(0, v)
+            assertFalse("$v", board.flinging)
+        }
+    }
+
+    @Test
+    fun aPlatformFlingTakesTheWholeFrameGapAndABoardCoastTheStepCap() {
+        assertTrue(50f > Tok.motion_flingMaxStep)
+        val line = Line(0f, 100000f)
+        val s = flung(line)
+        s.release(0, -3369f)
+        s.step(16)
+        s.step(66)
+        assertEquals(at(66, 3369f), line.pos, 0.01f)
+        val boardLine = Line(0f, 100000f)
+        val board = coast(boardLine)
+        board.release(0, -3369f)
+        board.step(16)
+        board.step(66)
+        assertEquals(at(49, 3369f), boardLine.pos, 0.01f)
+    }
+
     companion object {
         private const val DENSITY = 2.75f
         private const val TOUCH = 4.5f
         private const val PAGE = 2.96669f
+        private const val CAP = 22000f
     }
 }
