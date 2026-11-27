@@ -94,7 +94,7 @@ object Curves {
     }
     val easeIn: Curve = Closed { it * it }
     val easeOut: Curve = Closed { it * (HALF - it) }
-    val powOut17: Curve = table { if (it >= 1) 1.0 else 1 - exp(POW17 * ln(1 - it)) }
+    val powOut17: TableCurve = table { if (it >= 1) 1.0 else 1 - exp(POW17 * ln(1 - it)) }
     val cubicOut: Curve = Closed {
         val m = 1 - it
         1 - m * m * m
