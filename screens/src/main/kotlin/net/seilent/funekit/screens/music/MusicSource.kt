@@ -10,6 +10,7 @@ import net.seilent.funekit.api.Library
 import net.seilent.funekit.api.LibraryView
 import net.seilent.funekit.api.Listing
 import net.seilent.funekit.api.Lyrics
+import net.seilent.funekit.api.PlayModes
 import net.seilent.funekit.api.Player
 import net.seilent.funekit.api.Playlists
 import net.seilent.funekit.api.Quickplay
@@ -26,6 +27,7 @@ class MusicSource(
     val settings: Settings? = null,
     val eq: Eq? = null,
     val scrobbling: Scrobbling? = null,
+    val modes: PlayModes? = null,
 ) {
     suspend fun <T> viewed(block: suspend (LibraryView) -> T): T {
         while (true) {

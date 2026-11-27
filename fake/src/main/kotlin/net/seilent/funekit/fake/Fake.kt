@@ -34,6 +34,7 @@ class Fake(
     val eq = FakeEq(eqCap)
     val lyrics = FakeLyrics(set, latencyMs, lyricsCarried)
     val scrobbling = FakeScrobbling()
+    val modes = FakeModes()
 
     init {
         library.dropped = player::drop

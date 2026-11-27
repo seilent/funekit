@@ -49,6 +49,8 @@ class ApiShapeTest {
         assertEquals("EqFilterType", listOf("Off", "Peak", "LowShelf", "HighShelf"), EqFilterType.entries.map { it.name })
         assertEquals("EqPart", listOf("Type", "Freq", "Gain", "Q"), EqPart.entries.map { it.name })
         assertEquals("EqAnswer", listOf("Done", "Refused", "NoSpace", "Failed", "Fitting"), EqAnswer.entries.map { it.name })
+        assertEquals("PlayThrough", listOf("Off", "Folders", "Albums", "Playlist", "Library"), PlayThrough.entries.map { it.name })
+        assertEquals("ResumeMode", listOf("Off", "Track", "Position"), ResumeMode.entries.map { it.name })
     }
 
     @Test
@@ -105,6 +107,7 @@ class ApiShapeTest {
             EqCurve::class.java to listOf("preamp10", "filters"),
             EqFilter::class.java to listOf("type", "milliHz", "gain10", "q100"),
             EqLevels::class.java to listOf("level", "rateHz", "dsd", "dop", "dopTrim", "peak10"),
+            PlayPrefs::class.java to listOf("through", "list", "resume"),
         )
         assertEquals(emptyList<String>(), misses(want) { fields(it) })
     }

@@ -39,6 +39,7 @@ class EngineSubject(
     val bitPerfect: Boolean = true,
     val detachDac: (suspend () -> Unit)? = null,
     val attachDopDac: (suspend (Dac) -> Unit)? = null,
+    val modes: PlayModes? = null,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -571,11 +572,34 @@ abstract class ApiContract : SeamContract() {
         assertTrue(s.until(scrobbling.view) { !it.lastFm }.listenBrainz)
     }
 
+    @Test
+    fun playModesStartOffAtPositionAndRoundTrip() = runTest {
+        val s = open(Edge.Main)
+        val m = engine(s).modes ?: return@runTest
+        assertEquals(PlayPrefs(PlayThrough.Off, null, ResumeMode.Position), m.prefs.value)
+        val folders = PlayPrefs(PlayThrough.Folders, null, ResumeMode.Track)
+        m.set(folders)
+        s.until(m.prefs) { it == folders }
+        for (bad in listOf(folders.copy(list = Listing.Albums), folders.copy(through = PlayThrough.Playlist))) {
+            assertTrue("$bad", runCatching { m.set(bad) }.exceptionOrNull() is IllegalArgumentException)
+            assertEquals("$bad", folders, m.prefs.value)
+        }
+        val list = PlayPrefs(PlayThrough.Playlist, Listing.PlaylistTracks(LIST), ResumeMode.Off)
+        m.set(list)
+        s.until(m.prefs) { it == list }
+        m.set(list.copy(through = PlayThrough.Albums))
+        assertEquals(Listing.PlaylistTracks(LIST), s.until(m.prefs) { it.through == PlayThrough.Albums }.list)
+        val favorites = PlayPrefs(PlayThrough.Playlist, Listing.Favorites)
+        m.set(favorites)
+        s.until(m.prefs) { it == favorites }
+    }
+
     private companion object {
         const val DAC_VOLUME = 195
         val DAC_A = Dac(1, 1, "a")
         val DAC_B = Dac(1, 2, "b")
         const val ROOM = "Room One"
+        const val LIST = 7L
         const val ROOM_2 = "Room One 2"
         const val AUTOEQ = "Preamp: -3 dB\nFilter 1: ON PK Fc 1000 Hz Gain 2 dB Q 1.41"
         const val PRESET_1 = "Preset 1"

@@ -41,6 +41,7 @@ internal fun TestScope.fakeSubject(edge: Edge, refs: Boolean = false, lyricsCarr
             attachDac = { f.attachDac(it) },
             detachDac = { f.detachDac() },
             attachDopDac = { f.attachDac(it, true) },
+            modes = f.modes,
         ),
         eq = f.eq,
         scrobbling = f.scrobbling,
