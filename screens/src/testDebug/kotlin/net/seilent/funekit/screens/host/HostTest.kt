@@ -2450,6 +2450,22 @@ class HostTest {
         }
     }
 
+    private fun lateSourceApp(player: (Player) -> Player): Pair<TestApp, Fake> {
+        val f = testFake(FakeSet.Demo)
+        val ts = runBlocking { f.library.view().page(Listing.Songs, 0, ART_SONGS).rows.map { it.id }.take(LATE_SONGS) }
+        runBlocking { f.player.play(ts, 0, 0) }
+        val src = MusicSource(f.library, player(f.player), f.quickplay, f.favorites, f.playlists, f.lyrics)
+        val app = TestApp(page, np, null, Level(START, null)) { rule.mainClock.currentTime }
+        app.compose(rule, root = true)
+        rule.waitForIdle()
+        rule.mainClock.autoAdvance = false
+        rule.runOnIdle { app.source = src }
+        frames(OPEN_FRAMES)
+        rule.runOnIdle { app.host.resetNp(listOf(TestScreen.Music(MusicEntry(app.stack.entry(), MusicPage.Hub)))) }
+        frames(OPEN_FRAMES)
+        return app to f
+    }
+
     @Test
     fun aPushFromNowPlayingDropsItsHeldTouchAndAnUpAfterACloseActsNothing() {
         val seeks = mutableListOf<Long>()
@@ -2679,6 +2695,50 @@ class HostTest {
         }
         until("the slide answers") { app.logs.any { it.startsWith("slide:") } }
         assertEquals(listOf("slide: card not available"), app.logs.filter { it.startsWith("slide:") })
+    }
+
+    @Test
+    fun aSlideSkipsWithASourceThatArrivesAfterTheHost() {
+        var nexts = 0
+        val (app, f) = lateSourceApp { p ->
+            object : Player by p {
+                override suspend fun next() {
+                    nexts++
+                    p.next()
+                }
+            }
+        }
+        val m = app.music.np
+        until("premise: now playing shows its next song") { m.shown.nextId != null }
+        val next = rule.runOnIdle { m.shown.nextId }
+        rule.onRoot().performTouchInput {
+            down(artPx)
+            repeat(STEPS) { moveBy(Offset(-SLIDE_PX / STEPS, 0f)) }
+            up()
+        }
+        assertEquals("premise: the slide commits to the next song", next, rule.runOnIdle { m.slide.target })
+        until("the slide skips to the next song") { nexts == 1 && m.shown.track == next }
+        assertEquals(next, f.player.state.value.track)
+    }
+
+    @Test
+    fun anEdgeSwipeAfterAScaleChangeLeavesNowPlaying() {
+        val app = playingApp()
+        val first = rule.runOnIdle { app.arbiter }
+        val short = scale(Window(W, H_EDGE, SDK, none, none, none, none, none), Nav.None, Surface.Page, false)
+        assertNotEquals("premise: the new page scale has another touch scale", page.touchPpu, short.touchPpu)
+        rule.runOnIdle { app.page = short }
+        frames(OPEN_FRAMES)
+        assertNotSame("premise: the scale change makes a new arbiter", first, rule.runOnIdle { app.arbiter })
+        assertTrue("premise: now playing is the top at rest", rule.runOnIdle { app.stack.phase == Phase.Rest && app.stack.top?.let(app.host::isNp) == true })
+        rule.onRoot().performTouchInput {
+            down(Offset(EDGE_X, artPx.y))
+            repeat(STEPS) { moveBy(Offset(EDGE_PX / STEPS, 0f)) }
+            up()
+        }
+        frames(OPEN_FRAMES)
+        landed(app)
+        assertFalse("an edge swipe leaves now playing", rule.runOnIdle { app.stack.top?.let(app.host::isNp) == true })
     }
 
     @Test
@@ -3840,5 +3900,10 @@ class HostTest {
         private const val MODE_OFF = "lyrics mode off"
         private const val TITLE_DY = 4f
         private const val REFUSED_TEXT = "usb dac"
+        private const val LATE_SONGS = 3
+        private const val SLIDE_PX = 250f
+        private const val H_EDGE = 900
+        private const val EDGE_X = 20f
+        private const val EDGE_PX = 300f
     }
 }

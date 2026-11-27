@@ -319,31 +319,31 @@ class MusicHost<S : Any> internal constructor(
     private val menuHost: MenuHost,
     private val movePaint: MovePaint,
     private val scope: CoroutineScope,
-    app: MusicApp<S>,
-    env: MusicEnv,
-    src: MusicSource?,
-    volume: VolumeLevel,
-    types: MusicTypes,
-    npGeo: NpLayout,
-    npHalves: List<NpHalf>,
-    npHalfInks: List<NpInks>,
-    navGround: NavGround,
-    split: NpSplit?,
+    app0: MusicApp<S>,
+    env0: MusicEnv,
+    src0: MusicSource?,
+    volume0: VolumeLevel,
+    types0: MusicTypes,
+    npGeo0: NpLayout,
+    npHalves0: List<NpHalf>,
+    npHalfInks0: List<NpInks>,
+    navGround0: NavGround,
+    split0: NpSplit?,
     private var view: View,
 ) : MusicActs {
     lateinit var stack: PageStack<S>
-    private var app: MusicApp<S> = app
-    private var env by mutableStateOf(env)
-    private var src by mutableStateOf(src)
-    private var volume by mutableStateOf(volume)
-    internal var types by mutableStateOf(types)
+    private var app: MusicApp<S> = app0
+    private var env by mutableStateOf(env0)
+    private var src by mutableStateOf(src0)
+    private var volume by mutableStateOf(volume0)
+    internal var types by mutableStateOf(types0)
         private set
-    private var npGeo by mutableStateOf(npGeo)
-    private var npHalves by mutableStateOf(npHalves)
-    private var npHalfInks by mutableStateOf(npHalfInks)
+    private var npGeo by mutableStateOf(npGeo0)
+    private var npHalves by mutableStateOf(npHalves0)
+    private var npHalfInks by mutableStateOf(npHalfInks0)
     private var npSongArt = false
-    private var navGround by mutableStateOf(navGround)
-    private var split by mutableStateOf(split)
+    private var navGround by mutableStateOf(navGround0)
+    private var split by mutableStateOf(split0)
     private var scaleAt: List<Any> = scaleKey(env.page)
     private var splitAt: NpSplit? = split
     private var phone: PhoneSession? = null
