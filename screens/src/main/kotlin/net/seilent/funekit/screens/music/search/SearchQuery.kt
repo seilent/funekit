@@ -28,6 +28,8 @@ class SearchQuery(first: String) {
         private set
     var shows by mutableIntStateOf(0)
         private set
+    var ends by mutableIntStateOf(0)
+        private set
 
     fun openField(committed: String) {
         text = committed
@@ -47,6 +49,10 @@ class SearchQuery(first: String) {
         word = ""
         armed = false
         open = false
+    }
+
+    fun ended() {
+        ends++
     }
 
     fun committed(land: Boolean) {

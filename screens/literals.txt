@@ -66,6 +66,7 @@ screens/src/main/kotlin/net/seilent/funekit/screens/music/search/SearchQuery.kt 
 screens/src/main/kotlin/net/seilent/funekit/screens/settings/RowsPage.kt SPOT_FIELDS 3 FB FB-settings-spot a saved settings spot is the pivot name, the focus row key and the scroll in u
 screens/src/main/kotlin/net/seilent/funekit/screens/host/MusicHost.kt LEAD_MS 17L fos player/ui/app.h:3949 the jump grid lead with no refresh rate reported, the default display period of 16666667 ns rounded to ms (funeOS jump_lead, app.h:2755)
 screens/src/main/kotlin/net/seilent/funekit/screens/host/MusicHost.kt MS_PER_S 1000f platform Display.getRefreshRate the jump grid legs start one display period late, the period in ms from the refresh rate in Hz (funeOS jump_lead, the display period rounded)
+screens/src/main/kotlin/net/seilent/funekit/screens/host/IdleClock.kt MS_PER_S 1000f fos player/ui/app.h:168 the idle return wait is a token in whole seconds and the clock runs in ms (funeOS kNpReturnMs, settings.npReturn seconds times 1000)
 screens/src/main/kotlin/net/seilent/funekit/screens/host/MusicModels.kt PUSH_ROW 3 FB FB-stack-fields a saved push source is the entry, the pivot, the pivot word and the source row
 screens/src/main/kotlin/net/seilent/funekit/screens/host/MusicModels.kt ANCHOR_INDEX 3 FB FB-stack-fields a saved anchor is the kind, the id, the offset and the clamped index
 screens/src/main/kotlin/net/seilent/funekit/screens/host/MusicModels.kt MUSIC_STATE 3 FB FB-stack-fields a saved music page is its tag, the entry fields, the pivot and anchor, then the model state

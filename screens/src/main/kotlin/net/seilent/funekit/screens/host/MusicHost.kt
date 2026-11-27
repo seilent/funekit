@@ -42,10 +42,12 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import net.seilent.funekit.Case
 import net.seilent.funekit.Role
 import net.seilent.funekit.Roles
@@ -193,6 +195,7 @@ import net.seilent.funekit.screens.music.overlay.sheetItems
 import net.seilent.funekit.screens.music.overlay.sheetWords
 import net.seilent.funekit.screens.music.pivotBy
 import net.seilent.funekit.screens.music.queue.QueueModel
+import net.seilent.funekit.screens.music.search.SearchQuery
 import net.seilent.funekit.screens.settings.AimKind
 import net.seilent.funekit.screens.settings.FieldPress
 import net.seilent.funekit.screens.settings.FieldSheet
@@ -330,6 +333,7 @@ class MusicHost<S : Any> internal constructor(
     navGround0: NavGround,
     split0: NpSplit?,
     private var view: View,
+    private val idle: IdleClock?,
 ) : MusicActs {
     lateinit var stack: PageStack<S>
     private var app: MusicApp<S> = app0
@@ -360,6 +364,7 @@ class MusicHost<S : Any> internal constructor(
     var opened: PlayOpen? = null
         private set
     private var opens = 0
+    private var returnAsked = false
     val hud = VolumeHud(env.np.board, env.np.w, env.np.h)
     private val seekHold = SeekHold(scope, hud, { app.log(it) }, { now() }) { d, t, u -> np.keySeek(d, t, u) }
     private var seekLoop: Job? = null
@@ -611,6 +616,11 @@ class MusicHost<S : Any> internal constructor(
     fun albumOf(s: S): Long = (entryOf(s)?.page as? MusicPage.Album)?.id ?: -1L
 
     fun started(t: Turn<S>) {
+        if (returnAsked) {
+            returnAsked = false
+            val c = idle
+            if (c != null && t.to?.let(::isNp) == true) c.returnedAt(now())
+        }
         npHides = t.kind == MoveKind.T7 || t.kind == MoveKind.T8
         toastAtTurn(t, toast)
         npHalfInks.forEach { k -> npAtTurn(t, k, ::isNp) }
@@ -1071,6 +1081,39 @@ class MusicHost<S : Any> internal constructor(
         val h = stack.popToNp(kept, t, NowPlayingModel.HOLD_CAP)
         opened = h
         h.done()
+    }
+
+    private fun returnArmed(c: IdleClock): Boolean {
+        val top = stack.top
+        return !c.away && !c.held && !c.spent && !stack.backing && hubOf(top)?.search?.open != true && fieldRun == null && !stack.armed && !stack.taken &&
+            npHasTrack(np) && stack.phase == Phase.Rest && stack.overlay == null && top?.let(::isNp) != true
+    }
+
+    private fun returnInputs(c: IdleClock): List<Any?> {
+        val top = stack.top
+        return listOf(c.away, c.held, c.spent, stack.backing, hubOf(top)?.search?.open, fieldRun, stack.armed, stack.taken, np.shown.track, stack.phase, stack.overlay, top)
+    }
+
+    private suspend fun npReturn(c: IdleClock) {
+        while (true) {
+            if (!returnArmed(c)) {
+                snapshotFlow { returnArmed(c) }.first { it }
+                continue
+            }
+            val left = c.last + RETURN_MS - now()
+            if (left > 0) {
+                withTimeoutOrNull(left) { snapshotFlow { returnInputs(c) }.drop(1).first() }
+                continue
+            }
+            while (homeBusy(now())) withFrameMillis { }
+            if (!returnArmed(c) || now() - c.last < RETURN_MS) continue
+            val seen = returnInputs(c)
+            returnAsked = true
+            goNp()
+            while (returnAsked && stack.moving) withFrameMillis { }
+            returnAsked = false
+            if (!c.spent) snapshotFlow { returnInputs(c) }.first { it != seen }
+        }
     }
 
     fun openNowPlaying(): Boolean {
@@ -1598,6 +1641,27 @@ class MusicHost<S : Any> internal constructor(
             }
             volDue = false
             if (stack.overlay == null) openVolume(now())
+        }
+        LaunchedEffect(stack, idle) {
+            val c = idle ?: return@LaunchedEffect
+            snapshotFlow { stack.backs }.drop(1).collect { c.stamp(now()) }
+        }
+        LaunchedEffect(stack, idle) {
+            val c = idle ?: return@LaunchedEffect
+            snapshotFlow { stack.backing }.drop(1).collect { c.stamp(now()) }
+        }
+        LaunchedEffect(stack, idle) {
+            val c = idle ?: return@LaunchedEffect
+            var seen: Pair<SearchQuery, Int>? = null
+            snapshotFlow { hubOf(stack.top)?.search?.let { it to it.ends } }.collect { q ->
+                val was = seen
+                seen = q
+                if (q != null && was != null && q.first === was.first && q.second != was.second) c.stamp(now())
+            }
+        }
+        LaunchedEffect(stack, idle) {
+            val c = idle ?: return@LaunchedEffect
+            npReturn(c)
         }
         LaunchedEffect(np, stack) {
             var seen = false
@@ -2447,6 +2511,7 @@ fun <S : Any> rememberMusicHost(
     jump: Overlay,
     menuHost: MenuHost,
     movePaint: MovePaint,
+    idle: IdleClock? = null,
 ): MusicHost<S> {
     val scope = rememberCoroutineScope()
     val view = LocalView.current
@@ -2485,7 +2550,7 @@ fun <S : Any> rememberMusicHost(
     types.eq.panes = eqs.associate { it.id to it.pane }
     val navGround = remember(env.bands, env.accent) { NavGround(env.bands, env.accent) }
     remember(np) { np.lyrics.also { it.seed(app.lyricsMode) } }
-    val host = remember { MusicHost(music, models, toast, jump, menuHost, movePaint, scope, app, env, src, volume, types, npGeo, npHalves, npHalfInks, navGround, split, view) }
+    val host = remember { MusicHost(music, models, toast, jump, menuHost, movePaint, scope, app, env, src, volume, types, npGeo, npHalves, npHalfInks, navGround, split, view, idle) }
     val life = LocalLifecycleOwner.current
     DisposableEffect(host, life) {
         val stop = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_STOP) host.seekStop() }

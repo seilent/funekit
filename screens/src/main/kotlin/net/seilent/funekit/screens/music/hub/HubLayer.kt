@@ -702,6 +702,7 @@ fun HubLayer(
             SearchField(
                 q, insets,
                 done = {
+                    q.ended()
                     val ok = m.done()
                     if (ok) {
                         onCommit(m.committed())
@@ -710,6 +711,7 @@ fun HubLayer(
                     ok
                 },
                 close = {
+                    q.ended()
                     if (m.closeField()) onBack()
                     m.poke()
                 },

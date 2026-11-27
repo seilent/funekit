@@ -135,6 +135,8 @@ class TestApp(page: Scale, np: Scale, src: MusicSource?, private val level: Volu
     var artAsks = 0
     var songArts = 0
     var cancels = 0
+    var idle: IdleClock? = null
+    var panUntil = Long.MIN_VALUE
 
     override fun music(s: TestScreen): MusicEntry? = (s as? TestScreen.Music)?.music
 
@@ -152,7 +154,7 @@ class TestApp(page: Scale, np: Scale, src: MusicSource?, private val level: Volu
 
     override fun homeItem(word: String): Int = homeHost?.state?.item(word) ?: -1
 
-    override fun homeBusy(now: Long): Boolean = homeHost?.state?.panning(now) == true
+    override fun homeBusy(now: Long): Boolean = homeHost?.state?.panning(now) == true || now < panUntil
 
     override fun homeLand() {
         homeHost?.state?.land()
@@ -251,7 +253,7 @@ class TestApp(page: Scale, np: Scale, src: MusicSource?, private val level: Volu
         }
         val hs = homeHost?.State(toast, covers, m, fonts, density, now, poke, ::log)
         val env = MusicEnv(page, np, m, fonts, density, covers, bands, accent, accentOff, a, now, poke, grid)
-        val h = rememberMusicHost(this@TestApp, music, models, env, source, split, level, toast, jump, menuHost, movePaint)
+        val h = rememberMusicHost(this@TestApp, music, models, env, source, split, level, toast, jump, menuHost, movePaint, idle)
         host = h
         stack = remember {
             PageStack<TestScreen>(
