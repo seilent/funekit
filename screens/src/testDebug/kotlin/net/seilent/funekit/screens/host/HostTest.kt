@@ -946,7 +946,7 @@ class HostTest {
         }
     }
 
-    private class Edit : OffsetEdit {
+    private class Edit(override val hasEntry: Boolean = true) : OffsetEdit {
         val calls = mutableListOf<String>()
         override var shownMs = 0
         override var editing = false
@@ -1319,6 +1319,47 @@ class HostTest {
         assertTrue(app.host.fieldSheet!!.hud.shown)
         assertEquals(OverKind.Sheet, app.stack.overlay?.kind)
         assertEquals(listOf("begin"), e.calls)
+    }
+
+    @Test
+    fun aHoldOnTheOffsetRowWithNoTypedEntryOpensNothingAndItsLiftTaps() {
+        val e = Edit(hasEntry = false)
+        val app = lyricsApp(e)
+        rule.runOnIdle { app.host.openOffset() }
+        frames(OPEN_FRAMES)
+        val sheet = app.host.fieldSheet
+        val over = app.stack.overlay
+        assertTrue("premise: the lyrics sheet is up", sheet != null && over?.kind == OverKind.Sheet)
+        rule.onRoot().performTouchInput { down(Offset(page.widthPx / 2f, sheetY(app, 0))) }
+        frames(CUT_FRAMES)
+        assertEquals("premise: the down presses the offset row", 0, app.menu.pressed)
+        frames(HOLD_FRAMES)
+        assertSame("the hold keeps the sheet", over, app.stack.overlay)
+        assertSame(sheet, app.host.fieldSheet)
+        assertTrue("no entry", e.calls.none { it.startsWith("entry") })
+        rule.onRoot().performTouchInput { up() }
+        frames(OPEN_FRAMES)
+        assertEquals("the lift taps the row", listOf("begin"), e.calls)
+        assertSame(over, app.stack.overlay)
+    }
+
+    @Test
+    fun aHeldOffsetHudNumberWithNoTypedEntryKeepsTheHud() {
+        val e = Edit(hasEntry = false)
+        val app = lyricsApp(e)
+        rule.runOnIdle { app.host.openOffset() }
+        frames(OPEN_FRAMES)
+        rule.runOnIdle { app.menuHost.act(0) }
+        frames(OPEN_FRAMES)
+        assertTrue("premise: the hud is up", app.host.fieldSheet!!.hud.shown)
+        shot()
+        val x = px(Tok.edge, page.stdPpu) + 2f
+        val y = px(page.board.overlayRingY, page.stdPpu) - 2f
+        rule.onRoot().performTouchInput { down(Offset(x, y)) }
+        frames(OPEN_FRAMES)
+        assertTrue("the hud stays", app.host.fieldSheet!!.hud.shown)
+        assertEquals("the sheet stays", OverKind.Sheet, app.stack.overlay?.kind)
+        assertEquals("no keep and no entry", listOf("begin"), e.calls)
     }
 
     @Test

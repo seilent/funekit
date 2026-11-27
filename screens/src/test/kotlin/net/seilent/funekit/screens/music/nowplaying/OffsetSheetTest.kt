@@ -10,6 +10,7 @@ class OffsetSheetTest {
         val calls = mutableListOf<String>()
         override var shownMs = 0
         override var editing = false
+        override var hasEntry = true
 
         override fun begin() {
             calls += "begin"
@@ -150,6 +151,21 @@ class OffsetSheetTest {
         assertFalse(s.holdNumber())
         s.dismiss()
         assertEquals(listOf("entry false", "begin", "keep", "entry true", "end"), e.calls)
+    }
+
+    @Test
+    fun anEditWithNoTypedEntryTakesNoHold() {
+        val e = Edit()
+        val s = OffsetSheet(e)
+        assertTrue("premise: an edit with an entry takes the row", s.typed(0))
+        e.hasEntry = false
+        assertFalse(s.typed(0))
+        assertFalse(s.typed(1))
+        s.press(0)
+        s.adjust(0)
+        assertFalse("the number takes no entry either", s.typed(s.field()))
+        assertTrue(s.hud.shown)
+        assertEquals(listOf("begin"), e.calls)
     }
 
     @Test

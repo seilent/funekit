@@ -6,6 +6,7 @@ import net.seilent.funekit.screens.settings.FieldSheet
 interface OffsetEdit {
     val shownMs: Int
     val editing: Boolean
+    val hasEntry: Boolean get() = true
 
     fun begin()
 
@@ -21,8 +22,6 @@ interface OffsetEdit {
 
     fun end()
 }
-
-private const val MAX_MS = 60000
 
 class OffsetSheet(val edit: OffsetEdit) : FieldSheet {
     override val hud = AdjustHud()
@@ -55,7 +54,7 @@ class OffsetSheet(val edit: OffsetEdit) : FieldSheet {
 
     override fun pickLive(i: Int) {}
 
-    override fun typed(i: Int): Boolean = i == 0
+    override fun typed(i: Int): Boolean = i == 0 && edit.hasEntry
 
     override fun adjust(now: Long): Boolean {
         if (!edit.editing || hud.shown) return false
@@ -122,6 +121,7 @@ class OffsetSheet(val edit: OffsetEdit) : FieldSheet {
     }
 
     companion object {
+        const val MAX_MS = 60000
         const val TITLE = "lyrics"
         const val ITEM = "offset"
         const val LABEL = "offset ms"
