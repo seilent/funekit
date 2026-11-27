@@ -2028,6 +2028,23 @@ class HostTest {
     }
 
     @Test
+    fun aLyricsModeOverNoArtKeepsTheAppPicture() {
+        val app = lyricsApp(Edit(), mode = false)
+        val pic = NpPicture(ImageBitmap(4, 4))
+        rule.runOnIdle {
+            app.music.np.workContext = Dispatchers.Unconfined
+            app.backdropFlow.value = pic
+        }
+        frames(2)
+        assertNull("premise: no art", rule.runOnIdle { app.music.np.art })
+        assertSame("premise: the app picture shows", pic, app.host.npBackdrop.shown)
+        rule.runOnIdle { app.host.showLyrics(true) }
+        frames(BLUR_FRAMES)
+        assertTrue("premise: lyrics show", rule.runOnIdle { app.music.np.lyrics.shown(false) })
+        assertSame("with no art the app picture stays under the lyrics", pic, app.host.npBackdrop.shown)
+    }
+
+    @Test
     fun aCoverStillBlurringKeepsTheShownBackdrop() {
         val app = lyricsApp(Edit(), mode = false)
         rule.runOnIdle {
