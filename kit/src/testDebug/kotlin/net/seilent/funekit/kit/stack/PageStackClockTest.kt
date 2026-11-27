@@ -1,5 +1,6 @@
 package net.seilent.funekit.kit.stack
 
+import androidx.activity.BackEventCompat
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import net.seilent.funekit.kit.motion.MoveEnds
@@ -9,8 +10,10 @@ import net.seilent.funekit.kit.motion.OverKind
 import net.seilent.funekit.kit.motion.Overlay
 import net.seilent.funekit.kit.overlay.VolumeHud
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -48,6 +51,29 @@ class PageStackClockTest {
         rule.runOnIdle {
             assertEquals(listOf("hub"), stack.pages.toList())
             assertEquals(Phase.Rest, stack.phase)
+        }
+    }
+
+    @Test
+    fun aPredictiveBackIsLiveFromItsStartToItsEndOrCancel() {
+        stack.pages.add("hub")
+        stack.pages.add("album")
+        rule.setContent { PageStackClock(stack) { MoveKind.T4 } }
+        val d = rule.activity.onBackPressedDispatcher
+        rule.runOnIdle { d.dispatchOnBackStarted(BackEventCompat(0f, 0f, 0f, BackEventCompat.EDGE_LEFT)) }
+        rule.runOnIdle { assertTrue("the gesture is live", stack.backing) }
+        rule.runOnIdle { d.dispatchOnBackCancelled() }
+        rule.runOnIdle {
+            assertFalse("a cancel ends it", stack.backing)
+            assertEquals("a cancel takes no back", listOf("hub", "album"), stack.pages.toList())
+        }
+        rule.runOnIdle { d.dispatchOnBackStarted(BackEventCompat(0f, 0f, 0f, BackEventCompat.EDGE_LEFT)) }
+        rule.runOnIdle { assertTrue("premise: a second gesture is live", stack.backing) }
+        rule.runOnIdle { d.onBackPressed() }
+        rule.mainClock.advanceTimeBy(1000, ignoreFrameDuration = true)
+        rule.runOnIdle {
+            assertFalse("its end ends it", stack.backing)
+            assertEquals(listOf("hub"), stack.pages.toList())
         }
     }
 

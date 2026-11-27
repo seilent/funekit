@@ -1887,7 +1887,10 @@ class MusicHost<S : Any> internal constructor(
                 f.sheet.adjust(now())
             }
             BackHandler(f.live && f.choice == null) { fieldDrop(f) }
-            BackHandler(f.choice != null) { choiceBack(f) }
+            BackHandler(f.choice != null) {
+                stack.backed()
+                choiceBack(f)
+            }
         }
         MenuOverlay(
             menuHost.menu, over, env.page, env.a, env.now,
@@ -1911,7 +1914,10 @@ class MusicHost<S : Any> internal constructor(
         val s = env.page
         val at = remember(src.hud) { AdjustDown() }
         BlockBelow(env.a, OVER)
-        BackHandler { if (!src.hud.hiding) src.back() }
+        BackHandler {
+            stack.backed()
+            if (!src.hud.hiding) src.back()
+        }
         Box(Modifier.pxSize(s.widthPx, s.heightPx)) {
             AdjustLayer(src.hud, s, env.covers, env.now)
             val tap = Tap(
@@ -2223,7 +2229,7 @@ class MusicHost<S : Any> internal constructor(
     private fun fieldDrop(r: FieldRun) {
         val kept = r.sheet.back()
         fieldSync(r)
-        if (!kept) stack.back(true, popKind)
+        if (kept) stack.backed() else stack.back(true, popKind)
     }
 
     private fun fieldEntry(r: FieldRun, i: Int) {

@@ -114,6 +114,25 @@ class EdgeBackTest {
         assertSame(o, s.overlay)
     }
 
+    @Test
+    fun everyBackTheStackIsAskedCountsOnce() {
+        val gate = InputGate()
+        val s = PageStack<String>(MoveForms(), { PageKind.Hub }, gate = gate) { MoveEnds() }.also { it.pages.addAll(listOf(HUB, ALBUM)) }
+        assertEquals(0, s.backs)
+        s.back(pop)
+        assertEquals("a back", 1, s.backs)
+        s.back(true, pop)
+        assertEquals("a device back", 2, s.backs)
+        s.edgeBack(pop)
+        assertEquals("an edge back", 3, s.backs)
+        s.backed()
+        assertEquals("a back another handler took", 4, s.backs)
+        gate.host!!.back()
+        assertEquals("the gate's back key", 5, s.backs)
+        s.frame(0)
+        assertEquals("a frame counts nothing", 5, s.backs)
+    }
+
     private companion object {
         const val STEP = 16L
         const val HUB = "hub"

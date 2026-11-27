@@ -885,6 +885,20 @@ class SettingsHostTest {
     }
 
     @Test
+    fun anAdjustBackCountsOnceOnTheStack() {
+        val rows = hudRows()
+        val app = app(SettingsPage(ID, rows, HeaderLook.Settings))
+        val (_, m) = open(app)
+        tap(app, m, 0)
+        assertEquals("premise: the hud is up", OverKind.Adjust, app.stack.overlay?.kind)
+        val before = app.stack.backs
+        rule.runOnIdle { rule.activity.onBackPressedDispatcher.onBackPressed() }
+        frames(OPEN_FRAMES)
+        assertNull("premise: the back closes the hud", app.stack.overlay)
+        assertEquals("the back counts once", before + 1, app.stack.backs)
+    }
+
+    @Test
     fun backSendsTheLevelAtOpenAndClosesTheHud() {
         val rows = hudRows()
         val app = app(SettingsPage(ID, rows, HeaderLook.Settings))

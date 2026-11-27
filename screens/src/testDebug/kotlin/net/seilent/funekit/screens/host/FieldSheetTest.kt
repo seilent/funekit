@@ -512,6 +512,30 @@ class FieldSheetTest {
     }
 
     @Test
+    fun aBackWithAFieldLiveCountsOnceOnTheStack() {
+        val (app, _) = app()
+        val f = BandFields()
+        open(app, f, 2)
+        pick(app, GAIN, 1)
+        val before = app.stack.backs
+        back(1)
+        assertEquals("premise: the back drops the live field", "drop $GAIN", f.calls.last())
+        assertEquals("the back counts once", before + 1, app.stack.backs)
+    }
+
+    @Test
+    fun aBackOnAChoiceCountsOnceOnTheStack() {
+        val (app, _) = app()
+        val f = BandFields()
+        open(app, f)
+        pick(app, 0)
+        val before = app.stack.backs
+        back()
+        assertEquals("premise: the back drops the choice", "drop 0", f.calls.last())
+        assertEquals("the back counts once", before + 1, app.stack.backs)
+    }
+
+    @Test
     fun anAdjustWhoseFieldEndsWhileItsTargetStaysShowsTheSheetInPlace() {
         val (app, _) = app()
         val f = BandFields()

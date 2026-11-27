@@ -645,7 +645,10 @@ fun rememberHomeState(
 
 @Composable
 fun HomeBack(state: HomeState, stack: PageStack<*>) {
-    BackHandler(enabled = state.front && !stack.canBack) { state.back() }
+    BackHandler(enabled = state.front && !stack.canBack) {
+        stack.backed()
+        state.back()
+    }
 }
 
 @Composable

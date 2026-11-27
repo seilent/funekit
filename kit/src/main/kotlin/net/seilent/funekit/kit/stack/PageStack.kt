@@ -77,6 +77,10 @@ class PageStack<P : Any>(
         private set
     var snap by mutableIntStateOf(0)
         private set
+    var backs by mutableIntStateOf(0)
+        private set
+    var backing by mutableStateOf(false)
+        private set
     var entries = 0L
 
     var held: Held? = null
@@ -310,10 +314,24 @@ class PageStack<P : Any>(
 
     fun back(popKind: (Turn<P>) -> MoveKind) = back(false, popKind)
 
-    fun back(device: Boolean, popKind: (Turn<P>) -> MoveKind) = ask { now -> back(now, device, popKind) }
+    fun back(device: Boolean, popKind: (Turn<P>) -> MoveKind) {
+        backs++
+        ask { now -> back(now, device, popKind) }
+    }
+
+    fun backed() {
+        onMain("PageStack.backed")
+        backs++
+    }
+
+    internal fun gesture(on: Boolean) {
+        onMain("PageStack.gesture")
+        backing = on
+    }
 
     fun edgeBack(popKind: (Turn<P>) -> MoveKind) {
         onMain("PageStack.edgeBack")
+        backs++
         val o = overlay
         ask { now ->
             if (overlay !== o) return@ask
@@ -748,7 +766,10 @@ class PageStack<P : Any>(
         for (p in npLeaveGroup) move.land(p)
     }
 
-    private fun backKey() = ask { now -> if (opened != null) refuse(now) }
+    private fun backKey() {
+        backs++
+        ask { now -> if (opened != null) refuse(now) }
+    }
 
     private fun gateNow() {
         val g = gate ?: return
@@ -865,7 +886,12 @@ fun <P : Any> PageStackClock(stack: PageStack<P>, popKind: (Turn<P>) -> MoveKind
         }
     }
     PredictiveBackHandler(enabled = stack.canBack) { progress ->
-        progress.collect {}
-        stack.back(true, popKind)
+        stack.gesture(true)
+        try {
+            progress.collect {}
+            stack.back(true, popKind)
+        } finally {
+            stack.gesture(false)
+        }
     }
 }

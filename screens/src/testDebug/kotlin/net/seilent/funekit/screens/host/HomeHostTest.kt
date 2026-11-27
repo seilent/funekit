@@ -523,6 +523,19 @@ class HomeHostTest {
     }
 
     @Test
+    fun aBackOnThePaneInFrontCountsOnceOnTheStack() {
+        val data = QpData(null, items(TILES, QpKind.Album), emptyList(), emptyList(), 1L)
+        val qp = front(data)
+        settle()
+        assertTrue("premise: the pane is in front", qp.pan.front)
+        val before = stack.backs
+        systemBack()
+        settle()
+        assertFalse("premise: the back closes the pane", qp.pan.front)
+        assertEquals("the back counts once", before + 1, stack.backs)
+    }
+
+    @Test
     fun aBackOverTheVolumePlateInFrontHidesItCommitsItsSeekAndKeepsThePane() {
         val ids = songs(TILES)
         runBlocking {
