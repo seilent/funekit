@@ -50,6 +50,7 @@ class OverlayHitTest {
     private fun now() = rule.mainClock.currentTime
 
     private lateinit var overlay: Overlay
+    private lateinit var arb: Arbiter
 
     private fun jump(section: Int, openAt: Long = -10_000L): JumpGrid {
         val g = JumpGrid().also { it.open(BooleanArray(Section.count) { true }, section, 320f) }
@@ -158,6 +159,7 @@ class OverlayHitTest {
         val t = Toast()
         rule.setContent {
             val a = remember { Arbiter(v1) }
+            arb = a
             Box(Modifier.fillMaxSize().arbiter(a, Swipes(false, false, false, { false }, { _, _ -> }))) {
                 Box(Modifier.fillMaxSize().tapTarget(a, Tap({}, {}, { under++ })))
                 ToastStrip(t, v1, ::now, { place }, 320, a = a, onTap = { toastTaps++ })
@@ -183,6 +185,22 @@ class OverlayHitTest {
         rule.mainClock.advanceTimeBy(150)
         tapNow(120f, 300f)
         assertEquals(1, toastTaps)
+        assertEquals(0, under)
+    }
+
+    @Test
+    fun aCutTouchOnTheToastSnapsItsPressAndTapsNothing() {
+        val t = toast(ToastPlace.Bottom)
+        rule.mainClock.advanceTimeBy(150)
+        rule.onRoot().performTouchInput { down(Offset(120f, 300f)) }
+        rule.mainClock.advanceTimeBy(200)
+        assertTrue("premise: the toast press is lit", (t.look(v1, now())?.lit ?: 0f) > 0f)
+        rule.runOnIdle { arb.cancel() }
+        rule.mainClock.advanceTimeBy(48)
+        assertEquals("the cut snaps the press", 0f, t.look(v1, now())?.lit ?: -1f, 0f)
+        rule.onRoot().performTouchInput { up() }
+        rule.mainClock.advanceTimeBy(16)
+        assertEquals(0, toastTaps)
         assertEquals(0, under)
     }
 

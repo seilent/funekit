@@ -474,11 +474,14 @@ class MusicHost<S : Any> internal constructor(
         if (scaleAt != key) {
             scaleAt = key
             stack.touch()
+            env.a.cancel()
+            np.seekCancel()
             stack.overlay?.takeIf { it.kind == OverKind.Sheet || it.kind == OverKind.Dlg }?.let { frameMenu(menuHost.menu, env.page, menuHost.lift) { liftRow(stack.top) } }
         }
         if (splitAt !== split) {
             splitAt = split
             stack.touch()
+            env.a.cancel()
             np.seekCancel()
             np.slideLand(now(), npArtHalf.g.s.w)
         }
@@ -711,6 +714,8 @@ class MusicHost<S : Any> internal constructor(
             val t = now()
             if (np.slideUp(t, d, npArtHalf.g.s.w, npNanosAt(t))) scope.launch(FailFast) { act("slide", PLAYING) { if (d > 0) src?.player?.next() else src?.player?.prev() } }
         }
+
+        override fun cancel() = np.cancelTouch()
     }
 
     fun openMenu(
@@ -1353,11 +1358,6 @@ class MusicHost<S : Any> internal constructor(
     }
 
     private fun cardEnd(o: Overlay) {
-        if (menuOvers.any { it === o }) {
-            menuHost.act = { false }
-            menuHost.hold = null
-            menuHost.scrim = { false }
-        }
         if (liftOver === o) liftModel?.drop(0f)
         eqSheets.firstOrNull { it.over === o }?.let { e ->
             eqSheets -= e
@@ -1382,8 +1382,13 @@ class MusicHost<S : Any> internal constructor(
         val o = (menuOvers + jump).firstOrNull { stack.holds(it) } ?: stack.overlay
         val card = o != null && newCard && cardOver(o)
         if (o != null && (o === jump || libraryOvers.any { it === o } || card)) {
+            if (menuOvers.any { it === o }) {
+                menuHost.act = { false }
+                menuHost.hold = null
+                menuHost.scrim = { false }
+            }
             if (card) cardEnd(o)
-            stack.cutOverlay(o)
+            stack.cutOverlay(o, after = { env.a.cancel() })
         }
         searchAt = null
         val top = stack.top

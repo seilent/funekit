@@ -241,7 +241,7 @@ class PageStack<P : Any>(
         }
     }
 
-    fun cutOverlay(only: Overlay, closes: Boolean = true) {
+    fun cutOverlay(only: Overlay, closes: Boolean = true, after: () -> Unit = {}) {
         onMain("PageStack.cutOverlay")
         ask(only.takeIf { it === overlay }) { now ->
             if (overlay !== only) return@ask
@@ -249,6 +249,7 @@ class PageStack<P : Any>(
             only.drop()
             dropOverlay(show = closes)
             if (!closes) handedOff = true
+            after()
         }
     }
 

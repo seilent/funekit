@@ -761,6 +761,96 @@ class DeleteHostTest {
         assertEquals("a search with a query stays", listOf(MusicPage.Hub, MusicPage.Search(QUERY)), pages())
     }
 
+    private fun playing() {
+        runBlocking { fake.player.play(Listing.Songs, gen(), 0, 0) }
+        scheduler.advanceUntilIdle()
+        until("premise: a track is on now playing") { app.music.np.shown.track != null }
+    }
+
+    private fun toastAt(): Offset {
+        rule.runOnIdle { app.toast.show(rule.mainClock.currentTime, "line", "title", track = true) }
+        frames(OPEN_FRAMES)
+        val r = requireNotNull(rule.runOnIdle { app.toast.hitRect(page, rule.mainClock.currentTime) }) { "premise: the toast takes a tap" }
+        return Offset((r.x0 + r.x1) / 2f, (r.y0 + r.y1) / 2f)
+    }
+
+    private fun npPushed(): Boolean = rule.runOnIdle { stack.pages.any(app.host::isNp) || stack.turn?.to?.let(app.host::isNp) == true }
+
+    private fun sheetY(i: Int): Float {
+        val m = app.menu
+        val ppu = if (m.kept) page.stdPpu else page.ppu
+        val pitch = px(Tok.settingsPitch, ppu)
+        return m.bottomPx - px(Tok.edge, ppu) - (m.items.size - i) * pitch + pitch / 2f
+    }
+
+    @Test
+    fun theLibraryCloseCancelsATouchOnTheToast() {
+        launch()
+        on(screen(MusicPage.Hub))
+        playing()
+        sheet(songTarget(song()))
+        val at = toastAt()
+        rule.onRoot().performTouchInput { down(at) }
+        frames(CUT_FRAMES)
+        assertTrue("premise: the toast press is held", rule.runOnIdle { app.toast.press.held })
+        rule.runOnIdle { app.host.closeLibrarySheets() }
+        frames(CUT_FRAMES)
+        assertNull("premise: the sheet is cut", rule.runOnIdle { stack.overlay })
+        rule.onRoot().performTouchInput { up() }
+        frames(OPEN_FRAMES)
+        assertFalse("the up on the cut touch pushes no now playing", npPushed())
+    }
+
+    @Test
+    fun theLibraryCloseWithNothingToCutLeavesTheTouch() {
+        launch()
+        on(screen(MusicPage.Hub))
+        playing()
+        val at = toastAt()
+        rule.onRoot().performTouchInput { down(at) }
+        frames(CUT_FRAMES)
+        assertTrue("premise: the toast press is held", rule.runOnIdle { app.toast.press.held })
+        rule.runOnIdle { app.host.closeLibrarySheets() }
+        frames(CUT_FRAMES)
+        rule.onRoot().performTouchInput { up() }
+        frames(OPEN_FRAMES)
+        assertTrue("a close that cuts nothing leaves the touch, its up pushes now playing", npPushed())
+    }
+
+    @Test
+    fun aPressAfterTheLibraryCloseOnTheSheetItCutsPicksNothing() {
+        launch()
+        on(screen(MusicPage.Hub))
+        sheet(songTarget(song()))
+        rule.runOnIdle {
+            val i = app.menu.items.indexOf(DELETE)
+            assertTrue("premise: $DELETE is on ${app.menu.items}", i >= 0)
+            app.host.closeLibrarySheets()
+            if (app.menuHost.act(i)) stack.accept()
+        }
+        frames(OPEN_FRAMES)
+        assertNull("a press after the close opens no confirm", rule.runOnIdle { stack.overlay })
+        assertTrue(asked.isEmpty())
+    }
+
+    @Test
+    fun anUpOnASheetTheLibraryCloseCutPicksNothing() {
+        launch()
+        on(screen(MusicPage.Hub))
+        sheet(songTarget(song()))
+        val i = rule.runOnIdle { app.menu.items.indexOf(DELETE) }
+        rule.onRoot().performTouchInput { down(Offset(page.widthPx / 2f, sheetY(i))) }
+        frames(CUT_FRAMES)
+        assertEquals("premise: the down presses $DELETE", i, rule.runOnIdle { app.menu.pressed })
+        rule.runOnIdle { app.host.closeLibrarySheets() }
+        frames(CUT_FRAMES)
+        assertNull("premise: the sheet is cut", rule.runOnIdle { stack.overlay })
+        rule.onRoot().performTouchInput { up() }
+        frames(OPEN_FRAMES)
+        assertNull("the up on the cut sheet opens no confirm", rule.runOnIdle { stack.overlay })
+        assertTrue(asked.isEmpty())
+    }
+
     private fun artistTarget(): SheetTarget {
         val r = rows(Listing.Artists).first()
         return SheetTarget(SheetKind.Artist, r.title, Listing.ArtistTracks(r.id), gen(), pin = ApiKind.Artist, id = r.id, from = SheetFrom.Hub, pinned = false)

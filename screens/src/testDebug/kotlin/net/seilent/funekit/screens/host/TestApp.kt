@@ -119,6 +119,7 @@ class TestApp(page: Scale, np: Scale, src: MusicSource?, private val level: Volu
     lateinit var movePaint: MovePaint
     lateinit var menu: Menu
     lateinit var menuHost: MenuHost
+    lateinit var arbiter: Arbiter
     var pokes = 0
     var lyricsOn by mutableStateOf(false)
     var modeAtStart = false
@@ -229,6 +230,7 @@ class TestApp(page: Scale, np: Scale, src: MusicSource?, private val level: Volu
         val density = LocalDensity.current
         val covers = rememberCovers()
         val a = remember(page.touchPpu) { Arbiter(page) }
+        arbiter = a
         val toast = remember { Toast() }
         this@TestApp.toast = toast
         val jump = remember { Overlay(OverKind.Jump) }

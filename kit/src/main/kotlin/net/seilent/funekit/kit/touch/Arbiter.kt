@@ -31,6 +31,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import net.seilent.funekit.Scale
 import net.seilent.funekit.gen.Tok
+import net.seilent.funekit.kit.stack.onMain
 import net.seilent.funekit.px
 
 class Tap(
@@ -266,6 +267,43 @@ class Arbiter(val scale: Scale) {
     var downAt = 0L
         internal set
 
+    internal class Live {
+        var tap: Tap? = null
+        var faded: Tap? = null
+        var list: ListTouch? = null
+        var pan: Pan? = null
+        var inside = false
+    }
+
+    internal var live: Live? = null
+    internal var cancels = 0
+        private set
+
+    fun cancel() {
+        onMain("Arbiter.cancel")
+        live?.let { end(it) }
+    }
+
+    private fun end(g: Live) {
+        cancels++
+        if (!g.inside) cut(g)
+    }
+
+    internal fun cut(g: Live) {
+        val t = g.tap
+        val f = g.faded
+        val l = g.list
+        val p = g.pan
+        g.tap = null
+        g.faded = null
+        g.list = null
+        g.pan = null
+        t?.let { (it.onCut ?: it.onCancel)() }
+        f?.onCut?.invoke()
+        l?.cancel()
+        p?.cancel()
+    }
+
     internal fun root(c: LayoutCoordinates) {
         root = c
     }
@@ -370,6 +408,8 @@ interface Pan {
     fun drag(x: Float)
 
     fun end(s: Swipe)
+
+    fun cancel() = end(Swipe.None)
 }
 
 class Swipes(
@@ -403,6 +443,11 @@ fun Modifier.arbiter(a: Arbiter, swipes: Swipes): Modifier {
             a.downAt = t0
             tap?.onPress?.invoke()
             tap?.onAt?.invoke(down.position)
+            val g = Arbiter.Live()
+            g.tap = tap
+            g.list = list
+            a.live = g
+            val n = a.cancels
             var long = tap?.onLong != null
             var held = false
             var dragging = false
@@ -416,10 +461,14 @@ fun Modifier.arbiter(a: Arbiter, swipes: Swipes): Modifier {
             var faded: Tap? = null
 
             fun drop(cut: Boolean = false) {
+                g.tap = null
                 tap?.let {
                     val c = it.onCut
                     if (cut && c != null) c() else it.onCancel()
-                    if (!cut) faded = it
+                    if (!cut) {
+                        faded = it
+                        g.faded = it
+                    }
                 }
                 tap = null
                 long = false
@@ -432,12 +481,14 @@ fun Modifier.arbiter(a: Arbiter, swipes: Swipes): Modifier {
                     it.sync()
                 }
                 list = null
+                g.list = null
                 dragging = false
             }
 
             fun swipeTake() {
                 val f = faded
                 faded = null
+                g.faded = null
                 take(true)
                 f?.onCut?.invoke()
             }
@@ -446,6 +497,7 @@ fun Modifier.arbiter(a: Arbiter, swipes: Swipes): Modifier {
                 val p = page.pan ?: return false
                 if (panned != null || a.modal != 0 || !p.begin(x, origin, down.position)) return false
                 panned = p
+                g.pan = p
                 return true
             }
 
@@ -453,7 +505,26 @@ fun Modifier.arbiter(a: Arbiter, swipes: Swipes): Modifier {
                 if (list?.let { it.cuts != cut } != true) return
                 drop(true)
                 list = null
+                g.list = null
                 dragging = false
+            }
+
+            var gone = false
+
+            fun stale(): Boolean {
+                if (a.cancels == n) return false
+                if (!gone) {
+                    gone = true
+                    a.cut(g)
+                    tap = null
+                    faded = null
+                    list = null
+                    dragging = false
+                    panned = null
+                    long = false
+                    a.gesture.cancel()
+                }
+                return true
             }
 
             fun step(x: Float, y: Float, t: Long) {
@@ -471,6 +542,7 @@ fun Modifier.arbiter(a: Arbiter, swipes: Swipes): Modifier {
                     if (l != null) {
                         if (axisOf(x - x0, y - y0) == Axis.Horizontal) {
                             list = null
+                            g.list = null
                         } else {
                             dragging = true
                             l.scroll.begin(y)
@@ -480,6 +552,7 @@ fun Modifier.arbiter(a: Arbiter, swipes: Swipes): Modifier {
                 } else {
                     tap?.onAt?.invoke(Offset(x, y))
                 }
+                g.inside = true
                 val locked = a.gesture.move(x, y, t)
                 if (locked && a.gesture.state == Gesture.State.Horizontal && !a.gesture.turned && begin(x, a.gesture.originX)) swipeTake()
                 if (a.gesture.turned && !took && page.acts(a.gesture.commitAt(x, y))) {
@@ -489,6 +562,7 @@ fun Modifier.arbiter(a: Arbiter, swipes: Swipes): Modifier {
                     begin(x, a.gesture.originX)
                 }
                 panned?.drag(x)
+                g.inside = false
             }
 
             var change: PointerInputChange = down
@@ -500,15 +574,23 @@ fun Modifier.arbiter(a: Arbiter, swipes: Swipes): Modifier {
                         awaitPointerEvent()
                     }
                     if (e == null) {
+                        if (stale()) continue
                         long = false
+                        g.tap = null
                         if (tap?.onLong?.invoke() == true) {
                             held = true
                             take()
                             a.gesture.cancel()
+                        } else {
+                            g.tap = tap
                         }
                         continue
                     }
                     val c = e.changes.firstOrNull { it.id == down.id } ?: break
+                    if (stale()) {
+                        if (!c.pressed) break
+                        continue
+                    }
                     change = c
                     val x = c.position.x
                     val y = c.position.y
@@ -516,7 +598,8 @@ fun Modifier.arbiter(a: Arbiter, swipes: Swipes): Modifier {
                     if (c.isConsumed) {
                         take(true)
                         a.gesture.cancel()
-                        panned?.end(Swipe.None)
+                        g.pan = null
+                        panned?.cancel()
                         panned = null
                         if (!c.pressed) break
                         continue
@@ -526,6 +609,7 @@ fun Modifier.arbiter(a: Arbiter, swipes: Swipes): Modifier {
                         cutOff()
                         val bare = !c.positionChanged()
                         if (bare && !took) {
+                            g.inside = true
                             val lift = a.gesture.liftCommit(x, y, t)
                             if (lift.turned && page.acts(lift.swipe)) {
                                 took = true
@@ -533,8 +617,10 @@ fun Modifier.arbiter(a: Arbiter, swipes: Swipes): Modifier {
                                 swipeTake()
                                 begin(lift.x, lift.origin)
                             }
+                            g.inside = false
                         }
                         if (list != null) vel.add(t, y)
+                        g.tap = null
                         if (dragging) {
                             list?.release(vel.perS())
                             dragging = false
@@ -546,8 +632,10 @@ fun Modifier.arbiter(a: Arbiter, swipes: Swipes): Modifier {
                         tap = null
                         val s = a.gesture.up(x, y, t, bare)
                         val p = panned
+                        g.inside = true
                         if (p != null) {
                             panned = null
+                            g.pan = null
                             p.drag(a.gesture.liftX)
                             p.end(if (a.modal == 0) s else Swipe.None)
                         } else if (s != Swipe.None && (if (open) a.modal == 0 else a.modal != 0 && a.gesture.backs(s)) && page.acts(s)) {
@@ -558,6 +646,8 @@ fun Modifier.arbiter(a: Arbiter, swipes: Swipes): Modifier {
                     step(x, y, t)
                 }
             } finally {
+                stale()
+                if (a.live === g) a.live = null
                 under?.pressed = false
                 drop(true)
                 list?.let {
@@ -566,7 +656,7 @@ fun Modifier.arbiter(a: Arbiter, swipes: Swipes): Modifier {
                         it.sync()
                     }
                 }
-                panned?.end(Swipe.None)
+                panned?.cancel()
             }
         }
     }

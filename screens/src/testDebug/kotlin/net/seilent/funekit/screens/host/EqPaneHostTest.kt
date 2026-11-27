@@ -649,6 +649,32 @@ class EqPaneHostTest {
         assertEquals("the cut sends nothing", emptyList<String>(), rows.sends)
     }
 
+    private fun sheetY(app: TestApp, i: Int): Float {
+        val m = app.menu
+        val ppu = if (m.kept) page.stdPpu else page.ppu
+        val pitch = px(Tok.settingsPitch, ppu)
+        return m.bottomPx - px(Tok.edge, ppu) - (m.items.size - i) * pitch + pitch / 2f
+    }
+
+    @Test
+    fun aHoldOnABandSheetTheCardChangeCutOpensNoEntry() {
+        val rows = TestEqRows(outputs())
+        val app = app(rows)
+        val m = open(app)
+        tapRow(app, m, BAND_0)
+        assertNotNull("premise: the band sheet is up", app.host.fieldSheet)
+        assertTrue("premise: the gain item takes a typed entry", rule.runOnIdle { app.host.fieldSheet?.typed(GAIN) == true })
+        rule.onRoot().performTouchInput { down(Offset(page.widthPx / 2f, sheetY(app, GAIN))) }
+        frames(CUT_FRAMES)
+        assertEquals("premise: the down presses the gain item", GAIN, rule.runOnIdle { app.menu.pressed })
+        rule.runOnIdle { app.host.closeLibrarySheets(newCard = true) }
+        frames(HOLD_FRAMES)
+        rule.onRoot().performTouchInput { up() }
+        frames(OPEN_FRAMES)
+        assertTrue("the hold on the cut sheet opens no entry, ${rows.entries.size}", rows.entries.isEmpty())
+        assertNull(app.stack.overlay)
+    }
+
     @Test
     fun aCardChangeCutsAnEqSheetWhoseOpenIsQueued() {
         val rows = TestEqRows(outputs())

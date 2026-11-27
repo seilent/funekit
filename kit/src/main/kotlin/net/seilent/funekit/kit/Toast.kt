@@ -214,7 +214,7 @@ class Toast {
         target = false
     }
 
-    private fun reset() {
+    internal fun reset() {
         press.reset()
         target = false
     }
@@ -359,6 +359,10 @@ fun ToastStrip(
                 onTap = {
                     pokes++
                     if (t.tap(now())) onTap()
+                },
+                onCut = {
+                    t.reset()
+                    pokes++
                 },
             )
             Box(Modifier.pxAt(box).tapTarget(a, tap, layer))

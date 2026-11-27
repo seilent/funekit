@@ -3,6 +3,7 @@ package net.seilent.funekit.screens.host
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import android.os.SystemClock
 import android.view.View
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.Recomposer
@@ -2469,6 +2470,89 @@ class HostTest {
     }
 
     @Test
+    fun aCancelledSeekDragSeeksNothing() {
+        val seeks = mutableListOf<Long>()
+        val app = seekApp(seeks)
+        rule.onRoot().performTouchInput { down(seekPx) }
+        frames(CUT_FRAMES)
+        assertTrue("premise: the seek band down seeks", app.music.np.seeking)
+        val x0 = app.music.np.seekX
+        val drag = app.arbiter.slop.swipe
+        rule.onRoot().performTouchInput { repeat(DRAG_STEPS) { moveBy(Offset(drag / DRAG_STEPS, 0f)) } }
+        frames(CUT_FRAMES)
+        assertTrue("premise: the seek drag is live", app.music.np.seeking && app.music.np.seekX != x0)
+        rule.runOnIdle { app.arbiter.cancel() }
+        assertFalse("the cancel ends the seek before the up", app.music.np.seeking)
+        val nanos = SystemClock.elapsedRealtimeNanos()
+        assertEquals("the shown position is the player's again", app.music.np.state.anchor.ms(nanos), app.music.np.position(rule.mainClock.currentTime, nanos))
+        rule.onRoot().performTouchInput { up() }
+        frames(OPEN_FRAMES)
+        assertTrue("the up seeks nothing, $seeks", seeks.isEmpty())
+    }
+
+    @Test
+    fun aScaleChangeDuringASeekHeldWithinTheSlopSeeksNothing() {
+        val seeks = mutableListOf<Long>()
+        val app = seekApp(seeks)
+        rule.onRoot().performTouchInput { down(seekPx) }
+        frames(CUT_FRAMES)
+        assertTrue("premise: the seek band down seeks", app.music.np.seeking)
+        val shorter = scale(Window(W, H_SHORT, SDK, none, none, none, none, none), Nav.None, Surface.Page, false)
+        rule.runOnIdle { app.page = shorter }
+        frames(RESIZE_FRAMES)
+        rule.onRoot().performTouchInput { up() }
+        frames(OPEN_FRAMES)
+        assertTrue("the up seeks nothing, $seeks", seeks.isEmpty())
+    }
+
+    private fun sheetY(app: TestApp, i: Int): Float {
+        val m = app.menu
+        val ppu = if (m.kept) page.stdPpu else page.ppu
+        val pitch = px(Tok.settingsPitch, ppu)
+        return m.bottomPx - px(Tok.edge, ppu) - (m.items.size - i) * pitch + pitch / 2f
+    }
+
+    private fun heldRow(app: TestApp, picks: MutableList<Int>) {
+        rule.runOnIdle {
+            app.host.openMenu(MenuForm.Sheet, "sheet", listOf("one", "two"), false, -1, 0, false, { i ->
+                picks += i
+                true
+            })
+        }
+        frames(OPEN_FRAMES)
+        rule.onRoot().performTouchInput { down(Offset(page.widthPx / 2f, sheetY(app, 1))) }
+        frames(CUT_FRAMES)
+        assertEquals("premise: the down presses the row", 1, app.menu.pressed)
+    }
+
+    @Test
+    fun aPageScaleChangeUnderAHeldSheetRowPicksNothing() {
+        val app = app(Level(START, null))
+        val picks = mutableListOf<Int>()
+        heldRow(app, picks)
+        val shorter = scale(Window(W, H_SHORT, SDK, none, none, none, none, none), Nav.None, Surface.Page, false)
+        rule.runOnIdle { app.page = shorter }
+        frames(RESIZE_FRAMES)
+        rule.onRoot().performTouchInput { up() }
+        frames(OPEN_FRAMES)
+        assertTrue("a row held across a page scale change picks nothing, $picks", picks.isEmpty())
+    }
+
+    @Test
+    fun aFoldUnderAHeldSheetRowPicksNothing() {
+        val app = app(Level(START, null))
+        val picks = mutableListOf<Int>()
+        heldRow(app, picks)
+        val split = NpSplit.of(window, Nav.None, false, Fold(H / 2, H / 2), np.left)
+        assertNotNull("premise: the fold splits now playing", split)
+        rule.runOnUiThread { app.split = split }
+        frames(RESIZE_FRAMES)
+        rule.onRoot().performTouchInput { up() }
+        frames(OPEN_FRAMES)
+        assertTrue("a row held across a fold picks nothing, $picks", picks.isEmpty())
+    }
+
+    @Test
     fun aSeekDragThatOutlivesACloseStartSeeksNothingAtItsEnd() {
         val seeks = mutableListOf<Long>()
         val app = seekApp(seeks)
@@ -3689,6 +3773,7 @@ class HostTest {
         private const val HALF_BATTERY = 50
         private const val LOW_BATTERY = 20
         private const val PLAIN = "a plain line"
+        private const val DRAG_STEPS = 3
         private const val MODE_ON = "lyrics mode on"
         private const val MODE_OFF = "lyrics mode off"
         private const val TITLE_DY = 4f

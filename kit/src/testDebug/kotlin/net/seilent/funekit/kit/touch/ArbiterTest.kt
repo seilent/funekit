@@ -92,6 +92,7 @@ class ArbiterTest {
     private val begins = mutableListOf<Offset>()
     private val drags = mutableListOf<Float>()
     private val ends = mutableListOf<Swipe>()
+    private var panCancels = 0
 
     private fun pan(takes: (x: Float, origin: Float) -> Boolean) = object : Pan {
         override fun begin(x: Float, origin: Float, down: Offset): Boolean {
@@ -106,6 +107,10 @@ class ArbiterTest {
 
         override fun end(s: Swipe) {
             ends += s
+        }
+
+        override fun cancel() {
+            panCancels++
         }
     }
 
@@ -573,7 +578,7 @@ class ArbiterTest {
     }
 
     @Test
-    fun aConsumedMoveEndsThePanWithNone() {
+    fun aConsumedMoveCancelsThePan() {
         var eat = false
         val p = pan { x, origin -> x > origin }
         rule.setContent {
@@ -605,8 +610,237 @@ class ArbiterTest {
             up()
         }
         rule.waitForIdle()
-        assertEquals(listOf(Swipe.None), ends)
+        assertEquals(1, panCancels)
+        assertTrue(ends.isEmpty())
         assertTrue(swipes.isEmpty())
+    }
+
+    @Test
+    fun aCancelCutsTheLiveTapAtTheCall() {
+        list()
+        rule.mainClock.autoAdvance = false
+        rule.onRoot().performTouchInput { down(center) }
+        rule.mainClock.advanceTimeByFrame()
+        assertEquals("premise: the tap is pressed", 1, presses)
+        rule.runOnIdle { arb.cancel() }
+        assertEquals("the cancel cuts the live tap at the call", 1, cancels)
+        rule.onRoot().performTouchInput { up() }
+        rule.mainClock.advanceTimeByFrame()
+        assertEquals(0, taps)
+        assertEquals(1, cancels)
+    }
+
+    @Test
+    fun aCancelCutsAPressItsSlopExitFaded() {
+        cutList()
+        rule.onRoot().performTouchInput {
+            down(center)
+            moveBy(Offset(0f, -40f))
+        }
+        rule.waitForIdle()
+        assertEquals("premise: the slop exit faded the press", 1, cancels)
+        assertEquals(0, cutCount)
+        rule.runOnIdle { arb.cancel() }
+        assertEquals("the cancel cuts the faded press at the call", 1, cutCount)
+        rule.onRoot().performTouchInput { up() }
+        rule.waitForIdle()
+        assertEquals(1, cutCount)
+        assertEquals(0, taps)
+    }
+
+    @Test
+    fun aCancelledGestureFiresNoLongPress() {
+        list()
+        rule.mainClock.autoAdvance = false
+        rule.onRoot().performTouchInput { down(center) }
+        rule.mainClock.advanceTimeByFrame()
+        rule.runOnIdle { arb.cancel() }
+        rule.mainClock.advanceTimeBy(416, ignoreFrameDuration = true)
+        assertEquals(0, longs)
+        rule.onRoot().performTouchInput { up() }
+        rule.mainClock.advanceTimeBy(16)
+        assertEquals(0, taps)
+    }
+
+    @Test
+    fun aCancelAfterADeclinedLongPressCutsTheTap() {
+        takesLong = false
+        list()
+        rule.mainClock.autoAdvance = false
+        rule.onRoot().performTouchInput { down(center) }
+        rule.mainClock.advanceTimeBy(416, ignoreFrameDuration = true)
+        assertEquals("premise: the long press ran and was declined", 1, longs)
+        assertEquals("premise: the tap is live", 0, cancels)
+        rule.runOnIdle { arb.cancel() }
+        assertEquals("the cancel cuts the tap at the call", 1, cancels)
+        rule.onRoot().performTouchInput { up() }
+        rule.mainClock.advanceTimeBy(16)
+        assertEquals(0, taps)
+    }
+
+    @Test
+    fun aCancelEndsALiveListDragAtTheCall() {
+        list()
+        rule.mainClock.autoAdvance = false
+        rule.onRoot().performTouchInput {
+            down(center)
+            repeat(2) { moveBy(Offset(0f, -60f), delayMillis = 8) }
+        }
+        rule.mainClock.advanceTimeByFrame()
+        assertTrue("premise: the drag is live", touch.dragging)
+        rule.runOnIdle { arb.cancel() }
+        assertFalse("the cancel ends the drag at the call", touch.dragging)
+        val at = touch.state.firstVisibleItemIndex to touch.state.firstVisibleItemScrollOffset
+        rule.onRoot().performTouchInput { moveBy(Offset(0f, -60f), delayMillis = 8) }
+        rule.mainClock.advanceTimeByFrame()
+        assertEquals("a further move scrolls nothing", at, touch.state.firstVisibleItemIndex to touch.state.firstVisibleItemScrollOffset)
+        rule.onRoot().performTouchInput { up() }
+        rule.mainClock.advanceTimeBy(48)
+        assertFalse("the up flings nothing", touch.scroll.flinging)
+        assertEquals(at, touch.state.firstVisibleItemIndex to touch.state.firstVisibleItemScrollOffset)
+    }
+
+    @Test
+    fun aCancelEndsALivePanAtTheCall() {
+        list(pan { _, _ -> true })
+        rule.onRoot().performTouchInput {
+            down(center)
+            moveBy(Offset(40f, 0f))
+        }
+        rule.waitForIdle()
+        assertEquals("premise: the pan began", 1, begins.size)
+        val n = drags.size
+        rule.runOnIdle { arb.cancel() }
+        assertEquals("the cancel cancels the pan at the call", 1, panCancels)
+        rule.onRoot().performTouchInput { moveBy(Offset(40f, 0f)) }
+        rule.waitForIdle()
+        assertEquals("a move drags nothing", n, drags.size)
+        rule.onRoot().performTouchInput { up() }
+        rule.waitForIdle()
+        assertTrue(ends.isEmpty())
+        assertEquals(1, panCancels)
+    }
+
+    @Test
+    fun aCancelledGestureBeginsNoPanAndCommitsNoSwipe() {
+        list(pan { _, _ -> true })
+        rule.mainClock.autoAdvance = false
+        rule.onRoot().performTouchInput { down(center) }
+        rule.mainClock.advanceTimeByFrame()
+        rule.runOnIdle { arb.cancel() }
+        val far = arb.slop.swipe + 10f
+        rule.onRoot().performTouchInput {
+            moveBy(Offset(far / 2, 0f))
+            moveBy(Offset(far / 2, 0f))
+            up()
+        }
+        rule.mainClock.advanceTimeBy(48)
+        assertTrue(begins.isEmpty())
+        assertTrue(swipes.isEmpty())
+    }
+
+    @Test
+    fun aTapWhoseOwnActCancelsIsNotCut() {
+        rule.setContent {
+            val a = remember { Arbiter(v1) }
+            arb = a
+            Box(Modifier.fillMaxSize().arbiter(a, page(turn = false))) {
+                Box(
+                    Modifier.fillMaxSize().tapTarget(
+                        a,
+                        Tap(onPress = { presses++ }, onCancel = { cancels++ }, onTap = {
+                            taps++
+                            arb.cancel()
+                        }),
+                    ),
+                )
+            }
+        }
+        rule.onRoot().performTouchInput {
+            down(center)
+            up()
+        }
+        rule.waitForIdle()
+        assertEquals(1, taps)
+        assertEquals(0, cancels)
+    }
+
+    @Test
+    fun aCancelFromAPanCallbackCountsAndCutsNothingAtTheCall() {
+        var inDrag = -1
+        val p = object : Pan {
+            override fun begin(x: Float, origin: Float, down: Offset): Boolean {
+                begins += down
+                return true
+            }
+
+            override fun drag(x: Float) {
+                drags += x
+                if (drags.size == 1) {
+                    arb.cancel()
+                    inDrag = panCancels
+                }
+            }
+
+            override fun end(s: Swipe) {
+                ends += s
+            }
+
+            override fun cancel() {
+                panCancels++
+            }
+        }
+        list(p)
+        rule.onRoot().performTouchInput {
+            down(center)
+            moveBy(Offset(40f, 0f))
+        }
+        rule.waitForIdle()
+        assertEquals("premise: the pan began and dragged", 1, drags.size)
+        assertEquals("no pan cancel inside that drag", 0, inDrag)
+        rule.onRoot().performTouchInput { moveBy(Offset(40f, 0f)) }
+        rule.waitForIdle()
+        assertEquals("the next move cancels the pan", 1, panCancels)
+        assertEquals("and drags no more", 1, drags.size)
+        rule.onRoot().performTouchInput { up() }
+        rule.waitForIdle()
+        assertTrue(ends.isEmpty())
+    }
+
+    @Test
+    fun aConsumedGestureCancelsItsPan() {
+        list(pan { _, _ -> true })
+        rule.onRoot().performTouchInput {
+            down(center)
+            moveBy(Offset(40f, 0f))
+        }
+        rule.waitForIdle()
+        assertEquals("premise: the pan began", 1, begins.size)
+        rule.onRoot().performTouchInput { cancel() }
+        rule.waitForIdle()
+        assertEquals(1, panCancels)
+        assertTrue(ends.isEmpty())
+    }
+
+    @Test
+    fun aGestureEndedByARestartCancelsItsPan() {
+        list(pan { _, _ -> true })
+        rule.onRoot().performTouchInput {
+            down(center)
+            moveBy(Offset(40f, 0f))
+        }
+        rule.waitForIdle()
+        assertEquals("premise: the pan began", 1, begins.size)
+        rule.runOnUiThread {
+            restarts++
+            Snapshot.sendApplyNotifications()
+        }
+        rule.waitForIdle()
+        assertEquals(1, panCancels)
+        assertTrue(ends.isEmpty())
+        rule.onRoot().performTouchInput { up() }
+        rule.waitForIdle()
+        assertTrue(ends.isEmpty())
     }
 
     @Test
