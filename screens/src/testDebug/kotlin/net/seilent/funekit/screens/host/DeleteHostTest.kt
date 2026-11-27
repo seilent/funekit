@@ -59,6 +59,7 @@ import net.seilent.funekit.screens.music.overlay.SheetKind
 import net.seilent.funekit.screens.music.overlay.SheetTarget
 import net.seilent.funekit.screens.music.overlay.sheetItems
 import net.seilent.funekit.screens.music.testFake
+import net.seilent.funekit.screens.settings.SettingSheet
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -675,6 +676,42 @@ class DeleteHostTest {
     }
 
     @Test
+    fun theLibraryCloseCutsADeleteConfirmAskedFromTheSheetInItsTurn() {
+        launch()
+        on(screen(MusicPage.Hub))
+        sheet(songTarget(song()))
+        rule.runOnIdle {
+            val i = app.menu.items.indexOf(DELETE)
+            assertTrue("premise: $DELETE is on ${app.menu.items}", i >= 0)
+            if (app.menuHost.act(i)) stack.accept()
+            app.host.closeLibrarySheets()
+        }
+        frames(OPEN_FRAMES)
+        assertNull("the confirm asked in the close's turn is cut", rule.runOnIdle { stack.overlay })
+        assertTrue(asked.isEmpty())
+    }
+
+    @Test
+    fun theLibraryCloseKeepsASheetItDoesNotCutAskedInItsTurn() {
+        launch()
+        on(screen(MusicPage.Hub))
+        sheet(songTarget(song()))
+        var picks = 0
+        val o = rule.runOnIdle {
+            val o = app.host.openSheet(SettingSheet(MenuForm.Sheet, OTHER, listOf(OTHER, OTHER))) {
+                picks++
+                true
+            }
+            app.host.closeLibrarySheets()
+            o
+        }
+        frames(OPEN_FRAMES)
+        assertSame("the app's sheet asked in the close's turn stays", o, rule.runOnIdle { stack.overlay })
+        rule.runOnIdle { if (app.menuHost.act(0)) stack.accept() }
+        assertEquals("its pick runs its act", 1, picks)
+    }
+
+    @Test
     fun theLibraryCloseFiresNoPendingJumpPick() {
         launch(root = true)
         val hub = screen(MusicPage.Hub)
@@ -800,5 +837,6 @@ class DeleteHostTest {
         private const val SCRIM_UP = 40f
         private const val PICK_IMAGE = "pick image"
         private const val QUERY = "rain"
+        private const val OTHER = "other"
     }
 }

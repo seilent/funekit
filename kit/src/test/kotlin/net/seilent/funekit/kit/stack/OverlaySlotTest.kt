@@ -110,6 +110,105 @@ class OverlaySlotTest {
         assertSame(a, s.stack.overlay)
     }
 
+    @Test
+    fun anOpenAfterAnAskThatEndsTheTopHoldsTheSlotFromItsCall() {
+        val s = Slots()
+        var top = Overlay(OverKind.Sheet)
+        s.stack.open(top)
+        s.stack.frame(0)
+        s.settle(top)
+        val asks = listOf<Pair<String, (Overlay) -> Unit>>(
+            "accept" to { _ -> s.stack.accept() },
+            "close" to { _ -> s.stack.close() },
+            "home" to { _ -> s.stack.home(MoveKind.T4n) },
+            "reset" to { _ -> s.stack.reset(listOf(HUB)) },
+            "cutOverlay" to { o -> s.stack.cutOverlay(o) },
+        )
+        for ((name, ask) in asks) {
+            val b = Overlay(OverKind.Sheet)
+            ask(top)
+            s.stack.open(b)
+            assertTrue("an open after $name holds the slot", s.stack.holds(b))
+            s.step()
+            assertSame("the open after $name is up", b, s.stack.overlay)
+            assertFalse("the open after $name is no longer held", s.stack.holds(b))
+            s.settle(b)
+            top = b
+        }
+        s.stack.close()
+        s.step()
+        assertTrue("premise: the top is closing", top.closing && s.stack.overlay === top)
+        val b = Overlay(OverKind.Sheet)
+        s.stack.open(b)
+        assertTrue("an open over a closing top holds the slot", s.stack.holds(b))
+        s.step()
+        assertSame(b, s.stack.overlay)
+        assertFalse(s.stack.holds(b))
+    }
+
+    @Test
+    fun aSecondOpenInTheTurnHoldsNothing() {
+        val s = Slots()
+        val a = Overlay(OverKind.Sheet)
+        s.stack.open(a)
+        s.stack.frame(0)
+        s.settle(a)
+        val b = Overlay(OverKind.Sheet)
+        val c = Overlay(OverKind.Sheet)
+        s.stack.accept()
+        s.stack.open(b)
+        s.stack.open(c)
+        assertTrue("the first open after the accept holds the slot", s.stack.holds(b))
+        assertFalse("a second open in the turn holds nothing", s.stack.holds(c))
+        s.step()
+        assertSame(b, s.stack.overlay)
+        s.settle(b)
+        val e = Overlay(OverKind.Sheet)
+        s.stack.open(e)
+        assertFalse("an open over a live top with nothing asked holds nothing", s.stack.holds(e))
+        s.step()
+        assertSame("the live top stays", b, s.stack.overlay)
+    }
+
+    @Test
+    fun aSecondOpenOverAClosingTopHoldsNothing() {
+        val s = Slots()
+        val a = Overlay(OverKind.Sheet)
+        s.stack.open(a)
+        s.stack.frame(0)
+        s.settle(a)
+        s.stack.close()
+        s.step()
+        assertTrue("premise: the top is closing", a.closing && s.stack.overlay === a)
+        val b = Overlay(OverKind.Sheet)
+        val c = Overlay(OverKind.Sheet)
+        s.stack.open(b)
+        s.stack.open(c)
+        assertTrue("the first open over the closing top holds the slot", s.stack.holds(b))
+        assertFalse("a second open over it holds nothing", s.stack.holds(c))
+        s.step()
+        assertSame(b, s.stack.overlay)
+    }
+
+    @Test
+    fun aNoteDiesWithItsFrame() {
+        val s = Slots()
+        val d = Overlay(OverKind.Sheet)
+        s.stack.open(d)
+        s.stack.frame(0)
+        s.settle(d)
+        s.stack.close()
+        s.stack.swapMenu {}
+        s.step()
+        assertSame("premise: the swap reopens the closing sheet", d, s.stack.overlay)
+        assertFalse("premise: the sheet is live", d.closing)
+        val c = Overlay(OverKind.Sheet)
+        s.stack.open(c)
+        assertFalse("an open a turn after the close holds nothing", s.stack.holds(c))
+        s.step()
+        assertSame("the live sheet stays", d, s.stack.overlay)
+    }
+
     private companion object {
         const val STEP = 16L
         const val HUB = "hub"

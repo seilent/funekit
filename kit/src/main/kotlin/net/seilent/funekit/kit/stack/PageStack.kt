@@ -63,6 +63,7 @@ class PageStack<P : Any>(
     var overlay: Overlay? by mutableStateOf(null)
         private set
     private var opening: Overlay? by mutableStateOf(null)
+    private var ending: Overlay? = null
     private var onOpenRuns = false
     var clock by mutableLongStateOf(0L)
         private set
@@ -146,6 +147,11 @@ class PageStack<P : Any>(
         asked++
     }
 
+    private fun ask(ended: Overlay?, a: (Long) -> Unit) {
+        if (ended != null) ending = ended
+        ask(a)
+    }
+
     fun push(page: P, kind: MoveKind, row: Int = -1, album: Long = -1L) = ask { now ->
         if (phase != Phase.Rest || overlay != null) return@ask
         start(Turn(kind, top, page, popping = false, row = row, album = album), now, retarget = false)
@@ -189,7 +195,10 @@ class PageStack<P : Any>(
     ): Boolean {
         check(!onOpenRuns) { "an open's onOpen opens nothing" }
         if (overlay == null && opening != null) return false
-        if (overlay == null) opening = o
+        val up = overlay
+        val noted = up != null && ending === up
+        if (noted) ending = null
+        if (up == null || noted || (opening == null && up.hud == null && up.closing)) opening = o
         ask { now ->
             armedLand(now)
             if (phase != Phase.Rest) land(now)
@@ -214,9 +223,9 @@ class PageStack<P : Any>(
         return true
     }
 
-    fun close() = ask { now -> overlay?.let { closeOverlay(it, now) } }
+    fun close() = ask(overlay?.takeIf { it.hud == null }) { now -> overlay?.let { closeOverlay(it, now) } }
 
-    fun accept() = ask { now ->
+    fun accept() = ask(overlay?.takeIf { it.hud == null }) { now ->
         val o = overlay ?: return@ask
         snapshot(false, true)
         closeOverlay(o, now)
@@ -234,7 +243,7 @@ class PageStack<P : Any>(
 
     fun cutOverlay(only: Overlay, closes: Boolean = true) {
         onMain("PageStack.cutOverlay")
-        ask { now ->
+        ask(only.takeIf { it === overlay }) { now ->
             if (overlay !== only) return@ask
             if (closes && !only.closing) closing(only, now)
             only.drop()
@@ -390,7 +399,7 @@ class PageStack<P : Any>(
         return h.at < move.swapAt && at < move.swapAt + Tok.input_keyHoldMs.toLong()
     }
 
-    fun home(kind: MoveKind) = ask { now ->
+    fun home(kind: MoveKind) = ask(overlay) { now ->
         armedLand(now, replay = false)
         overlay?.drop()
         dropOverlay()
@@ -399,7 +408,7 @@ class PageStack<P : Any>(
         start(Turn(kind, top, null, popping = true, morph = false), now, retarget = false)
     }
 
-    fun reset(to: List<P>) = ask { now ->
+    fun reset(to: List<P>) = ask(overlay) { now ->
         armedLand(now, replay = false)
         overlay?.drop()
         dropOverlay()
@@ -803,6 +812,7 @@ class PageStack<P : Any>(
             if (gate?.replay(now) == true) replayDue = true
         }
         while (asks.isNotEmpty()) asks.removeFirst()(now)
+        ending = null
         handedOff = false
         opens(now)
         if (phase == Phase.Exit && now >= move.swapAt) {

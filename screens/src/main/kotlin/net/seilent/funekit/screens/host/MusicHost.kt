@@ -1379,7 +1379,7 @@ class MusicHost<S : Any> internal constructor(
     fun closeLibrarySheets(newCard: Boolean = false) {
         check(Looper.myLooper() == Looper.getMainLooper()) { "MusicHost.closeLibrarySheets runs on the main thread only" }
         warm()
-        val o = stack.overlay ?: (menuOvers + jump).firstOrNull { stack.holds(it) }
+        val o = (menuOvers + jump).firstOrNull { stack.holds(it) } ?: stack.overlay
         val card = o != null && newCard && cardOver(o)
         if (o != null && (o === jump || libraryOvers.any { it === o } || card)) {
             if (card) cardEnd(o)
