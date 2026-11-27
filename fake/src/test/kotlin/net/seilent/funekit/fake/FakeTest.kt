@@ -28,6 +28,7 @@ import net.seilent.funekit.api.engine.Dac
 import net.seilent.funekit.api.engine.Format
 import net.seilent.funekit.api.engine.Output
 import net.seilent.funekit.api.engine.Outputs
+import net.seilent.funekit.api.events
 import net.seilent.funekit.api.history
 import net.seilent.funekit.api.newAlbums
 import net.seilent.funekit.api.pins
@@ -287,6 +288,22 @@ class FakeTest {
         assertEquals(ids.sorted(), f.library.view().allRows(Listing.Queue).map { it.id }.sorted())
         f.player.shuffle(false)
         assertEquals(ids, f.library.view().allRows(Listing.Queue).map { it.id })
+    }
+
+    @Test
+    fun aResumeAfterTheQueueEndStartsTheLastTrackAgain() = runTest {
+        val f = fake()
+        val seen = events(f.player)
+        val (a, b) = f.library.view().page(Listing.Songs, 0, 2).rows.map { it.id }
+        f.player.play(listOf(a, b), 1, 0)
+        assertEquals(1, seen.value.count { it == EngineEvent.Started(b) })
+        advanceTimeBy(f.player.state.value.durationMs + 1)
+        assertFalse(f.player.state.value.playing)
+        f.player.resume()
+        val st = f.player.state.value
+        assertTrue(st.playing)
+        assertEquals(1, st.index)
+        assertEquals(2, seen.value.count { it == EngineEvent.Started(b) })
     }
 
     @Test

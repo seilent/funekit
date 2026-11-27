@@ -393,11 +393,16 @@ abstract class SeamContract {
         val second = playing(s, b)
         advanceTimeBy(second.durationMs + 1)
         val stopped = s.until(s.player.state) { !it.playing }
-        assertEquals(stopped.durationMs, stopped.anchor.ms(s.elapsedNanos()))
+        assertEquals(1, stopped.index)
+        assertEquals(b, stopped.track)
+        assertEquals(0L, stopped.anchor.frame)
+        assertFalse(stopped.anchor.running)
         val ended = seen.value.count { it == EngineEvent.Ended(b) }
         assertEquals(1, ended)
         s.player.resume()
         s.until(s.player.state) { it.playing }
+        assertEquals(1, s.player.state.value.index)
+        assertTrue(ms(s) < 1_000)
         advanceTimeBy(100L)
         assertEquals(ended, seen.value.count { it == EngineEvent.Ended(b) })
     }
@@ -546,6 +551,57 @@ abstract class SeamContract {
         advanceTimeBy(100L)
         assertEquals(ended.anchor, s.player.state.value.anchor)
         assertFalse(s.player.state.value.playing)
+    }
+
+    @Test
+    fun aStopOrAPauseAfterTheQueueEndKeepsItAndAPrevPlaysTheTrackBefore() = runTest {
+        val s = open(Edge.Main)
+        val (a, b) = songs(s, 2)
+        s.player.play(listOf(a, b), 1, 0)
+        val st = playing(s, b)
+        s.player.seek(st.durationMs - 500)
+        s.until(s.player.state) { it.anchor.ms(s.elapsedNanos()) >= st.durationMs - 500 }
+        advanceTimeBy(1_000L)
+        val end = s.until(s.player.state) { !it.playing }
+        assertEquals(1, end.index)
+        assertEquals(b, end.track)
+        assertEquals(0L, end.anchor.frame)
+        assertFalse(end.anchor.running)
+        advanceTimeBy(1_000L)
+        s.player.stop()
+        advanceTimeBy(100L)
+        assertEquals(end.anchor, s.player.state.value.anchor)
+        assertEquals(1, s.player.state.value.index)
+        assertFalse(s.player.state.value.playing)
+        advanceTimeBy(1_000L)
+        s.player.pause()
+        advanceTimeBy(100L)
+        assertEquals(end.anchor, s.player.state.value.anchor)
+        s.player.prev()
+        playing(s, a)
+        assertEquals(0, s.player.state.value.index)
+        assertTrue(ms(s) < 1_000)
+    }
+
+    @Test
+    fun aNextAfterTheQueueEndOnRepeatAllPlaysTheFirstTrack() = runTest {
+        val s = open(Edge.Main)
+        val (a, b) = songs(s, 2)
+        s.player.play(listOf(a, b), 1, 0)
+        val st = playing(s, b)
+        s.player.seek(st.durationMs - 500)
+        s.until(s.player.state) { it.anchor.ms(s.elapsedNanos()) >= st.durationMs - 500 }
+        advanceTimeBy(1_000L)
+        val end = s.until(s.player.state) { !it.playing }
+        assertEquals(1, end.index)
+        assertEquals(0L, end.anchor.frame)
+        assertFalse(end.anchor.running)
+        s.player.repeat(Repeat.All)
+        s.until(s.player.state) { it.repeat == Repeat.All }
+        s.player.next()
+        playing(s, a)
+        assertEquals(0, s.player.state.value.index)
+        assertTrue(ms(s) < 1_000)
     }
 
     @Test

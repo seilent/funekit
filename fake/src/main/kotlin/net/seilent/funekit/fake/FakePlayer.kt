@@ -69,7 +69,7 @@ class FakePlayer internal constructor(
         val to = if (queue.slot + 1 < queue.size) queue.slot + 1 else if (s.repeat == Repeat.All && queue.size > 0) 0 else -1
         if (to >= 0) {
             queue.select(to)
-            load(0, s.playing)
+            load(0, stopped || s.playing)
         }
     }
 
@@ -94,9 +94,8 @@ class FakePlayer internal constructor(
     override suspend fun stop() = lock.withLock {
         end?.cancel()
         val s = _state.value
-        if (s.input == null) return@withLock
-        val at = if (stopped) frozen(s) else s.anchor.copy(frame = 0, elapsedNanos = clock(), running = false)
-        publish(s.copy(playing = false, anchor = at))
+        if (s.input == null || stopped) return@withLock
+        publish(s.copy(playing = false, anchor = s.anchor.copy(frame = 0, elapsedNanos = clock(), running = false)))
     }
 
     override suspend fun enqueue(ids: List<Long>) = lock.withLock {
@@ -304,14 +303,14 @@ class FakePlayer internal constructor(
     private fun halt() {
         end?.cancel()
         val s = _state.value
-        if (s.input == null) return
+        if (s.input == null || stopped) return
         publish(s.copy(playing = false, anchor = frozen(s)))
     }
 
     private fun proceed() {
         val s = _state.value
         if (queue.current == null) return
-        if (s.input == null || s.anchor.ms(clock()) >= s.durationMs) return load(0, true)
+        if (s.input == null || stopped || s.anchor.ms(clock()) >= s.durationMs) return load(0, true)
         stopped = false
         publish(s.copy(playing = true, anchor = s.anchor.copy(elapsedNanos = clock(), running = true)))
         schedule()
@@ -466,7 +465,7 @@ class FakePlayer internal constructor(
             }
             else -> {
                 stopped = true
-                publish(s.copy(playing = false, anchor = s.anchor.copy(frame = s.durationMs * s.anchor.rate / 1000, elapsedNanos = clock(), running = false)))
+                publish(s.copy(playing = false, anchor = s.anchor.copy(frame = 0, elapsedNanos = clock(), running = false)))
             }
         }
     }
