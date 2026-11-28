@@ -29,7 +29,7 @@ internal fun TestScope.fakeSubject(edge: Edge, refs: Boolean = false, lyricsCarr
         loads = { f.library.pageLoads },
         imageSide = { pngSide(it) },
         wait = VIRTUAL,
-        caps = Caps(artRefs = !refs, outcomes = true, pinCap = f.pinCap, eqCap = f.eqCap, firstIndex = true, trackRefs = refs),
+        caps = Caps(artRefs = !refs, outcomes = true, pinCap = f.pinCap, eqCap = f.eqCap, firstIndex = true, trackRefs = refs, eqStages = true),
         engine = EngineSubject(
             settings = f.settings,
             brokenTrack = tracks.first { it.broken }.id,
@@ -49,6 +49,7 @@ internal fun TestScope.fakeSubject(edge: Edge, refs: Boolean = false, lyricsCarr
         card = { f.card(it) },
         bookTrack = Fixture.ALBUMS.first { it.title == Fixture.BOOK }.tracks.first().id,
         serviceEntry = if (refs) ({}) else null,
+        correction = f.correction,
     )
 }
 

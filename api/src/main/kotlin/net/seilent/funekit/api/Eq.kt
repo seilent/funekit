@@ -6,7 +6,7 @@ import net.seilent.funekit.api.engine.EqFilter
 import net.seilent.funekit.api.engine.EqPart
 import net.seilent.funekit.api.engine.EqView
 
-data class EqResult(val answer: EqAnswer, val name: String? = null, val log: List<String> = emptyList())
+data class EqResult(val answer: EqAnswer, val name: String? = null, val log: List<String> = emptyList(), val text: String? = null)
 
 interface Eq {
     val view: StateFlow<EqView>
@@ -21,4 +21,6 @@ interface Eq {
     suspend fun resetCustom(): EqResult
     suspend fun delete(key: String): EqResult
     suspend fun import(name: String, text: String): EqResult
+    suspend fun update(name: String): EqResult = EqResult(EqAnswer.Refused)
+    suspend fun export(key: String): EqResult = EqResult(EqAnswer.Refused)
 }

@@ -103,10 +103,11 @@ class ApiShapeTest {
                 "lastFm", "lastFmUser", "listenBrainz", "listenBrainzUser", "queued", "lastFmNote", "listenBrainzNote", "signingIn",
                 "appKey",
             ),
-            EqView::class.java to listOf("on", "key", "presets", "shown", "missing", "levels"),
+            EqView::class.java to listOf("on", "key", "presets", "shown", "missing", "levels", "origin"),
             EqCurve::class.java to listOf("preamp10", "filters"),
             EqFilter::class.java to listOf("type", "milliHz", "gain10", "q100"),
-            EqLevels::class.java to listOf("level", "rateHz", "dsd", "dop", "dopTrim", "peak10"),
+            EqLevels::class.java to listOf("level", "rateHz", "dsd", "dop", "dopTrim", "peak10", "preamp10", "alonePeak10", "corrected"),
+            EqResult::class.java to listOf("answer", "name", "log", "text"),
             PlayPrefs::class.java to listOf("through", "list", "resume"),
         )
         assertEquals(emptyList<String>(), misses(want) { fields(it) })

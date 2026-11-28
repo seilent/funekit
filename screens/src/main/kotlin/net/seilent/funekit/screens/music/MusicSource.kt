@@ -28,6 +28,7 @@ class MusicSource(
     val eq: Eq? = null,
     val scrobbling: Scrobbling? = null,
     val modes: PlayModes? = null,
+    val correction: Eq? = null,
 ) {
     suspend fun <T> viewed(block: suspend (LibraryView) -> T): T {
         while (true) {

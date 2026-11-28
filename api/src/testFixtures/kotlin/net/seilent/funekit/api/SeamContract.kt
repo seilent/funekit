@@ -40,6 +40,7 @@ data class Caps(
     val eqCap: Int? = null,
     val firstIndex: Boolean = false,
     val trackRefs: Boolean = false,
+    val eqStages: Boolean = false,
 )
 
 class Subject(
@@ -66,6 +67,7 @@ class Subject(
     val card: (suspend (Card) -> Unit)? = null,
     val bookTrack: Long? = null,
     val serviceEntry: (suspend () -> Unit)? = null,
+    val correction: Eq? = null,
 ) {
     suspend fun <T> within(block: suspend () -> T): T = wait.within(block)
 

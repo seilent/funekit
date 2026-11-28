@@ -16,21 +16,37 @@ import net.seilent.funekit.api.engine.EqFilterType
 import net.seilent.funekit.api.engine.EqPart
 import net.seilent.funekit.api.engine.EqView
 
-class FakeEq internal constructor(cap: Int?) : Eq {
-    private val cap = cap ?: PROFILES_MAX
-    private val lock = Mutex()
-    private val presets = sortedMapOf<String, EqCurve>(ORDER)
+class FakeEq internal constructor(private val book: Book) : Eq {
+    internal class Book(cap: Int?) {
+        val cap = cap ?: PROFILES_MAX
+        val lock = Mutex()
+        val presets = sortedMapOf<String, EqCurve>(ORDER)
+        val stages = mutableListOf<FakeEq>()
+    }
+
+    private val cap = book.cap
+    private val lock = book.lock
+    private val presets = book.presets
     private var on = true
     private var key = EQ_OFF
     private var custom = FRESH
+    private var origin: String? = null
     private val _view = MutableStateFlow(EqView())
 
     override val view: StateFlow<EqView> = _view.asStateFlow()
 
+    init {
+        book.stages += this
+    }
+
     private fun shown(): EqCurve? = if (key == EQ_CUSTOM) custom else presets[key]
 
+    private fun publish() {
+        _view.value = EqView(on, key, presets.keys.toList(), shown(), origin = origin?.takeIf { key == EQ_CUSTOM && it in presets })
+    }
+
     private fun done(name: String? = null): EqResult {
-        _view.value = EqView(on, key, presets.keys.toList(), shown())
+        for (s in book.stages) s.publish()
         return EqResult(EqAnswer.Done, name)
     }
 
@@ -48,10 +64,13 @@ class FakeEq internal constructor(cap: Int?) : Eq {
         val next = change(was) ?: return REFUSED
         if (next == was) return EqResult(EqAnswer.Done)
         var kept: String? = null
-        if (key != EQ_CUSTOM && unsaved()) {
-            if (presets.size >= cap) return NO_SPACE
-            kept = free { "$PRESET $it" }
-            presets[kept] = custom
+        if (key != EQ_CUSTOM) {
+            if (unsaved()) {
+                if (presets.size >= cap) return NO_SPACE
+                kept = free { "$PRESET $it" }
+                presets[kept] = custom
+            }
+            origin = key
         }
         key = EQ_CUSTOM
         custom = next
@@ -105,13 +124,29 @@ class FakeEq internal constructor(cap: Int?) : Eq {
     override suspend fun resetCustom(): EqResult = lock.withLock {
         if (key != EQ_CUSTOM) return@withLock REFUSED
         custom = FRESH
+        origin = null
         done()
     }
 
     override suspend fun delete(key: String): EqResult = lock.withLock {
         if (presets.remove(key) == null) return@withLock REFUSED
-        if (this.key == key) this.key = EQ_OFF
+        for (s in book.stages) {
+            if (s.key == key) s.key = EQ_OFF
+            if (s.origin == key) s.origin = null
+        }
         done()
+    }
+
+    override suspend fun update(name: String): EqResult = lock.withLock {
+        if (key != EQ_CUSTOM || origin != name || name !in presets) return@withLock REFUSED
+        presets[name] = custom
+        key = name
+        done(name)
+    }
+
+    override suspend fun export(key: String): EqResult = lock.withLock {
+        val c = presets[key] ?: return@withLock REFUSED
+        EqResult(EqAnswer.Done, key.map { if (it in UNSAFE) '_' else it }.joinToString("") + PARAMETRIC + TXT, text = autoEq(c))
     }
 
     override suspend fun import(name: String, text: String): EqResult = lock.withLock {
@@ -148,8 +183,30 @@ class FakeEq internal constructor(cap: Int?) : Eq {
         const val KHZ = 1_000_000
         const val FRESH_Q = 140
         val FRESH = EqCurve(0, listOf(EqFilter(EqFilterType.Peak, KHZ, 0, FRESH_Q)))
+        const val UNSAFE = "\\:*?\"<>|"
         val REFUSED = EqResult(EqAnswer.Refused)
         val NO_SPACE = EqResult(EqAnswer.NoSpace)
+
+        fun fixed(v: Int, digits: Int): String {
+            var div = 1
+            repeat(digits) { div *= 10 }
+            val a = if (v < 0) -v else v
+            return "${if (v < 0) "-" else ""}${a / div}.${(a % div).toString().padStart(digits, '0')}"
+        }
+
+        fun autoEq(c: EqCurve): String = buildString {
+            append("Preamp: ${fixed(c.preamp10, 1)} dB\n")
+            c.filters.forEachIndexed { i, f ->
+                append("Filter ${i + 1}: ")
+                val kind = when (f.type) {
+                    EqFilterType.Off -> null
+                    EqFilterType.LowShelf -> "LSC"
+                    EqFilterType.HighShelf -> "HSC"
+                    EqFilterType.Peak -> "PK"
+                }
+                if (kind == null) append("OFF\n") else append("ON $kind Fc ${fixed(f.milliHz, 3)} Hz Gain ${fixed(f.gain10, 1)} dB Q ${fixed(f.q100, 2)}\n")
+            }
+        }
 
         fun digit(c: Char): Boolean = c in '0'..'9'
 

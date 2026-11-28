@@ -59,6 +59,8 @@ abstract class ApiContract : SeamContract() {
 
     private fun still(v: EqView): EqView = v.copy(levels = EqLevels())
 
+    private fun correctionOf(s: Subject): Eq? = s.correction?.takeIf { s.caps.eqStages }
+
     private suspend fun custom(s: Subject, preamp10: Int): EqView {
         assertEquals(EqAnswer.Done, eqOf(s).pick(EQ_CUSTOM).answer)
         assertEquals(EqAnswer.Done, eqOf(s).preamp(preamp10).answer)
@@ -561,6 +563,121 @@ abstract class ApiContract : SeamContract() {
     }
 
     @Test
+    fun eqTheCorrectionStageStartsOffOverTheSamePresets() = runTest {
+        val s = open(Edge.Main)
+        val c = correctionOf(s) ?: return@runTest
+        imports(s, ROOM)
+        val v = s.until(c.view) { ROOM in it.presets }
+        assertEquals(EQ_OFF, v.key)
+        assertTrue(v.on)
+        assertEquals(listOf(ROOM), v.presets)
+        assertNull(v.shown)
+    }
+
+    @Test
+    fun eqAnImportThroughTheCorrectionStageMovesOnlyItsKey() = runTest {
+        val s = open(Edge.Main)
+        val c = correctionOf(s) ?: return@runTest
+        val r = c.import(ROOM, AUTOEQ)
+        assertEquals(EqAnswer.Done, r.answer)
+        assertEquals(ROOM, r.name)
+        s.until(c.view) { it.key == ROOM }
+        assertEquals(EQ_OFF, s.until(eqOf(s).view) { ROOM in it.presets }.key)
+    }
+
+    @Test
+    fun eqEachStageKeepsItsOwnCustom() = runTest {
+        val s = open(Edge.Main)
+        val c = correctionOf(s) ?: return@runTest
+        val eq = eqOf(s)
+        assertEquals(EqAnswer.Done, eq.pick(EQ_CUSTOM).answer)
+        assertEquals(EqAnswer.Done, c.pick(EQ_CUSTOM).answer)
+        assertEquals(EqAnswer.Done, eq.preamp(-20).answer)
+        s.until(eq.view) { it.key == EQ_CUSTOM && it.shown?.preamp10 == -20 }
+        assertEquals(EqAnswer.Done, c.preamp(-40).answer)
+        s.until(c.view) { it.key == EQ_CUSTOM && it.shown?.preamp10 == -40 }
+        assertEquals(-20, eq.view.value.shown?.preamp10)
+    }
+
+    @Test
+    fun eqDeletingAPresetTurnsOffEveryStageOnIt() = runTest {
+        val s = open(Edge.Main)
+        val c = correctionOf(s) ?: return@runTest
+        val eq = eqOf(s)
+        imports(s, ROOM)
+        assertEquals(EqAnswer.Done, c.pick(ROOM).answer)
+        s.until(c.view) { it.key == ROOM }
+        assertEquals(EqAnswer.Done, eq.delete(ROOM).answer)
+        assertEquals(EQ_OFF, s.until(eq.view) { ROOM !in it.presets }.key)
+        assertEquals(EQ_OFF, s.until(c.view) { ROOM !in it.presets }.key)
+    }
+
+    @Test
+    fun eqAnEditOfAPresetNamesItsOriginAndUpdateWritesItBack() = runTest {
+        val s = open(Edge.Main)
+        if (!s.caps.eqStages) return@runTest
+        val eq = eqOf(s)
+        imports(s, ROOM)
+        assertEquals(EqAnswer.Done, eq.preamp(-40).answer)
+        assertEquals(ROOM, s.until(eq.view) { it.key == EQ_CUSTOM && it.shown?.preamp10 == -40 }.origin)
+        val r = eq.update(ROOM)
+        assertEquals(EqAnswer.Done, r.answer)
+        assertEquals(ROOM, r.name)
+        val v = s.until(eq.view) { it.key == ROOM }
+        assertEquals(-40, v.shown?.preamp10)
+        assertNull(v.origin)
+    }
+
+    @Test
+    fun eqUpdateWithNoOriginOrAnotherNameIsRefused() = runTest {
+        val s = open(Edge.Main)
+        if (!s.caps.eqStages) return@runTest
+        val eq = eqOf(s)
+        assertEquals(EqAnswer.Done, eq.pick(EQ_CUSTOM).answer)
+        val fresh = s.until(eq.view) { it.key == EQ_CUSTOM }
+        assertNull(fresh.origin)
+        assertEquals(EqAnswer.Refused, eq.update(ROOM).answer)
+        assertEquals(still(fresh), still(eq.view.value))
+        imports(s, ROOM)
+        imports(s, OTHER)
+        assertEquals(EqAnswer.Done, eq.pick(ROOM).answer)
+        s.until(eq.view) { it.key == ROOM }
+        assertEquals(EqAnswer.Done, eq.preamp(-40).answer)
+        val edited = s.until(eq.view) { it.key == EQ_CUSTOM && it.origin == ROOM }
+        assertEquals(EqAnswer.Refused, eq.update(OTHER).answer)
+        assertEquals(still(edited), still(eq.view.value))
+    }
+
+    @Test
+    fun eqAnUpdateReachesTheOtherStageOnThatPreset() = runTest {
+        val s = open(Edge.Main)
+        val c = correctionOf(s) ?: return@runTest
+        val eq = eqOf(s)
+        imports(s, ROOM)
+        assertEquals(EqAnswer.Done, c.pick(ROOM).answer)
+        val before = checkNotNull(s.until(c.view) { it.key == ROOM }.shown)
+        assertEquals(EqAnswer.Done, eq.preamp(-40).answer)
+        s.until(eq.view) { it.origin == ROOM }
+        assertEquals(EqAnswer.Done, eq.update(ROOM).answer)
+        val v = s.until(c.view) { it.shown?.preamp10 == -40 }
+        assertEquals(ROOM, v.key)
+        assertEquals(before.filters, v.shown?.filters)
+    }
+
+    @Test
+    fun eqExportGivesTheNameAndTextOfAPresetOnly() = runTest {
+        val s = open(Edge.Main)
+        if (!s.caps.eqStages) return@runTest
+        val eq = eqOf(s)
+        imports(s, ROOM)
+        val r = eq.export(ROOM)
+        assertEquals(EqAnswer.Done, r.answer)
+        assertEquals("$ROOM ParametricEQ.txt", r.name)
+        assertTrue(checkNotNull(r.text).startsWith("Preamp: "))
+        for (k in listOf(EQ_CUSTOM, EQ_OFF, NONE)) assertEquals(k, EqAnswer.Refused, eq.export(k).answer)
+    }
+
+    @Test
     fun scrobbleSwitchesShowInTheView() = runTest {
         val s = open(Edge.Main)
         val scrobbling = checkNotNull(s.scrobbling)
@@ -601,6 +718,8 @@ abstract class ApiContract : SeamContract() {
         const val ROOM = "Room One"
         const val LIST = 7L
         const val ROOM_2 = "Room One 2"
+        const val OTHER = "Other"
+        const val NONE = "none"
         const val AUTOEQ = "Preamp: -3 dB\nFilter 1: ON PK Fc 1000 Hz Gain 2 dB Q 1.41"
         const val PRESET_1 = "Preset 1"
         const val PRESET_2 = "Preset 2"

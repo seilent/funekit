@@ -21,6 +21,9 @@ data class EqLevels(
     val dop: Boolean = false,
     val dopTrim: Int = 0,
     val peak10: Int? = null,
+    val preamp10: Int? = null,
+    val alonePeak10: Int? = null,
+    val corrected: Boolean = false,
 )
 
 data class EqView(
@@ -30,4 +33,5 @@ data class EqView(
     val shown: EqCurve? = null,
     val missing: Boolean = false,
     val levels: EqLevels = EqLevels(),
+    val origin: String? = null,
 )
