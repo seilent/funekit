@@ -381,6 +381,18 @@ class PageStackTest {
     }
 
     @Test
+    fun homeTakesItsKindFromThePageItsLandLeavesOnTop() {
+        val s = stack()
+        s.push("np", MoveKind.T3)
+        s.frame(0)
+        assertEquals("premise: the push is before its swap", Phase.Exit, s.phase)
+        s.home { t -> if (t.from == "np") MoveKind.T8 else MoveKind.T4n }
+        s.frame(16)
+        assertEquals("the home kind reads the landed top", MoveKind.T8, s.turn?.kind)
+        assertEquals("np", s.turn?.from)
+    }
+
+    @Test
     fun aPageBackHookTakesTheBackAtRestAndNothingPops() {
         val asked = mutableListOf<Pair<String, Long>>()
         val s = PageStack<String>(MoveForms(), { PageKind.Grid }, pageBack = { p, now -> asked += p to now; true }) { ends }.also { it.pages.add("hub") }

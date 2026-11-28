@@ -422,13 +422,16 @@ class PageStack<P : Any>(
         return h.at < move.swapAt && at < move.swapAt + Tok.input_keyHoldMs.toLong()
     }
 
-    fun home(kind: MoveKind) = ask(overlay) { now ->
+    fun home(kind: MoveKind) = home { kind }
+
+    fun home(popKind: (Turn<P>) -> MoveKind) = ask(overlay) { now ->
         armedLand(now, replay = false)
         overlay?.drop()
         dropOverlay()
         if (phase != Phase.Rest) land(now)
         if (pages.isEmpty()) return@ask
-        start(Turn(kind, top, null, popping = true, morph = false), now, retarget = false)
+        val t = Turn(MoveKind.None, top, null, popping = true)
+        start(Turn(popKind(t), t.from, null, popping = true, morph = false), now, retarget = false)
     }
 
     fun reset(to: List<P>) = ask(overlay) { now ->
