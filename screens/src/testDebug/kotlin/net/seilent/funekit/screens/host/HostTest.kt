@@ -2710,6 +2710,27 @@ class HostTest {
     }
 
     @Test
+    fun aSeekDragThatOutlivesAHomeKeySeeksNothingAtItsEnd() {
+        val seeks = mutableListOf<Long>()
+        val app = seekApp(seeks)
+        val m = app.music.np
+        npDown(app, seekAt)
+        assertTrue("premise: the seek band down seeks", m.seeking)
+        val x = seekPx.x
+        rule.runOnIdle {
+            assertTrue("premise: the drag takes the seek", app.host.npPan.begin(x, x, seekPx))
+            app.host.npPan.drag(x / 2)
+        }
+        rule.runOnIdle { app.stack.home(app.host.homeKind) }
+        frames(CUT_FRAMES)
+        assertEquals("premise: the home key closes now playing with a T8", MoveKind.T8, app.stack.turn?.kind)
+        rule.runOnIdle { app.host.npPan.end(Swipe.None) }
+        frames(OPEN_FRAMES)
+        assertTrue("a seek drag ended after now playing leaves seeks nothing", seeks.isEmpty())
+        assertFalse("the drag's end still ends the seek", m.seeking)
+    }
+
+    @Test
     fun aSeekWhileThePlayerIsGoneLogsAndStaysOnNowPlaying() {
         val app = playingApp { p ->
             object : Player by p {

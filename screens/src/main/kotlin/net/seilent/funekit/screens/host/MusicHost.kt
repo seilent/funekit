@@ -399,6 +399,7 @@ class MusicHost<S : Any> internal constructor(
     private var liftModel: RowsPage<*>? = null
     private val infoRole = Role(Roles.dialogItem.size, Roles.dialogItem.weight, Case.Mixed, Roles.dialogItem.alpha, Roles.dialogItem.tracking)
     val popKind: (Turn<S>) -> MoveKind = { t -> pop(t) ?: appPop(t) }
+    val homeKind: (Turn<S>) -> MoveKind = { t -> if (t.from?.let(::isNp) == true) npClose(t) else MoveKind.T4n }
 
     val chromes: MusicChromes get() = types.chromes
 
@@ -551,8 +552,10 @@ class MusicHost<S : Any> internal constructor(
 
     private fun pop(t: Turn<S>): MoveKind? {
         t.from?.let { s -> app.settings(s)?.id?.header ?: app.eq(s)?.id?.header }?.let { h -> return if (t.to != null) MoveKind.T4 else if (app.homeHas(h)) MoveKind.T4h else MoveKind.T4n }
-        return musicPopKind(t, app::music, models, app::homeHas)?.also { if (it == MoveKind.T8) movePaint.npForm = npCloseForm(t.to == null, app.homeFront()) }
+        return musicPopKind(t, app::music, models, app::homeHas)?.let { if (it == MoveKind.T8) npClose(t) else it }
     }
+
+    private fun npClose(t: Turn<S>): MoveKind = MoveKind.T8.also { movePaint.npForm = npCloseForm(t.to == null, app.homeFront()) }
 
     fun ready(s: S): Boolean? {
         val e = entryOf(s) ?: return pageEntry(s)?.let { models[it]?.ready ?: true }

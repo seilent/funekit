@@ -1198,7 +1198,7 @@ class HomeHostTest {
     }
 
     @Test
-    fun aHomeKeyFromNowPlayingOverTheFrontDrawsNoPanUnderTheMove() {
+    fun aHomeKeyFromNowPlayingOverTheFrontCutsThePaneAndRunsAT8Home() {
         val ids = songs(TILES)
         runBlocking { fake.player.play(listOf(ids[0]), 0, 0) }
         front(songData(ids))
@@ -1206,17 +1206,45 @@ class HomeHostTest {
         until("now playing is over the front") { npOnTop() }
         settle()
         rule.runOnUiThread {
-            state.leave()
-            stack.home(MoveKind.T4n)
+            state.cut()
+            stack.home(app.host.homeKind)
         }
-        until("the T4n swaps to the root") { stack.top == null }
-        assertTrue("premise: the pan runs back under the move", state.pan.shown && stack.phase != Phase.Rest)
+        assertTrue("the pane closes at once", !state.pan.shown && !state.front)
+        until("the home key's turn starts") { stack.turn != null }
+        assertEquals("the home key closes now playing with a T8", MoveKind.T8, stack.turn?.kind)
+        assertEquals("the T8 closes to the home menu", NpForm.Page, app.movePaint.npForm)
         val under = underTheMove()
-        assertTrue("no pan canvas under the move", under.none { it.pan })
-        assertTrue("no static front under the move", under.none { it.front })
-        assertTrue("premise: the pan's tail runs past the T4n's rest", state.panning(SystemClock.uptimeMillis()))
-        settle()
-        assertTrue("the home shows once the pan lands", shown().home)
+        assertTrue("no home under the T8", under.none { it.home })
+        assertTrue("no pan canvas under the T8", under.none { it.pan })
+        assertTrue("no static front under the T8", under.none { it.front })
+        val landed = shown()
+        assertTrue("the home draws on the landing frame", landed.home)
+        assertFalse("no pan canvas on the landing frame", landed.pan)
+        assertFalse("no pan tail at the T8's rest", state.panning(SystemClock.uptimeMillis()))
+    }
+
+    @Test
+    fun aHomeKeyFromAPageOverTheFrontCutsThePaneAndRunsT4n() {
+        front(songData(songs(TILES)))
+        rule.runOnUiThread {
+            stack.push(TestScreen.Music(MusicEntry(stack.entry(), MusicPage.Hub)), MoveKind.T2)
+            Snapshot.sendApplyNotifications()
+        }
+        until("premise: the push lands") { stack.phase == Phase.Rest && stack.top != null }
+        assertTrue("premise: the pane stays in front under the page", state.pan.front)
+        rule.runOnUiThread {
+            state.cut()
+            stack.home(app.host.homeKind)
+        }
+        assertTrue("the pane closes at once", !state.pan.shown && !state.front)
+        until("the home key's turn starts") { stack.turn != null }
+        assertEquals("a page over the front pops with T4n", MoveKind.T4n, stack.turn?.kind)
+        val under = underTheMove()
+        assertTrue("no pan canvas under the T4n", under.none { it.pan })
+        assertTrue("no static front under the T4n", under.none { it.front })
+        val landed = shown()
+        assertTrue("the home draws on the landing frame", landed.home)
+        assertFalse("no pan canvas on the landing frame", landed.pan)
     }
 
     @Test

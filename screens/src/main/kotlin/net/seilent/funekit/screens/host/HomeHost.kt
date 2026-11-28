@@ -416,6 +416,14 @@ class HomeState internal constructor(
 
     fun back() = leave()
 
+    fun cut() {
+        val p = qp.pan
+        val t = now()
+        p.show(false, t)
+        p.land(t)
+        poke()
+    }
+
     fun show(front: Boolean) {
         if (!panLayers(front)) return
         qp.pan.show(front, now())
