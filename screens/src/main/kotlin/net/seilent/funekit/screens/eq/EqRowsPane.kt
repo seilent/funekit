@@ -59,6 +59,8 @@ private const val TYPE_VALUE = "type value"
 private const val DELETE_ASK = "delete preset?"
 private const val DELETE = "delete preset"
 private const val KEEP = "keep preset"
+private const val UPDATE_ASK = "update preset?"
+private const val UPDATE = "update preset"
 private const val RENAME = "rename preset"
 private const val TOO_MANY = "too many presets"
 private const val RESET_ASK = "reset custom?"
@@ -141,6 +143,7 @@ class EqRowsPane(private val header: String, private val rows: EqRows) : EqPane 
         EqKind.AddBand -> "add band"
         EqKind.RemoveBand -> "remove band"
         EqKind.ResetCustom -> RESET
+        EqKind.UpdatePreset -> UPDATE
     }
 
     private fun valueOf(p: EqPivot, r: EqRow): String = when (r.kind) {
@@ -392,6 +395,7 @@ class EqRowsPane(private val header: String, private val rows: EqRows) : EqPane 
             EqKind.RenamePreset -> presetOf(p)?.let { (key, name) -> rename(p, key, name, name, acts) }
             EqKind.Import -> rows.import(p.slot)
             EqKind.ExportPreset -> rows.export(p.slot)
+            EqKind.UpdatePreset -> update(p, l.value, acts)
             EqKind.AutoPreamp, EqKind.Total, EqKind.Peak -> Unit
         }
     }
@@ -473,6 +477,16 @@ class EqRowsPane(private val header: String, private val rows: EqRows) : EqPane 
         showSheet(p, acts, SettingSheet(MenuForm.Dlg, DELETE_ASK, listOf(DELETE, KEEP), focus = 1, confirm = true), { i ->
             if (i == 0) {
                 send(acts, p.name, false, { rows.delete(p.slot, key) }) { r -> if (r == EqOutcome.Failed) acts.toast(NOT_DELETED, name) }
+            }
+            true
+        }) {}
+    }
+
+    private fun update(p: EqPivot, name: String, acts: EqActs) {
+        val items = listOf(name, UPDATE, KEEP)
+        showSheet(p, acts, SettingSheet(MenuForm.Dlg, UPDATE_ASK, items, lead = 1, mixedRow = 0, focus = items.lastIndex, confirm = true, wrapLead = true), { i ->
+            if (i == 1) {
+                send(acts, p.name, false, { rows.update(p.slot, name) }) { r -> if (r == EqOutcome.Refused || r == EqOutcome.Failed) acts.toast(NOT_SAVED, name) }
             }
             true
         }) {}

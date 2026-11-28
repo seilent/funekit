@@ -65,6 +65,8 @@ class Menu {
         private set
     var subs: List<String> = emptyList()
         private set
+    var wrapLead = false
+        private set
     var swatches: List<Color> = emptyList()
         private set
     var kept = false
@@ -150,6 +152,7 @@ class Menu {
         mixed = emptyList()
         wraps = emptyList()
         subs = emptyList()
+        wrapLead = false
         swatches = emptyList()
         pin = 0
         maxFirst = 0
@@ -197,6 +200,11 @@ class Menu {
     fun leadParts(wraps: List<String>, subs: List<String> = emptyList()) {
         this.wraps = wraps
         this.subs = subs
+        change()
+    }
+
+    fun wrapLead() {
+        wrapLead = true
         change()
     }
 
@@ -460,14 +468,21 @@ fun menuInk(m: TextMeasurer, fonts: FontFamily.Resolver, menu: Menu, s: Scale, d
     val countPx = rolePx(Roles.listCount, s, mp)
     val title = m.word(menu.title, titleRole, style(titleRole, s.stdPpu), fonts, density, covers, s.board.fontHanMinPx)
     val titleH = if (menu.title.isEmpty()) 0 else Metrics.ascent(titlePx) + Metrics.descent(titlePx)
-    val parts = menu.wraps.isNotEmpty() || menu.subs.isNotEmpty()
+    val parts = menu.wraps.isNotEmpty() || menu.subs.isNotEmpty() || menu.wrapLead
     val pin = if ((menu.form == MenuForm.Sheet && (menu.valueSheet || menu.cellsOn)) || parts) menu.lead else 0
     val w = s.widthPx
     val mixedWidth = textWidth(mixedItem, style(mixedItem), fonts, density, covers, s.board.fontHanMinPx)
     fun width64(t: String) = pen64(mixedWidth(t))
-    val rows = menu.items.mapIndexed { i, t ->
+    val leadRows = if (menu.wrapLead && menu.lead > 0) {
+        val t = menu.items[0]
+        wrapRanges(t, pen64((w - edge).toFloat()) - pen64(Tok.edge, mp), PAIR, { b, e -> width64(t.substring(b, e)) }, { p, e -> nextCluster(t, p, e) }).map { (b, e) -> t.substring(b, e) }
+    } else {
+        emptyList()
+    }
+    val rows = menu.items.mapIndexed { i, item ->
+        val t = leadRows.firstOrNull()?.takeIf { i == 0 } ?: item
         val line = menu.readOnly || i < menu.lead
-        val note = menu.valueSheet && i < menu.lead
+        val note = menu.valueSheet && i < menu.lead && !menu.wrapLead
         val isMixed = i == menu.mixedRow || menu.mixed.getOrElse(i) { false }
         val role = if (note) Roles.settingsValue else if (isMixed) mixedItem else itemRole
         val rolePx = if (note) valuePx else itemPx
@@ -480,7 +495,7 @@ fun menuInk(m: TextMeasurer, fonts: FontFamily.Resolver, menu: Menu, s: Scale, d
         var h = pitch
         var cut = 0
         val swatch = i - menu.lead in menu.swatches.indices
-        val wrapText = menu.wraps.getOrElse(i) { "" }
+        val wrapText = leadRows.getOrNull(1)?.takeIf { i == 0 } ?: menu.wraps.getOrElse(i) { "" }
         val subText = menu.subs.getOrElse(i) { "" }
         if (parts && i < menu.lead) {
             if (wrapText.isNotEmpty()) h += Metrics.ascent(itemPx) + Metrics.descent(itemPx)

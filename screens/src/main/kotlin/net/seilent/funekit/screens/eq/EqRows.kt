@@ -3,7 +3,7 @@ package net.seilent.funekit.screens.eq
 import androidx.compose.runtime.State
 import net.seilent.funekit.api.engine.EqLevels
 
-enum class EqKind { On, Mode, Profile, Preset, SavePreset, DeletePreset, RenamePreset, ExportPreset, Import, Preamp, AutoPreamp, Total, Peak, Band, Gain, AddBand, RemoveBand, ResetCustom }
+enum class EqKind { On, Mode, Profile, Preset, SavePreset, DeletePreset, RenamePreset, ExportPreset, Import, Preamp, AutoPreamp, Total, Peak, Band, Gain, AddBand, RemoveBand, ResetCustom, UpdatePreset }
 
 enum class EqField { Type, Freq, Gain, Q }
 
@@ -89,6 +89,8 @@ interface EqRows {
     suspend fun add(slot: String, band: EqBand): EqOutcome
 
     suspend fun remove(slot: String): EqOutcome
+
+    suspend fun update(slot: String, name: String): EqOutcome = EqOutcome.Refused
 
     fun hasEntry(slot: String): Boolean = true
 }

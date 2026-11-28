@@ -391,6 +391,15 @@ a105/eq-parametric no funeOS reference in the set: the v0.4.4 EQ shots are eq-50
 a105/eq-graphic no funeOS reference in the set: the v0.4.4 EQ shots are eq-500 and eqrows kinds, none of them this scene
 a105/eq-preamp-edit no funeOS reference in the set: the v0.4.4 EQ shots are eq-500 and eqrows kinds, none of them this scene
 a105/eq-parametric-large no funeOS reference in the set: the v0.4.4 EQ shots are eq-500 and eqrows kinds, none of them this scene
+v1/eq-update no funeOS reference of this kind in the set: the scene stands beside the v0.4.4 shot eq-500-update
+v1/eq-update-confirm no funeOS reference of this kind in the set: the scene stands beside the v0.4.4 shot eq-500-updateconfirm
+v1/eq-update-long no funeOS reference of this kind in the set: the ask with the long name, where the v0.4.4 shot eq-500-updatelong holds the page with no ask
+r1/eq-update no funeOS reference of this kind in the set: the scene stands beside the v0.4.4 shot eq-500-update
+r1/eq-update-confirm no funeOS reference of this kind in the set: the scene stands beside the v0.4.4 shot eq-500-updateconfirm
+r1/eq-update-long no funeOS reference of this kind in the set: the ask with the long name, where the v0.4.4 shot eq-500-updatelong holds the page with no ask
+a105/eq-update no funeOS reference of this kind in the set: the scene stands beside the v0.4.4 shot eq-500-update
+a105/eq-update-confirm no funeOS reference of this kind in the set: the scene stands beside the v0.4.4 shot eq-500-updateconfirm
+a105/eq-update-long no funeOS reference of this kind in the set: the ask with the long name, where the v0.4.4 shot eq-500-updatelong holds the page with no ask
 a105/cardbad-500-albums the hub under a card error draws only the chrome and the line card error, all text, and the residual pass gates the rest, so no region gates
 a105/cardbad-500-artists the hub under a card error draws only the chrome and the line card error, all text, and the residual pass gates the rest, so no region gates
 a105/cardbad-500-history History under a card error draws only the chrome and the line card error, all text, and the residual pass gates the rest, so no region gates

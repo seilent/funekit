@@ -9,11 +9,19 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.font.createFontFamilyResolver
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
+import net.seilent.funekit.Dpi
 import net.seilent.funekit.Insets
 import net.seilent.funekit.Nav
+import net.seilent.funekit.Scale
 import net.seilent.funekit.Surface
 import net.seilent.funekit.Window
 import net.seilent.funekit.gen.Tok
+import net.seilent.funekit.kit.MenuInk
+import net.seilent.funekit.kit.menuInk
 import net.seilent.funekit.kit.motion.Curves
 import net.seilent.funekit.kit.motion.OverKind
 import net.seilent.funekit.kit.motion.Overlay
@@ -48,6 +56,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import kotlin.math.abs
@@ -190,6 +199,15 @@ class EqPaneHostTest {
     }
 
     private fun shows(app: TestApp): Int = rule.runOnIdle { app.toast.shows }
+
+    private fun updating(name: String = PRESET): TestEqRows = TestEqRows(outputs().map { it.copy(rows = it.rows + EqRow(EqKind.UpdatePreset, name)) })
+
+    private fun leadInk(app: TestApp, s: Scale = page): MenuInk = rule.runOnIdle {
+        val fonts = createFontFamilyResolver(RuntimeEnvironment.getApplication())
+        menuInk(TextMeasurer(fonts, Density(1f), LayoutDirection.Ltr), fonts, app.menu, s, Density(1f), true, null)
+    }
+
+    private fun leadLines(ink: MenuInk): List<String> = listOfNotNull(ink.rows[0].text.text, ink.rows[0].wrap?.text)
 
     private fun presets(rows: TestEqRows) {
         rows.choiceOf = { _, _ -> listOf(EqChoice("custom", "custom"), EqChoice(PRESET_KEY, PRESET)) }
@@ -946,6 +964,97 @@ class EqPaneHostTest {
     }
 
     @Test
+    fun anUpdatePresetTapAsksWithTheNameLeadAndKeepFocused() {
+        val rows = updating()
+        val app = app(rows)
+        val m = open(app)
+        tapRow(app, m, UPDATE_ROW)
+        assertEquals("premise: the ask is up", OverKind.Dlg, app.stack.overlay?.kind)
+        assertEquals(
+            listOf<Any>("update preset?", listOf(PRESET, "update preset", "keep preset"), 1, 0, 2, true),
+            rule.runOnIdle { listOf(app.menu.title, app.menu.items, app.menu.lead, app.menu.mixedRow, app.menu.focus.row, app.menu.wrapLead) },
+        )
+        assertEquals("the ask sends nothing", emptyList<String>(), rows.sends)
+        assertEquals("a short name takes one lead line", listOf(PRESET), leadLines(leadInk(app)))
+    }
+
+    @Test
+    fun aLongNameWrapsToTwoLeadLines() {
+        val app = app(updating(LONG_NAME))
+        val m = open(app)
+        tapRow(app, m, UPDATE_ROW)
+        val ink = leadInk(app)
+        val lines = leadLines(ink)
+        assertEquals("two lead lines", 2, lines.size)
+        assertTrue("the first line starts the name: $lines", LONG_NAME.startsWith(lines[0]))
+        assertTrue("the wrap goes on from it: $lines", LONG_NAME.substring(lines[0].length).trimStart().startsWith(lines[1]))
+        assertEquals("the items stay three", 3, ink.rows.size)
+        assertTrue("the lead row holds both lines", ink.rows[0].h > ink.pitch)
+    }
+
+    @Test
+    fun aWidthChangeWrapsTheLeadAgain() {
+        val app = app(updating(LONG_NAME))
+        val m = open(app)
+        tapRow(app, m, UPDATE_ROW)
+        val narrow = leadLines(leadInk(app))
+        val wide = leadLines(leadInk(app, scale(Window(PHONE_W, PHONE_H, SDK, none, none, none, none, none, PHONE_DPI), Nav.None, Surface.Page, false)))
+        assertEquals("premise: two lines at both widths", listOf(2, 2), listOf(narrow.size, wide.size))
+        assertTrue("the wider page's first line is longer: $narrow $wide", wide[0].length > narrow[0].length)
+        assertTrue("both start the name", LONG_NAME.startsWith(wide[0]))
+    }
+
+    @Test
+    fun updatePresetSendsTheShownName() {
+        val rows = updating()
+        val app = app(rows)
+        val m = open(app)
+        tapRow(app, m, UPDATE_ROW)
+        pick(app, 1)
+        assertEquals(listOf("update $HP_SLOT $PRESET"), rows.sends)
+        assertNull("the pick closes the ask", app.stack.overlay)
+    }
+
+    @Test
+    fun keepPresetSendsNothing() {
+        val rows = updating()
+        val app = app(rows)
+        val m = open(app)
+        tapRow(app, m, UPDATE_ROW)
+        pick(app, 2)
+        assertEquals(emptyList<String>(), rows.sends)
+        assertNull("the pick closes the ask", app.stack.overlay)
+    }
+
+    @Test
+    fun aRefusedOrFailedUpdateToastsPresetNotSaved() {
+        val rows = updating()
+        val app = app(rows)
+        val m = open(app)
+        for (a in listOf(EqOutcome.Refused, EqOutcome.Failed, EqOutcome.Done)) {
+            rows.answer = a
+            rows.sends.clear()
+            val s = spyTap(app, m, UPDATE_ROW)
+            pick(app, 1)
+            assertEquals("premise: the update went out, $a", listOf("update $HP_SLOT $PRESET"), rows.sends)
+            assertEquals("$a", if (a == EqOutcome.Done) emptyList<String>() else listOf("preset not saved / $PRESET"), s.toasts)
+        }
+    }
+
+    @Test
+    fun theUpdateAskClosesWhenItsPivotLeaves() {
+        val rows = updating()
+        val app = app(rows)
+        val m = open(app)
+        tapRow(app, m, UPDATE_ROW)
+        assertEquals("premise: the ask is up", OverKind.Dlg, app.stack.overlay?.kind)
+        rule.runOnIdle { rows.land { ps -> ps.map { if (it.slot == HP_SLOT) it.copy(name = WIRED) else it } } }
+        frames(OPEN_FRAMES)
+        assertNull("the move closes the ask", app.stack.overlay)
+        assertEquals("nothing sent", emptyList<String>(), rows.sends)
+    }
+
+    @Test
     fun aTapOnRenamePresetWithNoTypedEntryOpensNothing() {
         val rows = TestEqRows(listOf(EqPivot(HP_SLOT, HP, listOf(EqRow(EqKind.On, "on"), EqRow(EqKind.RenamePreset))))).also { it.typed = false }
         presets(rows)
@@ -978,6 +1087,11 @@ class EqPaneHostTest {
         private const val PRESET_ROW = "hp:Preset"
         private const val TYPE = "type"
         private const val RENAME = "hp:RenamePreset"
+        private const val UPDATE_ROW = "hp:UpdatePreset"
+        private const val LONG_NAME = "Sennheiser HD 650 Harman Over Ear 2018 Target With A Bass Shelf!"
+        private const val PHONE_W = 1080
+        private const val PHONE_H = 2160
+        private val PHONE_DPI = Dpi(403.411f, 403.411f, 440, PHONE_W, PHONE_H, 1, PHONE_W, PHONE_H)
         private const val PRESET = "HD 650"
         private const val PRESET_KEY = "hd650"
         private const val SAVED = "Preset 2"

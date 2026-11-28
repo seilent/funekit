@@ -141,5 +141,7 @@ class TestEqRows(start: List<EqPivot>) : EqRows {
 
     override suspend fun remove(slot: String): EqOutcome = send(slot, "remove $slot") { withBands(it, it.bands.dropLast(1)) }
 
+    override suspend fun update(slot: String, name: String): EqOutcome = send(slot, "update $slot $name") { it }
+
     override fun hasEntry(slot: String): Boolean = typed
 }

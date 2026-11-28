@@ -106,6 +106,12 @@ class EqRowsPaneTest {
     }
 
     @Test
+    fun updatePresetTakesItsTitleAndTheSuppliersValue() {
+        val l = lines(parametric.copy(rows = parametric.rows + EqRow(EqKind.UpdatePreset, PRESET))).last()
+        assertEquals(listOf("hp:UpdatePreset", "update preset", PRESET), listOf(l.key, l.title, l.value))
+    }
+
+    @Test
     fun thePivotsTakeTheSuppliersNamesInOrder() {
         val pane = EqRowsPane(EQ, StillRows(listOf(parametric, graphic)))
         assertEquals(listOf(HEADPHONES, BLUETOOTH), pane.pivots.value.map { it.name })
@@ -205,5 +211,6 @@ class EqRowsPaneTest {
         private const val EAR_BT = "earbluetooth"
         private const val HEADPHONES = "headphones"
         private const val BLUETOOTH = "bluetooth"
+        private const val PRESET = "HD 650"
     }
 }

@@ -65,6 +65,7 @@ open class SettingSheet(
     val confirm: Boolean = false,
     val edit: String? = null,
     val swatches: List<Color> = emptyList(),
+    val wrapLead: Boolean = false,
 )
 
 fun valueSheet(row: SettingRow): SettingSheet {

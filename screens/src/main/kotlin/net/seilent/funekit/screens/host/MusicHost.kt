@@ -767,6 +767,7 @@ class MusicHost<S : Any> internal constructor(
             if (sheet.focus >= 0) menu.value(sheet.focus, sheet.mark, sheet.wrap, now())
             if (sheet.values.isNotEmpty() || sheet.mixed.isNotEmpty()) menu.cells(sheet.values, sheet.mixed, -1)
             if (sheet.swatches.isNotEmpty()) menu.swatches(sheet.swatches)
+            if (sheet.wrapLead) menu.wrapLead()
         } ?: return null
         val m = rowsOf(stack.top)
         m?.edit(sheet.edit?.takeIf { sheet.focus >= 0 }, sheet.lift)
@@ -794,6 +795,7 @@ class MusicHost<S : Any> internal constructor(
         }
         if (sheet.values.isNotEmpty() || sheet.mixed.isNotEmpty()) menu.cells(sheet.values, sheet.mixed, -1)
         if (sheet.swatches.isNotEmpty()) menu.swatches(sheet.swatches)
+        if (sheet.wrapLead) menu.wrapLead()
         frameMenu(menu, env.page, menuHost.lift) { liftRow(stack.top) }
         menuHost.act = pick
         return true
