@@ -127,7 +127,7 @@ class TestApp(page: Scale, np: Scale, src: MusicSource?, private val level: Volu
     var edit: OffsetEdit? = null
     var asked: () -> Unit = {}
     val backdropFlow = MutableStateFlow<NpPicture?>(null)
-    var deletes: (SheetTarget) -> SheetDelete? = { null }
+    var deletes: suspend (SheetTarget) -> SheetDelete? = { null }
     var extras: (SheetTarget) -> List<SheetExtra> = { emptyList() }
     val logs = mutableListOf<String>()
     var phoneLyricsOf: PhoneLyrics? = null
@@ -190,7 +190,7 @@ class TestApp(page: Scale, np: Scale, src: MusicSource?, private val level: Volu
 
     override fun offset(track: Long): OffsetEdit? = edit.also { asked() }
 
-    override fun sheetDelete(t: SheetTarget): SheetDelete? = deletes(t)
+    override suspend fun sheetDelete(t: SheetTarget): SheetDelete? = deletes(t)
 
     override fun sheetExtras(t: SheetTarget): List<SheetExtra> = extras(t)
 

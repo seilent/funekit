@@ -38,6 +38,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -367,6 +368,7 @@ class MusicHost<S : Any> internal constructor(
     private val volumeOverlay = Overlay(OverKind.Volume, hud) { if (hud.pendingSeek() != null) volSeek() }
     private val menuOvers = ArrayList<Overlay>()
     private val libraryOvers = ArrayList<Overlay>()
+    private var libraryCloses = 0
     private val valueOvers = ArrayList<Overlay>()
     private val exits = ArrayList<OwedExit>()
     private var exitEpoch = 0
@@ -1461,6 +1463,7 @@ class MusicHost<S : Any> internal constructor(
 
     fun closeLibrarySheets(newCard: Boolean = false) {
         check(Looper.myLooper() == Looper.getMainLooper()) { "MusicHost.closeLibrarySheets runs on the main thread only" }
+        libraryCloses++
         warm()
         val o = (menuOvers + jump).firstOrNull { stack.holds(it) } ?: stack.overlay
         val card = o != null && newCard && cardOver(o)
@@ -1490,20 +1493,25 @@ class MusicHost<S : Any> internal constructor(
         val s = src ?: return false
         if (stack.phase != Phase.Rest || stack.overlay != null || sheetItems(t, false).isEmpty()) return false
         val pins = s.quickplay.available.value
-        fun open(pinned: Boolean) {
-            val del = if (t.kind == SheetKind.Song || t.kind == SheetKind.Album) app.sheetDelete(t) else null
+        val offers = t.kind == SheetKind.Song || t.kind == SheetKind.Album
+        fun open(pinned: Boolean, del: SheetDelete?) {
             val extras = app.sheetExtras(t)
             val words = sheetWords(t, pinned, del != null, extras, pins)
             openMenu(MenuForm.Sheet, t.title, words, false, -1, 0, false, { i -> pickMusic(t, words, i, s, del, extras) })?.let(::libraryOver)
         }
-        t.pinned?.let {
-            open(it)
-            return true
+        if (!offers) {
+            t.pinned?.let {
+                open(it, null)
+                return true
+            }
         }
+        val closes = libraryCloses
         scope.launch(FailFast) {
-            val pinned = t.pin?.takeIf { pins }?.let { k -> act("pinned", READ) { s.viewed { v -> v.pinned(k, t.id) } } } ?: false
-            if (stack.phase != Phase.Rest || stack.overlay != null) return@launch
-            open(pinned)
+            val offer = if (offers) async { act("delete offer", READ_AT) { app.sheetDelete(t) } } else null
+            val pinned = t.pinned ?: t.pin?.takeIf { pins }?.let { k -> act("pinned", READ) { s.viewed { v -> v.pinned(k, t.id) } } } ?: false
+            val del = offer?.await()
+            if (closes != libraryCloses || stack.phase != Phase.Rest || stack.overlay != null) return@launch
+            open(pinned, del)
         }
         return true
     }

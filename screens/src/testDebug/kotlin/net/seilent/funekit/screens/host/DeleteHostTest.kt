@@ -6,6 +6,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import net.seilent.funekit.Insets
@@ -256,6 +257,81 @@ class DeleteHostTest {
             assertTrue("the confirm takes the rise guard", m.confirm)
         }
         assertTrue(asked.isEmpty())
+    }
+
+    @Test
+    fun aSongOrAlbumSheetOpensOnceItsOfferAnswers() {
+        launch()
+        on(screen(MusicPage.Hub))
+        for (t in listOf(songTarget(song()), albumTarget(rows(Listing.Albums).first()))) {
+            val gate = CompletableDeferred<Unit>()
+            app.deletes = {
+                gate.await()
+                SheetDelete(0, null) { DeleteDone.Done }
+            }
+            assertTrue("premise: the ${t.kind} sheet asks to open", rule.runOnIdle { app.host.openMusic(t) })
+            frames(OPEN_FRAMES)
+            assertNull("no ${t.kind} sheet before its offer answers", rule.runOnIdle { stack.overlay })
+            gate.complete(Unit)
+            frames(OPEN_FRAMES)
+            assertEquals(OverKind.Sheet, rule.runOnIdle { stack.overlay?.kind })
+            assertEquals(sheetItems(t, false) + DELETE, rule.runOnIdle { app.menu.items })
+            rule.runOnIdle { app.host.closeLibrarySheets() }
+            gone()
+        }
+    }
+
+    @Test
+    fun anOfferThatFailsOpensTheSheetWithNoDelete() {
+        launch()
+        on(screen(MusicPage.Hub))
+        val t = songTarget(song())
+        val fails = listOf(Disconnected(), Busy(), Expired(1L))
+        for (x in fails) {
+            app.deletes = { throw x }
+            sheet(t)
+            assertEquals("$x opens the sheet with no delete", sheetItems(t, false), rule.runOnIdle { app.menu.items })
+            rule.runOnIdle { app.host.closeLibrarySheets() }
+            gone()
+        }
+        assertEquals(fails.size, app.logs.count { it.startsWith("delete offer: ") })
+    }
+
+    @Test
+    fun anOverlayOpenedDuringTheOfferKeepsTheSheetShut() {
+        launch()
+        val hub = screen(MusicPage.Hub)
+        on(hub)
+        val gate = CompletableDeferred<Unit>()
+        app.deletes = {
+            gate.await()
+            null
+        }
+        assertTrue("premise: the sheet asks to open", rule.runOnIdle { app.host.openMusic(songTarget(song())) })
+        frames(OPEN_FRAMES)
+        rule.runOnIdle { app.host.openJump(hub) }
+        frames(OPEN_FRAMES)
+        val o = rule.runOnIdle { stack.overlay }
+        assertEquals("premise: the jump grid is up", OverKind.Jump, o?.kind)
+        gate.complete(Unit)
+        frames(OPEN_FRAMES)
+        assertSame("the offer's answer opens no sheet over the jump grid", o, rule.runOnIdle { stack.overlay })
+    }
+
+    @Test
+    fun aGenreSheetAsksNoOffer() {
+        launch()
+        on(screen(MusicPage.Hub))
+        var offers = 0
+        app.deletes = {
+            offers++
+            null
+        }
+        val g = rows(Listing.Genres).first()
+        val t = SheetTarget(SheetKind.Genre, g.title, Listing.GenreTracks(g.id), gen(), id = g.id, from = SheetFrom.Hub)
+        sheet(t)
+        assertEquals(sheetItems(t, false), rule.runOnIdle { app.menu.items })
+        assertEquals("a genre sheet asks no delete offer", 0, offers)
     }
 
     @Test

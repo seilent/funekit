@@ -61,7 +61,7 @@ interface MusicApp<S : Any> {
 
     fun offset(track: Long): OffsetEdit? = null
 
-    fun sheetDelete(t: SheetTarget): SheetDelete? = null
+    suspend fun sheetDelete(t: SheetTarget): SheetDelete? = null
 
     fun sheetExtras(t: SheetTarget): List<SheetExtra> = emptyList()
 
