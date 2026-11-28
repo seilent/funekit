@@ -42,10 +42,12 @@ class EqRowsPaneTest {
     private fun lines(p: EqPivot, header: String = EQ): List<EqPaneLine> =
         EqRowsPane(header, StillRows(listOf(p))).pivots.value.single().rows.map { it as EqPaneLine }
 
-    private fun leveled(levels: EqLevels, on: Boolean = true, listed: Boolean = true, rows: List<EqRow> = parametric.rows): EqPivot =
-        parametric.copy(rows = eqLevelRows(rows, levels, on, listed), levels = levels)
+    private fun leveled(levels: EqLevels, on: Boolean = true, listed: Boolean = true, rows: List<EqRow> = parametric.rows, correction: Boolean = false): EqPivot =
+        parametric.copy(rows = eqLevelRows(rows, levels, on, listed), levels = levels, correction = correction)
 
     private fun valueOf(p: EqPivot, kind: EqKind): String = lines(p).single { it.kind == kind }.value
+
+    private fun kinds(p: EqPivot): List<EqKind> = p.rows.map { it.kind }.filter { it == EqKind.Preamp || it == EqKind.Total || it == EqKind.Peak }
 
     private class HudActs(private val hud: AdjustHud) : EqActs {
         var made: RowAdjust? = null
@@ -131,7 +133,7 @@ class EqRowsPaneTest {
 
     @Test
     fun aListedCurveWithEqOnListsPeakGainAfterTotal() {
-        val p = leveled(EqLevels(level = 1, rateHz = 44100, peak10 = -15))
+        val p = leveled(EqLevels(level = 1, rateHz = 44100, alonePeak10 = -15))
         assertEquals(
             listOf(
                 EqKind.On, EqKind.Mode, EqKind.Profile, EqKind.SavePreset, EqKind.Import, EqKind.Preamp, EqKind.Total, EqKind.Peak,
@@ -141,6 +143,53 @@ class EqRowsPaneTest {
         )
         assertEquals(listOf("total", "peak gain"), lines(p).filter { it.kind == EqKind.Total || it.kind == EqKind.Peak }.map { it.title })
         assertEquals("-1.5 db", valueOf(p, EqKind.Peak))
+    }
+
+    @Test
+    fun aCorrectionBesideTheUserStageHeadsTheUserPageWithTheMergedPreamp() {
+        val p = leveled(EqLevels(rateHz = 44100, peak10 = -12, preamp10 = -45, corrected = true))
+        assertEquals(listOf(EqKind.Preamp, EqKind.Total, EqKind.Peak), kinds(p))
+        assertEquals("-4.5 db", valueOf(p, EqKind.Total))
+        assertEquals("-1.2 db", valueOf(p, EqKind.Peak))
+        assertTrue("one stage lists no total", leveled(EqLevels(rateHz = 44100, preamp10 = -45)).rows.none { it.kind == EqKind.Total })
+    }
+
+    @Test
+    fun levelOneIsEqOffOnTheUserPageOnly() {
+        val capped = EqLevels(level = 1, rateHz = 44100, preamp10 = -45, corrected = true)
+        assertEquals("eq off at 44.1 khz", valueOf(leveled(capped), EqKind.Total))
+        assertEquals("-6.1 db", valueOf(leveled(capped, correction = true), EqKind.Total))
+        assertEquals("level two is eq off on both pages", "eq off at 44.1 khz", valueOf(leveled(capped.copy(level = 2), correction = true), EqKind.Total))
+    }
+
+    @Test
+    fun levelOneOnTheCorrectionPageReadsItsOwnPreampAndTheAlonePeak() {
+        val p = leveled(EqLevels(level = 1, rateHz = 44100, peak10 = -15, preamp10 = -45, alonePeak10 = -9, corrected = true), correction = true)
+        assertEquals(listOf(EqKind.Preamp, EqKind.Total, EqKind.Peak), kinds(p))
+        assertEquals("-6.1 db", valueOf(p, EqKind.Total))
+        assertEquals("-0.9 db", valueOf(p, EqKind.Peak))
+    }
+
+    @Test
+    fun aCorrectionOnlyCurveHeadsTheUserPageWithNoPeakRow() {
+        val off = listOf(EqRow(EqKind.On, "on"), EqRow(EqKind.Profile, "off"), EqRow(EqKind.Import))
+        val p = leveled(EqLevels(rateHz = 44100, peak10 = -12, preamp10 = -40, corrected = true), listed = false, rows = off)
+        assertEquals(listOf(EqKind.On, EqKind.Profile, EqKind.Import, EqKind.Total), p.rows.map { it.kind })
+        assertEquals("-4.0 db", valueOf(p, EqKind.Total))
+    }
+
+    @Test
+    fun aMergedPreampNotYetKnownListsTotalWithNoValue() {
+        val p = leveled(EqLevels(rateHz = 44100, corrected = true))
+        assertTrue(p.rows.any { it.kind == EqKind.Total })
+        assertEquals("", valueOf(p, EqKind.Total))
+    }
+
+    @Test
+    fun theCorrectionHudLineAtLevelOneIsItsPeak() {
+        val l = EqLevels(level = 1, rateHz = 44100, peak10 = -15, alonePeak10 = -9, corrected = true)
+        assertEquals("PEAK GAIN -0.9 DB", hudLine(leveled(l, correction = true)))
+        assertEquals("the user page at level one takes the total", "EQ OFF AT 44.1 KHZ", hudLine(leveled(l)))
     }
 
     @Test

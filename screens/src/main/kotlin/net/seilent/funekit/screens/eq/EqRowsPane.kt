@@ -152,23 +152,29 @@ class EqRowsPane(private val header: String, private val rows: EqRows) : EqPane 
         EqKind.Band -> p.bands.getOrNull(r.band)?.let(::eqBandText) ?: ""
         EqKind.Gain -> p.gains.getOrNull(r.band)?.let { eqGainText(it.gain10, true) } ?: ""
         EqKind.RemoveBand -> p.bands.size.toString()
-        EqKind.Total -> p.levels?.let { totalText(it) } ?: r.value
+        EqKind.Total -> p.levels?.let { totalText(p, it) } ?: r.value
         EqKind.Peak -> p.levels?.let { peakText(it) } ?: r.value
         else -> r.value
     }
 
-    private fun totalText(l: EqLevels): String = if (eqOff(l)) "$EQ_OFF_AT ${eqCapText(l)}" else if (l.dop) EQ_OFF_DOP else ""
+    private fun totalText(p: EqPivot, l: EqLevels): String = when {
+        eqOff(l, p.correction) -> "$EQ_OFF_AT ${eqCapText(l)}"
+        l.dop -> EQ_OFF_DOP
+        l.level == 1 -> eqGainText(p.preamp10, false)
+        else -> l.preamp10?.let { eqGainText(it, false) } ?: ""
+    }
 
     private fun peakText(l: EqLevels): String = when {
         l.level == CAP_OFF -> eqGainText(0, true)
-        l.level != 1 && l.dop -> eqGainText(DOP_TRIM10 * l.dopTrim, true)
+        l.level == 1 -> l.alonePeak10?.let { eqGainText(it, true) } ?: ""
+        l.dop -> eqGainText(DOP_TRIM10 * l.dopTrim, true)
         else -> l.peak10?.let { eqGainText(it, true) } ?: ""
     }
 
     private fun peakLine(p: EqPivot): String {
         val l = p.levels ?: return ""
         if (p.rows.none { it.kind == EqKind.Peak }) return ""
-        if (eqOff(l)) return totalText(l)
+        if (eqOff(l, p.correction)) return totalText(p, l)
         val v = peakText(l)
         return if (v.isEmpty()) "" else "$PEAK_GAIN $v"
     }
