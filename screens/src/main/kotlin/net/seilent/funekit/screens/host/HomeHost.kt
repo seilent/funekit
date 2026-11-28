@@ -453,7 +453,7 @@ class HomeState internal constructor(
         val p = qp.pan
         val home = atHome && rest && !p.shown
         val modal = over == OverKind.Sheet || over == OverKind.Dlg
-        return HomeShown(home, atHome && p.shown, atHome && p.front && p.still, atHome && p.front && modal, home && gate)
+        return HomeShown(home, atHome && rest && p.shown, atHome && rest && p.front && p.still, atHome && p.front && modal, home && gate)
     }
 
     fun tick(t: Long) {

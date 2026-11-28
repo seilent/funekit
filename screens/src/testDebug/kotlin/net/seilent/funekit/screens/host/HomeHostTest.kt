@@ -133,6 +133,7 @@ class HomeHostTest {
     private val fake = testFake(FakeSet.Demo)
     private val noPins = testFake(FakeSet.Demo, quickplay = false)
     private var reply: CompletableDeferred<Unit>? = null
+    private var qpReply: CompletableDeferred<Unit>? = null
     private var cold = false
     private var qpPlays = true
     private var qpBusy = false
@@ -168,6 +169,7 @@ class HomeHostTest {
         override suspend fun art(ref: ArtRef, maxSide: Int): ByteArray? = null
 
         override suspend fun play(item: QpItem): Boolean {
+            qpReply?.await()
             played += item
             if (qpBusy) throw Busy()
             if (qpRefuses) throw Refused()
@@ -1067,6 +1069,17 @@ class HomeHostTest {
 
     private fun shown(): HomeShown = state.shown(stack.top == null, stack.phase == Phase.Rest, stack.overlay?.kind)
 
+    private fun underTheMove(): List<HomeShown> {
+        val under = mutableListOf<HomeShown>()
+        var n = 0
+        while (stack.phase != Phase.Rest) {
+            if (stack.top == null) under += shown()
+            frame()
+            assertTrue("the move lands", ++n < MAX_FRAMES)
+        }
+        return under
+    }
+
     @Test
     fun aPanShowsThePanCanvasAndTheFrontAddsTheFront() {
         launcher(qpSource(songData(songs(TILES))))
@@ -1141,6 +1154,88 @@ class HomeHostTest {
         settle()
         assertSame("premise: the dialog stays open", dialog, stack.overlay)
         assertFalse(shown().frontFrozen)
+    }
+
+    @Test
+    fun aT8ToTheFrontDrawsNoStaticFrontUntilItLands() {
+        val ids = songs(TILES)
+        runBlocking { fake.player.play(listOf(ids[0]), 0, 0) }
+        val qp = front(songData(ids))
+        rule.runOnUiThread { app.host.openNp(npOpenForm(true, true)) }
+        until("now playing is over the front") { npOnTop() }
+        settle()
+        systemBack()
+        until("the T8 starts") { stack.turn?.kind == MoveKind.T8 }
+        assertEquals("premise: the T8 closes to the front", NpForm.Front, app.movePaint.npForm)
+        val under = underTheMove()
+        assertTrue("premise: the T8 runs at the root", under.isNotEmpty())
+        assertTrue("no pan canvas under the T8", under.none { it.pan })
+        assertTrue("no static front under the T8", under.none { it.front })
+        val landed = shown()
+        assertTrue("the front draws on the landing frame", landed.pan && landed.front)
+        assertTrue("the pane lands in front", qp.pan.front && qp.pan.still)
+    }
+
+    @Test
+    fun aTilePlayRefusedAfterItsT7TurnsBackToTheFrontWithNoStaticFront() {
+        qpReply = CompletableDeferred()
+        qpPlays = false
+        val data = songData(songs(TILES))
+        val qp = front(data)
+        tapTile(data, 1)
+        armed()
+        qpReply!!.complete(Unit)
+        until("the refusal's T8 starts") { stack.turn?.kind == MoveKind.T8 }
+        assertNull("premise: the refusal's T8 runs at the root", stack.top)
+        val under = underTheMove()
+        assertTrue("premise: the T8 runs at the root", under.isNotEmpty())
+        assertTrue("no pan canvas under the T8", under.none { it.pan })
+        assertTrue("no static front under the T8", under.none { it.front })
+        val landed = shown()
+        assertTrue("the front draws on the landing frame", landed.pan && landed.front)
+        assertTrue("the pane lands in front", qp.pan.front && qp.pan.still)
+        assertEquals("the refusal leaves no now playing", 0, npEntries())
+    }
+
+    @Test
+    fun aHomeKeyFromNowPlayingOverTheFrontDrawsNoPanUnderTheMove() {
+        val ids = songs(TILES)
+        runBlocking { fake.player.play(listOf(ids[0]), 0, 0) }
+        front(songData(ids))
+        rule.runOnUiThread { app.host.openNp(npOpenForm(true, true)) }
+        until("now playing is over the front") { npOnTop() }
+        settle()
+        rule.runOnUiThread {
+            state.leave()
+            stack.home(MoveKind.T4n)
+        }
+        until("the T4n swaps to the root") { stack.top == null }
+        assertTrue("premise: the pan runs back under the move", state.pan.shown && stack.phase != Phase.Rest)
+        val under = underTheMove()
+        assertTrue("no pan canvas under the move", under.none { it.pan })
+        assertTrue("no static front under the move", under.none { it.front })
+        assertTrue("premise: the pan's tail runs past the T4n's rest", state.panning(SystemClock.uptimeMillis()))
+        settle()
+        assertTrue("the home shows once the pan lands", shown().home)
+    }
+
+    @Test
+    fun aT8ToTheHomeMenuDrawsNoHomeUntilItLands() {
+        val ids = songs(TILES)
+        runBlocking { fake.player.play(listOf(ids[0]), 0, 0) }
+        launcher(qpSource(songData(ids)))
+        rule.runOnUiThread { app.host.openNp(npOpenForm(true, false)) }
+        until("now playing is over the home menu") { npOnTop() }
+        settle()
+        systemBack()
+        until("the T8 starts") { stack.turn?.kind == MoveKind.T8 }
+        val under = underTheMove()
+        assertTrue("premise: the T8 runs at the root", under.isNotEmpty())
+        assertTrue("no home under the T8", under.none { it.home })
+        assertTrue("no peek under the T8", under.none { it.peek })
+        assertTrue("no pan canvas under the T8", under.none { it.pan })
+        assertTrue("no static front under the T8", under.none { it.front })
+        assertTrue("the home draws on the landing frame", shown().home)
     }
 
     private fun drawn(s: HomeState): IntArray {
